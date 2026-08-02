@@ -1,6 +1,8 @@
 # APRS emergency alerts
 
-The `Alerts` tab shows logical alerts created from received APRS emergency frames. Subsequent frames from the same full source callsign update one alert and its history.
+The `Alerts` tab shows logical alerts created from APRS emergency and CAWF frames. A CAWF alert sent from the APRSBox form enters the same list and behaves like every other alert, including normal details, frame history, muting, and deletion.
+
+When the alert's full source callsign exactly matches the configured station callsign, the list shows a `Cancel alarm` action. After confirmation, APRSBox stops repeats and sends a CAWF `CANCEL` frame with the same source, group, and logical `ALERT_ID`.
 
 - Clicking a row opens the modal with the latest emergency frame.
 - The alert details button opens the complete record and related frame history.

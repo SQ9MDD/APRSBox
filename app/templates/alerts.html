@@ -136,17 +136,6 @@
     </div>
 </div>
 
-<div class="own-alert-modal" id="own-alert-details-modal" hidden>
-    <div class="own-alert-modal-backdrop" data-close-own-alert-details></div>
-    <div class="own-alert-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="own-alert-details-title" tabindex="-1">
-        <h2 id="own-alert-details-title">{{ t("Own alarm details") }}</h2>
-        <dl class="own-alert-confirm-grid" id="own-alert-details-grid"></dl>
-        <div class="own-alert-modal-actions">
-            <button type="button" class="button" data-close-own-alert-details>{{ t("Close") }}</button>
-        </div>
-    </div>
-</div>
-
 <section class="panel alerts-page-panel">
     <div class="panel-body">
         <div class="panel-header">
@@ -204,18 +193,13 @@
                     {% set category_class = "alert-category-badge-unknown" %}
                     {% endif %}
                     <tr
-                        {% if not alert.is_own_alert %}
                         class="clickable-row{% if alert.muted %} alert-row-muted{% endif %}"
                         data-alert-id="{{ alert.id }}"
                         data-alert-detail-href="{{ request.scope.root_path }}{{ alert.detail_href }}"
                         tabindex="0"
                         aria-label="{{ t('Alert') }} #{{ alert.id }} {{ alert.source_callsign }}"
-                        {% endif %}
                     >
                         {% if can_manage_alerts %}
-                        {% if alert.is_own_alert %}
-                        <td></td>
-                        {% else %}
                         <td class="alerts-select-cell" onclick="event.stopPropagation();">
                             <input
                                 type="checkbox"
@@ -227,20 +211,12 @@
                             >
                         </td>
                         {% endif %}
-                        {% endif %}
                         <td>
                             <strong>
-                                {% if alert.is_own_alert %}
-                                {{ alert.source_callsign }}
-                                {% else %}
                                 <a class="station-link" href="{{ request.scope.root_path }}{{ alert.related_entity.detail_href }}">
                                     {{ alert.source_callsign }}
                                 </a>
-                                {% endif %}
                             </strong>
-                            {% if alert.is_own_alert %}
-                            <div class="muted small">{{ alert.alert_id }}</div>
-                            {% endif %}
                         </td>
                         <td>
                             <div class="alert-list-category">
@@ -283,28 +259,6 @@
                         </td>
                         <td class="alerts-actions-cell" onclick="event.stopPropagation();">
                             <div class="table-actions">
-                                {% if alert.is_own_alert %}
-                                <button
-                                    type="button"
-                                    class="table-icon-button"
-                                    title="{{ t('Details') }}"
-                                    aria-label="{{ t('Details') }} {{ alert.alert_id }}"
-                                    aria-haspopup="dialog"
-                                    data-open-alert-modal="{{ alert.modal_id or alert.id }}"
-                                >
-                                    <img src="{{ request.scope.root_path }}/static/icons/eye-outline.svg" alt="">
-                                </button>
-                                <button
-                                    type="button"
-                                    class="table-icon-button table-icon-button-danger"
-                                    title="{{ t('Cancel alarm') }}"
-                                    aria-label="{{ t('Cancel alarm') }} {{ alert.alert_id }}"
-                                    data-own-alert-cancel="{{ alert.own_alert_id }}"
-                                    data-own-alert-label="{{ alert.own_alert_label }}"
-                                >
-                                    <img src="{{ request.scope.root_path }}/static/icons/alarm-off.svg" alt="">
-                                </button>
-                                {% else %}
                                 <button
                                     type="button"
                                     class="table-icon-button"
@@ -323,8 +277,19 @@
                                 >
                                     <img src="{{ request.scope.root_path }}/static/icons/file-document-alert-outline.svg" alt="">
                                 </a>
+                                {% if alert.can_cancel_protocol %}
+                                <button
+                                    type="button"
+                                    class="table-icon-button table-icon-button-danger"
+                                    title="{{ t('Cancel alarm') }}"
+                                    aria-label="{{ t('Cancel alarm') }} {{ alert.logical_alert_id }}"
+                                    data-alert-protocol-cancel="{{ alert.id }}"
+                                    data-alert-protocol-label="{{ alert.protocol_cancel_label }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/alarm-off.svg" alt="">
+                                </button>
                                 {% endif %}
-                                {% if can_manage_alerts and not alert.is_own_alert %}
+                                {% if can_manage_alerts %}
                                 <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="table-action-form alert-mute-form">
                                     <input type="hidden" name="return_to" value="/alerts?page={{ alerts_page.page }}">
                                     <select name="duration" aria-label="{{ t('Mute') }} #{{ alert.id }}">
@@ -414,7 +379,6 @@
 {
     "rootPath": {{ request.scope.root_path|tojson }},
     "compose": {{ own_alert_compose|tojson }},
-    "activeAlerts": {{ active_own_alerts|tojson }},
     "i18n": {
         "loadingAreas": {{ t("Loading areas...")|tojson }},
         "selectArea": {{ t("Select an area")|tojson }},
@@ -426,22 +390,7 @@
         "previewError": {{ t("Alarm preview could not be generated.")|tojson }},
         "sending": {{ t("Sending alarm...")|tojson }},
         "sent": {{ t("Alarm queued for transmission.")|tojson }},
-        "minutes": {{ t("{count} minutes")|tojson }},
-        "detailsLabels": {
-            "alert_id": {{ t("ID")|tojson }},
-            "sender_callsign": {{ t("Sender")|tojson }},
-            "target_group": {{ t("Group")|tojson }},
-            "event_code": {{ t("Hazard")|tojson }},
-            "area": {{ t("Area")|tojson }},
-            "comment": {{ t("Content")|tojson }},
-            "created_label": {{ t("Created")|tojson }},
-            "valid_until_label": {{ t("Valid until")|tojson }},
-            "repeat_interval_minutes": {{ t("Interval")|tojson }},
-            "next_transmission_label": {{ t("Next transmission")|tojson }},
-            "last_transmission_label": {{ t("Last transmission")|tojson }},
-            "transmission_count": {{ t("Transmission count")|tojson }},
-            "status": {{ t("Status")|tojson }}
-        }
+        "minutes": {{ t("{count} minutes")|tojson }}
     }
 }
 </script>

@@ -1,6 +1,8 @@
 # Alarmy APRS emergency
 
-Zakładka `Alarmy` pokazuje logiczne alarmy utworzone z odebranych ramek APRS emergency. Kolejne ramki z tego samego pełnego znaku wywoławczego aktualizują jeden alarm i jego historię.
+Zakładka `Alarmy` pokazuje logiczne alarmy utworzone z odebranych ramek APRS emergency i CAWF. Alarm CAWF wysłany z formularza APRSBox trafia do tej samej listy i zachowuje się jak każdy inny alarm: ma zwykłe szczegóły, historię ramek, wyciszanie i usuwanie.
+
+Jeżeli pełny znak źródłowy alarmu jest identyczny ze znakiem skonfigurowanej stacji, na liście pojawia się przycisk `Odwołaj alarm`. Po potwierdzeniu APRSBox zatrzymuje powtórzenia i wysyła protokolarną ramkę CAWF `CANCEL` z tym samym źródłem, grupą i logicznym `ALERT_ID`.
 
 - Kliknięcie wiersza otwiera modal z najnowszą ramką emergency.
 - Przycisk szczegółów alarmu otwiera pełny rekord i historię powiązanych ramek.

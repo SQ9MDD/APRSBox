@@ -148,13 +148,12 @@ from app.services.alerts import (
     mute_alert,
     unmute_alert,
 )
-from app.services.alert_event_icons import resolve_alert_event_icon
 from app.services.own_alerts import (
+    cancel_station_aprs_alert,
     cancel_own_alert,
     create_own_alert,
     get_own_alert_area_options,
     get_own_alert_compose_context,
-    list_active_own_alerts,
     preview_own_alert,
     send_own_alert_now,
 )
@@ -413,102 +412,6 @@ def _station_detail_context(callsign: str, unit_system: str, *, root_path: str =
 
 def _path(request: Request, suffix: str) -> str:
     return f"{request.scope.get('root_path', '')}{suffix}"
-
-
-def _own_alert_list_row(
-    own_alert: dict[str, Any],
-    *,
-    event_label: str,
-) -> dict[str, Any]:
-    event_code = str(own_alert.get("event_code") or "").strip().upper()
-    severity_level = None
-    if event_code and event_code[-1].isdigit():
-        severity_level = int(event_code[-1])
-    sender_callsign = str(own_alert.get("sender_callsign") or "").strip().upper()
-    target_group = str(own_alert.get("target_group") or "").strip().upper()
-    area_code = str(own_alert.get("area_code") or "").strip().upper()
-    area_name = str(own_alert.get("area_name") or "").strip()
-    comment = str(own_alert.get("comment") or "").strip()
-    created_at = str(own_alert.get("created_at") or "").strip()
-    valid_until = str(own_alert.get("valid_until") or "").strip()
-    view_id = f"own-{int(own_alert['id'])}"
-    return {
-        "id": int(own_alert["id"]),
-        "modal_id": view_id,
-        "alert_id": str(own_alert.get("alert_id") or "").strip().upper(),
-        "source_callsign": sender_callsign,
-        "alarm_group": target_group,
-        "destination_group": target_group,
-        "logical_alert_id": str(own_alert.get("alert_id") or "").strip().upper(),
-        "event_code": event_code,
-        "event_label": event_label,
-        "event_icon": resolve_alert_event_icon(event_code, alert_type="APRS WARNING"),
-        "severity_level": severity_level,
-        "area_count": 1,
-        "expires_at_label": str(own_alert.get("valid_until_label") or ""),
-        "last_seen_label": str(own_alert.get("created_label") or ""),
-        "created_label": str(own_alert.get("created_label") or ""),
-        "updated_label": str(own_alert.get("updated_label") or ""),
-        "detail_href": "",
-        "related_entity": {
-            "label": sender_callsign,
-            "kind": "station",
-            "detail_href": "",
-        },
-        "is_own_alert": True,
-        "own_alert_id": int(own_alert["id"]),
-        "own_alert_label": (
-            f"{str(own_alert.get('alert_id') or '').strip().upper()} · "
-            f"{str(own_alert.get('target_group') or '').strip().upper()}"
-        ).strip(" ·"),
-        "own_alert_cancelled": bool(own_alert.get("cancelled_at")),
-        "modal_frame": {
-            "id": view_id,
-            "timestamp": created_at,
-            "source": sender_callsign,
-            "line": comment,
-            "display_callsign": sender_callsign,
-            "emergency": True,
-            "emergency_data": {
-                "callsign": sender_callsign,
-                "summary": " · ".join(
-                    value for value in [
-                        target_group,
-                        event_label,
-                        f"{area_name} ({area_code})" if area_name or area_code else "",
-                    ]
-                    if value
-                ),
-                "comment": comment,
-                "timestamp_utc": created_at,
-                "raw_frame": comment,
-                "path": "",
-                "source_interface": "",
-                "source_port": "",
-                "latitude": None,
-                "longitude": None,
-            },
-            "alert_popup": True,
-            "alert_popup_kind": "alarm_group",
-            "alert_popup_data": {
-                "callsign": sender_callsign,
-                "summary": " · ".join(
-                    value for value in [
-                        target_group,
-                        event_label,
-                        f"{area_name} ({area_code})" if area_name or area_code else "",
-                    ]
-                    if value
-                ),
-                "comment": comment,
-                "timestamp_utc": created_at,
-                "raw_frame": comment,
-            },
-            "alert_href": "/alerts",
-            "alert_muted": False,
-            "alert_should_notify": False,
-        },
-    }
 
 
 def _aprsis_interface_settings_path() -> str:
@@ -3530,41 +3433,34 @@ def alerts_page(
     templates = request.app.state.templates
     own_alert_compose = get_own_alert_compose_context()
     translator = get_translator(get_app_language())
-    event_labels: dict[str, str] = {}
     for group in own_alert_compose["groups"]:
         for option in group["event_options"]:
             option["translated_label"] = translator(option["label"])
-            event_labels[str(option["code"])] = str(option["translated_label"])
         for option in group["hazard_options"]:
             option["translated_label"] = translator(option["label"])
         for option in group["level_options"]:
             option["translated_label"] = translator(option["label"])
-    active_own_alerts = list_active_own_alerts()
-    for own_alert in active_own_alerts:
-        own_alert["event_label"] = event_labels.get(
-            str(own_alert.get("event_code") or ""),
-            str(own_alert.get("event_code") or ""),
-        )
     alerts_page_data = list_alerts(page=page)
-    own_alert_rows = [
-        _own_alert_list_row(own_alert, event_label=str(own_alert.get("event_label") or ""))
-        for own_alert in active_own_alerts
-    ]
-    if page == 1 and own_alert_rows:
-        alerts_page_data["items"] = own_alert_rows + list(alerts_page_data["items"])
-        alerts_page_data["total"] = int(alerts_page_data.get("total") or 0) + len(own_alert_rows)
-        alerts_page_data["total_pages"] = max(
-            1,
-            (
-                int(alerts_page_data["total"]) + int(alerts_page_data["page_size"]) - 1
-            )
-            // int(alerts_page_data["page_size"]),
+    station = get_station_settings()
+    station_callsign = str(station.get("callsign") or "").strip().upper()
+    station_ssid = str(station.get("ssid") or "").strip()
+    if station_ssid and station_ssid != "0":
+        station_callsign = f"{station_callsign}-{station_ssid}"
+    for alert in alerts_page_data["items"]:
+        source_matches_station = bool(station_callsign) and (
+            str(alert.get("source_callsign") or "").strip().upper()
+            == station_callsign
         )
-        alerts_page_data["has_next"] = int(alerts_page_data["page"]) < int(
-            alerts_page_data["total_pages"]
+        alert["can_cancel_protocol"] = bool(
+            source_matches_station
+            and alert.get("destination_group")
+            and alert.get("logical_alert_id")
+            and alert.get("area_codes")
         )
-        alerts_page_data["previous_page"] = int(alerts_page_data["page"]) - 1
-        alerts_page_data["next_page"] = int(alerts_page_data["page"]) + 1
+        alert["protocol_cancel_label"] = (
+            f"{str(alert.get('logical_alert_id') or '').strip().upper()} · "
+            f"{str(alert.get('destination_group') or '').strip().upper()}"
+        ).strip(" ·")
     context = build_template_context(
         request,
         page_title="Alerts",
@@ -3572,7 +3468,6 @@ def alerts_page(
         active_nav="alerts",
         alerts_page=alerts_page_data,
         own_alert_compose=own_alert_compose,
-        active_own_alerts=active_own_alerts,
         flash=flash,
         flash_success=flash_success,
         can_manage_alerts=current_user.role in {"admin", "operator"},
@@ -3651,6 +3546,21 @@ def own_alert_cancel_action(
     _: UserIdentity = Depends(get_current_user),
 ) -> RedirectResponse:
     success, message = cancel_own_alert(own_alert_id)
+    return _alerts_redirect(
+        request,
+        "/alerts",
+        "Own alarm cancelled." if success else message,
+        success=success,
+    )
+
+
+@router.post("/alerts/{alert_id}/cancel-protocol")
+def station_alert_cancel_action(
+    alert_id: int,
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> RedirectResponse:
+    success, message = cancel_station_aprs_alert(alert_id)
     return _alerts_redirect(
         request,
         "/alerts",

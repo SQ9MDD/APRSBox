@@ -17,11 +17,13 @@ from app.services.alert_areas import (
     find_alarm_group_area_for_point,
     list_alarm_group_areas,
 )
+from app.services.alerts import list_alerts
 from app.services.aprs_warning_identity import (
     generate_aprs_group_warning_parts,
     parse_aprs_group_warning_content,
 )
 from app.services.own_alerts import (
+    cancel_station_aprs_alert,
     cancel_own_alert,
     create_own_alert,
     dispatch_due_own_alerts,
@@ -32,7 +34,11 @@ from app.services.own_alerts import (
     send_own_alert_now,
     validate_own_alert_payload,
 )
-from app.services.outbound import mark_outbound_job_failed
+from app.services.outbound import (
+    build_message_tnc2,
+    mark_outbound_job_failed,
+    persist_outbound_frame,
+)
 from app.services.warning_groups import list_supported_warning_groups
 from app.services.traffic import process_normalized_tnc2_rx
 
@@ -188,6 +194,17 @@ class OwnAlertTests(unittest.TestCase):
                 for part in multipart
             )
         )
+        parsed_multipart = [
+            parse_aprs_group_warning_content(part["payload"])
+            for part in multipart
+        ]
+        self.assertTrue(
+            all(part["area_codes"] == ["1465"] for part in parsed_multipart)
+        )
+        self.assertEqual(
+            "".join(str(part.get("comment") or "") for part in parsed_multipart),
+            "A" * 100,
+        )
 
     def test_parser_keeps_area_when_legacy_comment_follows_it(self):
         parsed = parse_aprs_group_warning_content(
@@ -201,6 +218,24 @@ class OwnAlertTests(unittest.TestCase):
         )
         self.assertEqual(parsed_comma_comment["area_codes"], ["1465"])
         self.assertEqual(parsed_comma_comment["comment"], "LOUD TEXT,RAIN")
+
+    def test_pipe_comment_is_never_parsed_as_additional_area_codes(self):
+        parsed = parse_aprs_group_warning_content(
+            "031000z,TSTORM2,@A7F3,1/1,1465|RAIN,1466 LOUD TEXT{AAAAA"
+        )
+        self.assertEqual(parsed["area_code"], "1465")
+        self.assertEqual(parsed["area_codes"], ["1465"])
+        self.assertEqual(parsed["comment"], "RAIN,1466 LOUD TEXT")
+
+        generated = generate_aprs_group_warning_parts(
+            expiry="031000z",
+            event_code="TSTORM2",
+            alert_id="A7F3",
+            area_code="1465",
+            comment="RAIN,1466 LOUD TEXT",
+            message_ids=["AAAAA"],
+        )
+        self.assertIn("1465|RAIN,1466 LOUD TEXT{AAAAA", generated[0]["payload"])
 
     def test_dynamic_comment_limit_counts_headers_and_parts(self):
         with temporary_database():
@@ -266,6 +301,43 @@ class OwnAlertTests(unittest.TestCase):
             row["next_transmission_at"],
             (NOW + timedelta(minutes=31)).isoformat(),
         )
+
+    def test_created_alarm_uses_regular_alert_model_and_tx_frames_join_its_history(self):
+        with temporary_database():
+            created = create_own_alert(
+                payload(comment="RAIN,1466 Silna burza"),
+                now=NOW,
+            )
+            stored = fetch_one("SELECT * FROM aprs_alerts")
+            self.assertIsNotNone(stored)
+            assert stored is not None
+            self.assertEqual(stored["source_callsign"], "SP5ABC-1")
+            self.assertEqual(stored["logical_alert_id"], created["alert_id"])
+            self.assertEqual(stored["area_code"], "1465")
+            self.assertEqual(stored["area_codes_json"], '["1465"]')
+            self.assertEqual(stored["protocol_comment"], "RAIN,1466 Silna burza")
+            self.assertIsNone(stored["last_frame_id"])
+
+            queued = queued_payloads()[0]
+            self.assertEqual(queued["message_kind"], "alarm_group")
+            self.assertEqual(queued["tx_origin"], "local_generated")
+            self.assertTrue(queued["local_tx_metadata"]["local_generated"])
+            transmitted_line = build_message_tnc2(queued)
+            persist_outbound_frame(source="RF-OUT", line=transmitted_line)
+            transmitted = fetch_one(
+                "SELECT last_frame_id FROM aprs_alerts WHERE id = ?",
+                (int(stored["id"]),),
+            )
+            relation = fetch_one(
+                "SELECT frame_id FROM aprs_alert_frames WHERE alert_id = ?",
+                (int(stored["id"]),),
+            )
+            active = list_alerts(now=NOW)
+
+        self.assertIsNotNone(transmitted["last_frame_id"])
+        self.assertIsNotNone(relation)
+        self.assertEqual(active["total"], 1)
+        self.assertEqual(active["items"][0]["detail_href"], f"/alerts/{stored['id']}")
 
     def test_restart_restores_future_schedule_without_backlog(self):
         with temporary_database():
@@ -357,6 +429,10 @@ class OwnAlertTests(unittest.TestCase):
             )
             mark_outbound_job_failed(int(cancel_job["outbound_job_id"]), "Radio unavailable")
             failed = fetch_one("SELECT * FROM own_aprs_alerts WHERE id = ?", (created["id"],))
+            reactivated = fetch_one(
+                "SELECT is_active, cancelled_at FROM aprs_alerts WHERE logical_alert_id = ?",
+                (created["alert_id"],),
+            )
             self.assertEqual(restore_own_alert_schedules(now=NOW + timedelta(hours=1)), 0)
             self.assertFalse(send_own_alert_now(created["id"], now=NOW + timedelta(hours=1))[0])
             self.assertTrue(cancel_own_alert(created["id"], now=NOW + timedelta(hours=1))[0])
@@ -365,6 +441,8 @@ class OwnAlertTests(unittest.TestCase):
         self.assertEqual(failed["status"], "error")
         self.assertIsNone(failed["next_transmission_at"])
         self.assertIsNotNone(failed["cancelled_at"])
+        self.assertEqual(int(reactivated["is_active"]), 1)
+        self.assertIsNone(reactivated["cancelled_at"])
         self.assertEqual(first_cancel, repeated_cancel)
         self.assertEqual(retried["status"], "cancelled")
 
@@ -380,6 +458,81 @@ class OwnAlertTests(unittest.TestCase):
         self.assertFalse(success)
         self.assertEqual(row["status"], "active")
         self.assertIsNone(row["cancelled_at"])
+
+    def test_regular_alert_cancel_action_requires_matching_station_source(self):
+        with temporary_database():
+            created = create_own_alert(payload(), now=NOW)
+            alert = fetch_one("SELECT id FROM aprs_alerts")
+            assert alert is not None
+            success, _ = cancel_station_aprs_alert(
+                int(alert["id"]),
+                now=NOW + timedelta(minutes=1),
+            )
+            cancelled = fetch_one(
+                "SELECT is_active, cancelled_at FROM aprs_alerts WHERE id = ?",
+                (int(alert["id"]),),
+            )
+            own = fetch_one(
+                "SELECT status FROM own_aprs_alerts WHERE alert_id = ?",
+                (created["alert_id"],),
+            )
+        self.assertTrue(success)
+        self.assertEqual(int(cancelled["is_active"]), 0)
+        self.assertIsNotNone(cancelled["cancelled_at"])
+        self.assertEqual(own["status"], "cancelled")
+
+    def test_regular_alert_cancel_action_rejects_a_different_source(self):
+        with temporary_database():
+            create_own_alert(payload(), now=NOW)
+            alert = fetch_one("SELECT id FROM aprs_alerts")
+            assert alert is not None
+            execute(
+                "UPDATE aprs_alerts SET source_callsign = 'SP9OTHER' WHERE id = ?",
+                (int(alert["id"]),),
+            )
+            success, message = cancel_station_aprs_alert(
+                int(alert["id"]),
+                now=NOW + timedelta(minutes=1),
+            )
+            stored = fetch_one(
+                "SELECT is_active, cancelled_at FROM aprs_alerts WHERE id = ?",
+                (int(alert["id"]),),
+            )
+        self.assertFalse(success)
+        self.assertIn("does not match", message)
+        self.assertEqual(int(stored["is_active"]), 1)
+        self.assertIsNone(stored["cancelled_at"])
+
+    def test_matching_station_can_cancel_a_regular_cawf_alert_without_scheduler_row(self):
+        with temporary_database():
+            thresholds = get_aprs_alarm_category_thresholds()
+            for values in thresholds.values():
+                values["alerts"] = 1
+            save_aprs_alarm_category_thresholds(thresholds)
+            self.assertTrue(
+                process_normalized_tnc2_rx(
+                    "SP5ABC-1>APBOX0::PL-WARN  :031000z,TSTORM3,@A7F3,1/1,1465{AAAAA",
+                    source="APRS-IS",
+                    source_kind="aprsis",
+                    timestamp=NOW.isoformat(),
+                )
+            )
+            alert = fetch_one("SELECT id FROM aprs_alerts")
+            assert alert is not None
+            self.assertIsNone(fetch_one("SELECT id FROM own_aprs_alerts"))
+            success, _ = cancel_station_aprs_alert(
+                int(alert["id"]),
+                now=NOW + timedelta(minutes=1),
+            )
+            stored = fetch_one(
+                "SELECT is_active, cancelled_at FROM aprs_alerts WHERE id = ?",
+                (int(alert["id"]),),
+            )
+            cancel_payload = queued_payloads()[-1]["message_text"]
+        self.assertTrue(success)
+        self.assertEqual(int(stored["is_active"]), 0)
+        self.assertIsNotNone(stored["cancelled_at"])
+        self.assertTrue(parse_aprs_group_warning_content(cancel_payload)["is_cancel"])
 
     def test_received_cancel_is_scoped_by_sender_group_and_logical_id(self):
         with temporary_database():
@@ -439,9 +592,12 @@ class OwnAlertTests(unittest.TestCase):
                         json=payload(target_group="LOCALWARN"),
                     )
                     sent = client.post("/api/alerts/send", json=payload())
+                    regular_alert_id = int(
+                        fetch_one("SELECT id FROM aprs_alerts")["id"]
+                    )
                     refreshed_before_cancel = client.get("/alerts")
                     cancelled = client.post(
-                        f"/alerts/own/{sent.json()['id']}/cancel",
+                        f"/alerts/{regular_alert_id}/cancel-protocol",
                         follow_redirects=False,
                     )
                     cancelled_status = fetch_one(
@@ -453,8 +609,8 @@ class OwnAlertTests(unittest.TestCase):
                 app.dependency_overrides.clear()
 
         self.assertEqual(page.status_code, 200)
-        self.assertLess(page.text.index("Send alarm"), page.text.index("My active alarms"))
-        self.assertLess(page.text.index("My active alarms"), page.text.index("alerts-page-panel"))
+        self.assertLess(page.text.index("Send alarm"), page.text.index("alerts-page-panel"))
+        self.assertNotIn("My active alarms", page.text)
         self.assertIn('id="own-alert-hazard"', page.text)
         self.assertIn('id="own-alert-level"', page.text)
         self.assertNotIn('id="own-alert-area-search"', page.text)
@@ -467,6 +623,15 @@ class OwnAlertTests(unittest.TestCase):
         self.assertEqual(cancelled.status_code, 303)
         self.assertEqual(cancelled_status, "cancelled")
         self.assertIn(sent.json()["alert_id"], refreshed_before_cancel.text)
+        self.assertIn(
+            f'data-alert-protocol-cancel="{regular_alert_id}"',
+            refreshed_before_cancel.text,
+        )
+        self.assertIn(f'href="/alerts/{regular_alert_id}"', refreshed_before_cancel.text)
+        self.assertNotIn(
+            f'data-alert-protocol-cancel="{regular_alert_id}"',
+            refreshed.text,
+        )
 
 
 if __name__ == "__main__":

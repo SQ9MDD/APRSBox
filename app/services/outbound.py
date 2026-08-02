@@ -591,7 +591,7 @@ def enqueue_alarm_group_frames(
     sender_callsign: str,
     target_group: str,
     path: str,
-    own_alert_id: int,
+    own_alert_id: int | None,
     dispatch_token: str,
     trigger: str,
     scheduled_for: datetime | None = None,
@@ -629,11 +629,12 @@ def enqueue_alarm_group_frames(
             "message_text": str(frame.get("payload") or ""),
             "trigger": str(trigger or "manual-alert").strip() or "manual-alert",
             "force_send": True,
-            "own_alert_id": int(own_alert_id),
             "manual_alert_dispatch_token": str(dispatch_token),
             "manual_alert_part_number": int(frame.get("part_number") or 1),
             "manual_alert_parts_total": int(frame.get("parts_total") or len(frames)),
         }
+        if own_alert_id is not None:
+            payload["own_alert_id"] = int(own_alert_id)
         job_ids.extend(
             _enqueue_jobs_for_modems(
                 kind=OUTBOUND_KIND_MESSAGE,
@@ -1092,8 +1093,12 @@ def persist_outbound_frame(
     payload_hex: str = "",
     source_kind: str = "rf",
 ) -> None:
+    occurred_at = utc_now()
+    normalized_source_kind = str(source_kind or "rf").strip().lower() or "rf"
+    normalized_band = str(band or "").strip()
+    normalized_command = str(command or "TX")
     with get_connection() as connection:
-        connection.execute(
+        cursor = connection.execute(
             """
             INSERT INTO traffic_frames(
                 source, source_kind, interface_id, direction, band, format, line, port, command, length, hex, created_at
@@ -1102,16 +1107,57 @@ def persist_outbound_frame(
             """,
             (
                 source,
-                str(source_kind or "rf").strip().lower() or "rf",
+                normalized_source_kind,
                 interface_id,
-                str(band or "").strip(),
+                normalized_band,
                 "TNC2-TX",
                 line,
                 port,
-                command,
+                normalized_command,
                 len(line.encode("utf-8")),
                 payload_hex,
-                utc_now(),
+                occurred_at,
+            ),
+        )
+        frame_id = int(cursor.lastrowid)
+
+    if normalized_command.upper().startswith("TX-SKIP"):
+        return
+    try:
+        from app.services.alerts import process_alert_frame
+        from app.services.content import parse_tnc2_frame
+
+        parsed = parse_tnc2_frame(line)
+        if parsed is None:
+            return
+        with get_connection() as connection:
+            process_alert_frame(
+                connection,
+                frame_id=frame_id,
+                parsed=parsed,
+                frame_row={
+                    "source": source,
+                    "source_kind": normalized_source_kind,
+                    "interface_id": interface_id,
+                    "direction": "tx",
+                    "band": normalized_band,
+                    "format": "TNC2-TX",
+                    "line": line,
+                    "port": port,
+                    "command": normalized_command,
+                    "length": len(line.encode("utf-8")),
+                    "hex": payload_hex,
+                    "created_at": occurred_at,
+                },
+                enforce_alarm_threshold=False,
+            )
+    except Exception as exc:
+        log_event(
+            "WARNING",
+            "alerts",
+            (
+                "Could not attach outbound frame to the APRS alert model: "
+                f"{str(exc).strip() or exc.__class__.__name__}"
             ),
         )
 

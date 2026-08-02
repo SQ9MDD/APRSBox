@@ -21,6 +21,7 @@ from app.services.aprs_warning_identity import (
     generate_cawf_message_id,
     normalize_cawf_comment,
 )
+from app.services.alerts import process_local_aprs_warning_frame
 from app.services.content import get_station_settings
 from app.services.outbound import build_message_tnc2, enqueue_alarm_group_frames
 from app.services.tx_scope import TX_SCOPE_ALL_ACTIVE, normalize_tx_scope
@@ -55,6 +56,8 @@ def _utc_datetime(value: Any = None) -> datetime:
 def _station_callsign(station_settings: Mapping[str, Any]) -> str:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
+    if ssid == "0":
+        ssid = ""
     return f"{callsign}-{ssid}" if callsign and ssid else callsign
 
 
@@ -414,6 +417,34 @@ def _register_tx_jobs(
         )
 
 
+def _record_local_alert_dispatch(
+    frames: list[dict[str, Any]],
+    *,
+    sender_callsign: str,
+    target_group: str,
+    path: str,
+    occurred_at: datetime,
+) -> None:
+    callsign, separator, ssid = str(sender_callsign or "").strip().upper().partition("-")
+    for frame in frames:
+        line = build_message_tnc2(
+            {
+                "callsign": callsign,
+                "ssid": ssid if separator else "",
+                "message_kind": "alarm_group",
+                "addressee": target_group,
+                "path": path,
+                "message_text": str(frame.get("payload") or ""),
+            }
+        )
+        result = process_local_aprs_warning_frame(
+            line,
+            timestamp=occurred_at,
+        )
+        if result is None:
+            raise RuntimeError("Locally generated CAWF frame was not accepted as an alarm.")
+
+
 def _dispatch_own_alert(
     row: Mapping[str, Any],
     *,
@@ -513,6 +544,23 @@ def _dispatch_own_alert(
     )
     now_text = now.isoformat()
     if success:
+        try:
+            _record_local_alert_dispatch(
+                frames,
+                sender_callsign=stored_sender,
+                target_group=str(row["target_group"]),
+                path=str(row.get("tx_path") or ""),
+                occurred_at=now,
+            )
+        except Exception as exc:
+            log_event(
+                "WARNING",
+                "alerts",
+                (
+                    f"Could not register own APRS alarm {row['alert_id']} in the alert list: "
+                    f"{str(exc).strip() or exc.__class__.__name__}"
+                ),
+            )
         _register_tx_jobs(
             own_alert_id=int(row["id"]),
             job_ids=job_ids,
@@ -699,6 +747,118 @@ def cancel_own_alert(
     return success, message
 
 
+def cancel_station_aprs_alert(
+    alert_id: int,
+    *,
+    now: Any = None,
+) -> tuple[bool, str]:
+    """Cancel a CAWF alert only when its source is the configured station."""
+
+    reference = _utc_datetime(now)
+    alert = fetch_one(
+        """
+        SELECT *
+        FROM aprs_alerts
+        WHERE id = ?
+          AND superseded_by_alert_id IS NULL
+          AND is_active = 1
+          AND alarm_group IS NOT NULL
+        """,
+        (alert_id,),
+    )
+    if alert is None:
+        return False, "Active APRS alarm not found."
+
+    station = get_station_settings()
+    current_sender = _station_callsign(station)
+    alert_sender = str(alert["source_callsign"] or "").strip().upper()
+    if not current_sender or current_sender != alert_sender:
+        return False, "Alarm sender does not match the configured station callsign."
+
+    target_group = str(alert["alarm_group"] or "").strip().upper()
+    logical_alert_id = str(alert["logical_alert_id"] or "").strip().upper()
+    area_code = str(alert["area_code"] or "").strip().upper()
+    if not target_group or not logical_alert_id or not area_code:
+        return False, "Alarm does not contain the CAWF identity required for cancellation."
+
+    own_alert = fetch_one(
+        """
+        SELECT id
+        FROM own_aprs_alerts
+        WHERE sender_callsign = ? COLLATE NOCASE
+          AND target_group = ? COLLATE NOCASE
+          AND alert_id = ? COLLATE NOCASE
+          AND status IN ('active', 'error')
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (alert_sender, target_group, logical_alert_id),
+    )
+    if own_alert is not None:
+        return cancel_own_alert(
+            int(own_alert["id"]),
+            sender_callsign=current_sender,
+            now=reference,
+        )
+
+    tx_available, tx_error = own_alert_tx_availability(station)
+    if not tx_available:
+        return False, tx_error or "No TX interface is available."
+    expiry = str(alert["expiry"] or "").strip()
+    if not expiry:
+        expires_at = parse_datetime(alert["expires_at"])
+        if expires_at is None:
+            return False, "Alarm expiry is unavailable."
+        expiry = format_aprs_expiry(expires_at)
+    try:
+        cancel_frames = generate_aprs_group_warning_parts(
+            expiry=expiry,
+            event_code=CAWF_CANCEL_EVENT_CODE,
+            alert_id=logical_alert_id,
+            area_code=area_code,
+        )
+    except ValueError as exc:
+        return False, str(exc)
+
+    path = str(station.get("beacon_path") or "").strip().upper()
+    success, message, _job_ids = enqueue_alarm_group_frames(
+        cancel_frames,
+        station,
+        sender_callsign=current_sender,
+        target_group=target_group,
+        path=path,
+        own_alert_id=None,
+        dispatch_token=uuid.uuid4().hex,
+        trigger="manual-alert-cancel",
+        scheduled_for=reference,
+    )
+    if not success:
+        return False, message
+    try:
+        _record_local_alert_dispatch(
+            cancel_frames,
+            sender_callsign=current_sender,
+            target_group=target_group,
+            path=path,
+            occurred_at=reference,
+        )
+    except Exception as exc:
+        log_event(
+            "WARNING",
+            "alerts",
+            (
+                f"Could not register CAWF cancellation for alert #{alert_id}: "
+                f"{str(exc).strip() or exc.__class__.__name__}"
+            ),
+        )
+    log_event(
+        "INFO",
+        "alerts",
+        f"Cancelled APRS alarm {logical_alert_id} for {target_group}.",
+    )
+    return True, message
+
+
 def restore_own_alert_schedules(*, now: Any = None) -> int:
     reference = _utc_datetime(now)
     expire_own_alerts(now=reference)
@@ -805,6 +965,38 @@ def reconcile_own_alert_job(
                     int(relation["own_alert_id"]),
                 ),
             )
+            if str(relation["dispatch_kind"]) == "cancel":
+                connection.execute(
+                    """
+                    UPDATE aprs_alerts
+                    SET is_active = 1,
+                        cancelled_at = NULL,
+                        updated_at = ?
+                    WHERE superseded_by_alert_id IS NULL
+                      AND (
+                            expires_at IS NULL
+                            OR julianday(expires_at) > julianday(?)
+                      )
+                      AND (
+                            valid_until_utc IS NULL
+                            OR julianday(valid_until_utc) > julianday(?)
+                      )
+                      AND EXISTS (
+                            SELECT 1
+                            FROM own_aprs_alerts AS own
+                            WHERE own.id = ?
+                              AND own.sender_callsign = aprs_alerts.source_callsign COLLATE NOCASE
+                              AND own.target_group = aprs_alerts.alarm_group COLLATE NOCASE
+                              AND own.alert_id = aprs_alerts.logical_alert_id COLLATE NOCASE
+                      )
+                    """,
+                    (
+                        timestamp,
+                        timestamp,
+                        timestamp,
+                        int(relation["own_alert_id"]),
+                    ),
+                )
         return
     jobs = fetch_all(
         """

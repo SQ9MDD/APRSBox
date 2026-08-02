@@ -13,9 +13,6 @@
     const compose = pageData.compose || {};
     const i18n = pageData.i18n || {};
     const groups = new Map((compose.groups || []).map((group) => [group.group, group]));
-    const activeAlerts = new Map(
-        (pageData.activeAlerts || []).map((alert) => [String(alert.id), alert])
-    );
     const format = (template, values = {}) => Object.entries(values).reduce(
         (text, [key, value]) => text.replaceAll(`{${key}}`, String(value)),
         String(template || "")
@@ -44,62 +41,16 @@
     const cancelModal = document.getElementById("own-alert-cancel-modal");
     const cancelForm = document.getElementById("own-alert-cancel-form");
     const cancelLabel = document.getElementById("own-alert-cancel-label");
-    document.querySelectorAll("[data-own-alert-cancel]").forEach((button) => {
+    document.querySelectorAll("[data-alert-protocol-cancel]").forEach((button) => {
         button.addEventListener("click", () => {
-            const id = button.dataset.ownAlertCancel || "";
-            if (cancelForm) cancelForm.action = `${rootPath}/alerts/own/${encodeURIComponent(id)}/cancel`;
-            if (cancelLabel) cancelLabel.textContent = button.dataset.ownAlertLabel || id;
+            const id = button.dataset.alertProtocolCancel || "";
+            if (cancelForm) cancelForm.action = `${rootPath}/alerts/${encodeURIComponent(id)}/cancel-protocol`;
+            if (cancelLabel) cancelLabel.textContent = button.dataset.alertProtocolLabel || id;
             showModal(cancelModal);
         });
     });
     document.querySelectorAll("[data-close-own-alert-cancel]").forEach((button) => {
         button.addEventListener("click", () => hideModal(cancelModal));
-    });
-
-    const detailsModal = document.getElementById("own-alert-details-modal");
-    const detailsGrid = document.getElementById("own-alert-details-grid");
-    const detailKeys = [
-        "alert_id",
-        "sender_callsign",
-        "target_group",
-        "event_code",
-        "area",
-        "comment",
-        "created_label",
-        "valid_until_label",
-        "repeat_interval_minutes",
-        "next_transmission_label",
-        "last_transmission_label",
-        "transmission_count",
-        "status",
-    ];
-    document.querySelectorAll("[data-own-alert-details]").forEach((button) => {
-        button.addEventListener("click", () => {
-            const alert = activeAlerts.get(String(button.dataset.ownAlertDetails || ""));
-            if (!alert || !detailsGrid) return;
-            detailsGrid.replaceChildren();
-            detailKeys.forEach((key) => {
-                const row = document.createElement("div");
-                const term = document.createElement("dt");
-                const value = document.createElement("dd");
-                term.textContent = i18n.detailsLabels?.[key] || key;
-                if (key === "area") {
-                    value.textContent = `${alert.area_name || "-"} (${alert.area_code || "-"})`;
-                } else if (key === "event_code") {
-                    value.textContent = `${alert.event_label || alert.event_code || "-"} — ${alert.event_code || "-"}`;
-                } else if (key === "repeat_interval_minutes") {
-                    value.textContent = format(i18n.minutes, { count: alert[key] || 0 });
-                } else {
-                    value.textContent = String(alert[key] ?? "") || "-";
-                }
-                row.append(term, value);
-                detailsGrid.append(row);
-            });
-            showModal(detailsModal);
-        });
-    });
-    document.querySelectorAll("[data-close-own-alert-details]").forEach((button) => {
-        button.addEventListener("click", () => hideModal(detailsModal));
     });
 
     const form = document.getElementById("own-alert-compose-form");
@@ -353,7 +304,7 @@
 
     document.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
-        [confirmModal, cancelModal, detailsModal].forEach((modal) => {
+        [confirmModal, cancelModal].forEach((modal) => {
             if (modal && !modal.hidden) hideModal(modal);
         });
     });

@@ -218,7 +218,7 @@ def _recalculate_logical_alert(
 def accept_aprs_warning_frame(
     connection: sqlite3.Connection,
     *,
-    frame_id: int,
+    frame_id: int | None,
     parsed: Mapping[str, Any],
     frame_row: Mapping[str, Any],
     warning: Mapping[str, Any],
@@ -511,7 +511,8 @@ def accept_aprs_warning_frame(
                     comment_fragment = ?,
                     last_received_at = ?,
                     received_count = received_count + 1,
-                    last_frame_id = ?,
+                    initial_frame_id = COALESCE(initial_frame_id, ?),
+                    last_frame_id = COALESCE(?, last_frame_id),
                     updated_at = ?
                 WHERE id = ?
                 """,
@@ -524,20 +525,23 @@ def accept_aprs_warning_frame(
                     protocol_comment,
                     received_at,
                     frame_id,
+                    frame_id,
                     received_at,
                     part_id,
                 ),
             )
 
-    relation_cursor = connection.execute(
-        """
-        INSERT INTO aprs_alert_frames(alert_id, frame_id, part_id, received_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(frame_id) DO NOTHING
-        """,
-        (alert_id, frame_id, part_id, received_at),
-    )
-    relation_created = int(relation_cursor.rowcount or 0) == 1
+    relation_created = False
+    if frame_id is not None:
+        relation_cursor = connection.execute(
+            """
+            INSERT INTO aprs_alert_frames(alert_id, frame_id, part_id, received_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(frame_id) DO NOTHING
+            """,
+            (alert_id, frame_id, part_id, received_at),
+        )
+        relation_created = int(relation_cursor.rowcount or 0) == 1
 
     existing_state = connection.execute(
         "SELECT cancelled_at FROM aprs_alerts WHERE id = ?",
@@ -569,7 +573,8 @@ def accept_aprs_warning_frame(
                 severity_level = COALESCE(?, severity_level),
                 last_seen_at = ?,
                 frame_count = frame_count + ?,
-                last_frame_id = ?,
+                initial_frame_id = COALESCE(initial_frame_id, ?),
+                last_frame_id = COALESCE(?, last_frame_id),
                 latitude = ?,
                 longitude = ?,
                 cancelled_at = CASE
@@ -601,6 +606,7 @@ def accept_aprs_warning_frame(
                 severity_level,
                 received_at,
                 1 if relation_created else 0,
+                frame_id,
                 frame_id,
                 latitude,
                 longitude,
@@ -681,9 +687,10 @@ def _raw_aprs_message_fields(parsed: Mapping[str, Any]) -> tuple[str, str]:
 def process_alarm_group_message_frame(
     connection: sqlite3.Connection,
     *,
-    frame_id: int,
+    frame_id: int | None,
     parsed: dict[str, Any],
     frame_row: Mapping[str, Any],
+    enforce_alert_threshold: bool = True,
 ) -> dict[str, Any] | None:
     """Route a configured APRS alarm-group message into the shared intake."""
 
@@ -701,10 +708,14 @@ def process_alarm_group_message_frame(
     if not addressee or addressee not in set(get_aprs_alarm_groups()):
         return None
     warning_fields = parse_aprs_group_warning_content(raw_content)
-    if not warning_fields.get("is_cancel") and not alarm_event_meets_category_threshold(
-        warning_fields.get("event_code"),
-        warning_fields.get("severity_level"),
-        target="alerts",
+    if (
+        enforce_alert_threshold
+        and not warning_fields.get("is_cancel")
+        and not alarm_event_meets_category_threshold(
+            warning_fields.get("event_code"),
+            warning_fields.get("severity_level"),
+            target="alerts",
+        )
     ):
         return None
 
@@ -726,12 +737,55 @@ def process_alarm_group_message_frame(
     )
 
 
+def process_local_aprs_warning_frame(
+    line: str,
+    *,
+    timestamp: datetime | str | None = None,
+) -> dict[str, Any] | None:
+    """Register a locally generated CAWF frame in the shared alert model.
+
+    The logical alert is created as soon as transmission is queued. Later RF
+    and APRS-IS TX records attach their real Traffic Monitor frames to the same
+    identity through ``process_alert_frame``.
+    """
+
+    normalized_line = str(line or "").rstrip("\r\n")
+    parsed = parse_tnc2_frame(normalized_line) if normalized_line else None
+    if parsed is None:
+        return None
+    occurred_at = _normalized_utc_datetime(timestamp).replace(
+        microsecond=0
+    ).isoformat()
+    with get_connection() as connection:
+        return process_alarm_group_message_frame(
+            connection,
+            frame_id=None,
+            parsed=parsed,
+            frame_row={
+                "source": "APRSBox local TX",
+                "source_kind": "local_tx",
+                "interface_id": None,
+                "direction": "tx",
+                "band": "",
+                "format": "TNC2-TX",
+                "line": normalized_line,
+                "port": "",
+                "command": "TX-QUEUED",
+                "length": len(normalized_line.encode("utf-8")),
+                "hex": "",
+                "created_at": occurred_at,
+            },
+            enforce_alert_threshold=False,
+        )
+
+
 def process_alert_frame(
     connection: sqlite3.Connection,
     *,
     frame_id: int,
     parsed: dict[str, Any],
     frame_row: Mapping[str, Any],
+    enforce_alarm_threshold: bool = True,
 ) -> dict[str, Any] | None:
     """Recognize one alert candidate and feed it into the shared intake."""
 
@@ -748,6 +802,7 @@ def process_alert_frame(
         frame_id=frame_id,
         parsed=parsed,
         frame_row=frame_row,
+        enforce_alert_threshold=enforce_alarm_threshold,
     )
 
 
