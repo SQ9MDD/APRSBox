@@ -1896,7 +1896,7 @@
   "Alerts controls transfer from Messages to Alerts. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Alarme steuert die Übernahme von Nachrichten zu Alarmen. Alarm-Popup steuert das Popup im Notfallstil. Aus deaktiviert die Kategorie in dieser Spalte vollständig. Unbekannte Stufen bleiben ansonsten zur Sicherheit erhalten.",
   "Alarm visibility on the map is managed directly from the alarm panel on the Map page.": "Die Sichtbarkeit von Alarmen auf der Karte wird direkt im Alarmpanel der Kartenseite verwaltet.",
   "Send alarm": "Send alarm",
-  "Send a CAWF alarm from the configured APRSBox station.": "Send a CAWF alarm from the configured APRSBox station.",
+  "Send a CAWF alarm.": "Sende einen CAWF-Alarm.",
   "No fully supported configured alarm groups are available.": "No fully supported configured alarm groups are available.",
   "Area": "Area",
   "Search areas": "Search areas",

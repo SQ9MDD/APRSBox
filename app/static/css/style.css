@@ -8032,7 +8032,7 @@ button.message-delivery-badge {
 
 .own-alert-compose-form {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
     gap: var(--space-2);
 }
@@ -8058,6 +8058,11 @@ button.message-delivery-badge {
     grid-column: 1 / -1;
     justify-content: flex-end;
     align-self: end;
+}
+
+.own-alert-compose-form select,
+.own-alert-compose-form textarea {
+    min-height: 2.1rem;
 }
 
 .own-alert-empty-state {

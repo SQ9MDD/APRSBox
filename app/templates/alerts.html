@@ -19,11 +19,8 @@
         <div class="panel-header own-alert-panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Send alarm") }}</h2>
-                <p class="muted small">{{ t("Send a CAWF alarm from the configured APRSBox station.") }}</p>
+                <p class="muted small">{{ t("Send a CAWF alarm.") }}</p>
             </div>
-            {% if own_alert_compose.station_callsign %}
-            <span class="frame-type-badge">{{ own_alert_compose.station_callsign }}</span>
-            {% endif %}
         </div>
 
         {% if not own_alert_compose.groups %}
@@ -59,6 +56,16 @@
                 <select id="own-alert-level" name="severity_level" required></select>
             </label>
             <label>
+                <span>{{ t("Repeat every") }}</span>
+                <select id="own-alert-repeat" name="repeat_interval_minutes" required>
+                    {% for minutes in own_alert_compose.repeat_intervals %}
+                    <option value="{{ minutes }}"{% if minutes == own_alert_compose.default_repeat_interval %} selected{% endif %}>
+                        {{ tf("{count} minutes", {"count": minutes}) }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
                 <span>{{ t("Validity") }}</span>
                 <select id="own-alert-validity" name="validity_hours" required>
                     {% for hours in own_alert_compose.validity_hours %}
@@ -75,16 +82,6 @@
                     <span id="own-alert-character-counter">{{ t("Select an area to calculate the limit.") }}</span>
                     <span id="own-alert-parts-counter" class="muted"></span>
                 </span>
-            </label>
-            <label>
-                <span>{{ t("Repeat every") }}</span>
-                <select id="own-alert-repeat" name="repeat_interval_minutes" required>
-                    {% for minutes in own_alert_compose.repeat_intervals %}
-                    <option value="{{ minutes }}"{% if minutes == own_alert_compose.default_repeat_interval %} selected{% endif %}>
-                        {{ tf("{count} minutes", {"count": minutes}) }}
-                    </option>
-                    {% endfor %}
-                </select>
             </label>
             <div class="form-actions own-alert-compose-actions">
                 <span class="small" id="own-alert-form-status" role="status" aria-live="polite"></span>
@@ -470,7 +467,6 @@
         "selectArea": {{ t("Select an area")|tojson }},
         "positionUnknown": {{ t("Own station position is unknown. Select an area manually.")|tojson }},
         "areaNotMatched": {{ t("Own station position does not match an area. Select one manually.")|tojson }},
-        "areaAutoSelected": {{ t("Area selected from the own station position.")|tojson }},
         "areasUnavailable": {{ t("Areas could not be loaded from GeoJSON.")|tojson }},
         "remainingCharacters": {{ t("Remaining {count} characters")|tojson }},
         "parts": {{ t("{count} frames")|tojson }},

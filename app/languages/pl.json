@@ -1952,7 +1952,7 @@
   "Alerts controls transfer from Messages to Alerts. Alert popup controls the emergency-style popup. Off disables the category completely in that column. Unknown severity levels are otherwise kept for safety.": "Kolumna Alarmy steruje przenoszeniem z Wiadomości do Alarmów. Kolumna Popup alarmowy steruje popupem w stylu alarmu emergency. Wył. całkowicie wyłącza kategorię w danej kolumnie. Nieznane poziomy są poza tym zachowywane ze względów bezpieczeństwa.",
   "Alarm visibility on the map is managed directly from the alarm panel on the Map page.": "Widocznością alarmów na mapie zarządza się bezpośrednio w panelu alarmów na stronie Mapa.",
   "Send alarm": "Wyślij alarm",
-  "Send a CAWF alarm from the configured APRSBox station.": "Wyślij alarm CAWF ze skonfigurowanej stacji APRSBox.",
+  "Send a CAWF alarm.": "Wyślij alarm CAWF.",
   "No fully supported configured alarm groups are available.": "Brak skonfigurowanych grup alarmowych z pełną obsługą.",
   "Area": "Obszar",
   "Search areas": "Szukaj obszarów",

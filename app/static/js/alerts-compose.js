@@ -250,7 +250,6 @@
             const defaultCode = String(payload.default_area_code || "");
             if (defaultCode && areas.some((area) => area.code === defaultCode)) {
                 areaSelect.value = defaultCode;
-                if (areaStatus) areaStatus.textContent = i18n.areaAutoSelected || "";
             } else if (areaStatus) {
                 areaStatus.textContent = payload.station_position_known
                     ? (i18n.areaNotMatched || "")
