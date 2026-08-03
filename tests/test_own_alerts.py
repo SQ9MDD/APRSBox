@@ -115,6 +115,18 @@ class OwnAlertTests(unittest.TestCase):
                 ["PL-WARN", "ES-WARN"],
             )
 
+    def test_compose_targets_follow_alarm_group_settings_order(self):
+        with temporary_database():
+            save_aprs_alarm_groups("ES-WARN,PL-WARN")
+            supported_groups = list_supported_warning_groups()
+            compose_groups = [
+                group["group"]
+                for group in get_own_alert_compose_context()["groups"]
+            ]
+
+        self.assertEqual(supported_groups, ["ES-WARN", "PL-WARN"])
+        self.assertEqual(compose_groups, ["ES-WARN", "PL-WARN"])
+
     def test_area_lists_are_loaded_from_profile_geojson(self):
         pl_areas = list_alarm_group_areas("PL-WARN")
         es_areas = list_alarm_group_areas("ES-WARN")

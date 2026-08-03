@@ -46,13 +46,13 @@ def list_supported_warning_group_profiles(
     if configured_only:
         if not get_aprs_alarm_enabled():
             return []
-        configured = set(get_aprs_alarm_groups())
+        configured_groups = get_aprs_alarm_groups()
     else:
-        configured = set(_WARNING_GROUP_PROFILES)
+        configured_groups = list(_WARNING_GROUP_PROFILES)
     return [
         profile
-        for group, profile in _WARNING_GROUP_PROFILES.items()
-        if group in configured
+        for group in configured_groups
+        if (profile := _WARNING_GROUP_PROFILES.get(group)) is not None
         and profile.protocol == "CAWF-v1"
         and bool(profile.event_families)
         and bool(profile.area_encoding)
