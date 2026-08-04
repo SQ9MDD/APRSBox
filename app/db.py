@@ -3541,6 +3541,34 @@ def mark_system_job_error(job_id: int, *, message: str) -> None:
         )
 
 
+def mark_unreported_system_job_error(
+    job_id: int,
+    *,
+    message: str,
+    stale_after_seconds: int = 60,
+) -> bool:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    cutoff = (now - timedelta(seconds=max(1, int(stale_after_seconds)))).isoformat()
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE system_jobs
+            SET status = 'error',
+                message = ?,
+                stage = 'failed',
+                finished_at = COALESCE(finished_at, ?),
+                updated_at = ?
+            WHERE id = ?
+              AND kind IN ('update-application', 'restart-services')
+              AND status = 'running'
+              AND progress_percent <= 1
+              AND datetime(updated_at) <= datetime(?)
+            """,
+            (str(message or ""), now.isoformat(), now.isoformat(), int(job_id), cutoff),
+        )
+        return int(cursor.rowcount or 0) > 0
+
+
 def fetch_system_job(job_id: int) -> dict[str, Any] | None:
     row = fetch_one(
         """

@@ -2,7 +2,7 @@
 
 ## 1.9.7.dev - 2026-08-04
 - `Stationen / Filter`: Eine kompakte einzeilige Kartenleiste mit Symbolen und Tooltips wurde ergänzt, einschließlich des Filters `Direkt gehört` für über RF ohne verbrauchten Digipeater-Hop empfangene Stationen.
-- `Einstellungen / Anwendungsaktualisierung`: Das Modal zeigt nun die tatsächliche Phase und den Fortschritt in Prozent, behält die Überwachung während des Webdienst-Neustarts bei und endet erst bei einem terminalen Prozessstatus statt bereits bei erneut erreichbarem Health-Endpunkt.
+- `Einstellungen / Anwendungsaktualisierung`: Das Modal zeigt die tatsächliche Phase und den Fortschritt in Prozent, behält die Überwachung während des Webdienst-Neustarts bei und endet erst bei einem terminalen Prozessstatus; die Auftrags-ID wird explizit über die `sudo`-Grenze übergeben und ein verwaister Auftrag ohne Statusmeldungen sicher freigegeben.
 
 ## 1.9.6.dev - 2026-08-01
 - `Einstellungen / Hilfe`: Eigene Markdown-Hilfe für 8 Panels in EN/DE/PL/ES/TLH hinzugefügt und die Oberfläche durch Entfernen wiederholter Beschreibungen vereinfacht.

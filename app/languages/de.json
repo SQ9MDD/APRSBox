@@ -206,6 +206,7 @@
   "Application update": "Anwendungsaktualisierung",
   "Service restart": "Dienstneustart",
   "This operation is taking longer than usual. Status monitoring is still active.": "Dieser Vorgang dauert länger als üblich. Die Statusüberwachung ist weiterhin aktiv.",
+  "The maintenance process stopped reporting status. Verify the installed version before trying again.": "Der Wartungsprozess meldet keinen Status mehr. Prüfen Sie die installierte Version, bevor Sie es erneut versuchen.",
   "Waiting for the update process to start...": "Warten auf den Start des Aktualisierungsvorgangs...",
   "Starting the update process...": "Aktualisierungsvorgang wird gestartet...",
   "Downloading application files...": "Anwendungsdateien werden heruntergeladen...",

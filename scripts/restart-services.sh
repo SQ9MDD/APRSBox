@@ -25,6 +25,43 @@ job_escape() {
     printf '%s' "$1" | sed "s/'/''/g"
 }
 
+parse_args() {
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --job-id)
+                if [ "$#" -lt 2 ]; then
+                    log "Missing value for --job-id"
+                    exit 2
+                fi
+                case "$2" in
+                    "" | *[!0-9]*)
+                        log "Invalid job ID: $2"
+                        exit 2
+                        ;;
+                esac
+                JOB_ID="$2"
+                shift 2
+                ;;
+            --db-path)
+                if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+                    log "Missing value for --db-path"
+                    exit 2
+                fi
+                DB_PATH="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                log "Unknown argument: $1"
+                exit 2
+                ;;
+        esac
+    done
+}
+
 job_update() {
     status="$1"
     message="${2:-}"
@@ -68,6 +105,7 @@ on_exit() {
     exit "$code"
 }
 
+parse_args "$@"
 trap on_exit EXIT
 job_update "running" "Preparing to restart services." "" "10" "starting"
 

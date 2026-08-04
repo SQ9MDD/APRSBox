@@ -2,7 +2,7 @@
 
 ## 1.9.7.dev - 04.08.2026
 - `Stacje / filtry`: dodano zwarty, jednorzędowy pasek kafelków z ikonami i tooltipami oraz filtr `Słyszane bezpośrednio` dla stacji odebranych przez RF bez zużytego hopu digi.
-- `Ustawienia / aktualizacja aplikacji`: modal pokazuje rzeczywisty etap i procent postępu, zachowuje stan podczas restartu WWW i kończy operację wyłącznie po terminalnym statusie procesu zamiast po samym powrocie endpointu zdrowia.
+- `Ustawienia / aktualizacja aplikacji`: modal pokazuje rzeczywisty etap i procent postępu, zachowuje stan podczas restartu WWW i kończy operację wyłącznie po terminalnym statusie procesu; identyfikator zadania jest przekazywany przez granicę `sudo`, a osierocone zadanie bez raportowania zostaje bezpiecznie zwolnione.
 
 ## 1.9.6.dev - 01.08.2026
 - `Ustawienia / Pomoc`: dodano osobną pomoc Markdown dla 8 paneli w EN/DE/PL/ES/TLH i uproszczono interfejs, usuwając powtórzone opisy.

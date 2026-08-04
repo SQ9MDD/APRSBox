@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import quote
@@ -32,6 +33,7 @@ from app.db import (
     log_event,
     mark_system_job_error,
     mark_system_job_running,
+    mark_unreported_system_job_error,
     normalize_event_log_level,
     normalize_traffic_retention_minutes,
     reset_runtime_operational_data,
@@ -279,6 +281,24 @@ DATABASE_MAINTENANCE_TABLE_LABELS: dict[str, str] = {
 
 def _translate(message: object) -> str:
     return get_translator(get_app_language())(message)
+
+
+def _system_job_process_is_running(pid: object) -> bool:
+    try:
+        normalized_pid = int(pid or 0)
+    except (TypeError, ValueError):
+        return False
+    if normalized_pid <= 0:
+        return False
+    try:
+        os.kill(normalized_pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
 
 
 def _container_mode_system_action_denied_response() -> JSONResponse:
@@ -1468,6 +1488,19 @@ def settings_job_status_api(
     job = fetch_system_job(job_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    should_check_reporting = (
+        str(job.get("kind") or "") in {"update-application", "restart-services"}
+        and str(job.get("status") or "") == "running"
+        and int(job.get("progress_percent") or 0) <= 1
+        and not _system_job_process_is_running(job.get("pid"))
+    )
+    if should_check_reporting and mark_unreported_system_job_error(
+        job_id,
+        message=_translate(
+            "The maintenance process stopped reporting status. Verify the installed version before trying again."
+        ),
+    ):
+        job = fetch_system_job(job_id) or job
     return JSONResponse({"ok": True, "job": job})
 
 

@@ -206,6 +206,7 @@
   "Application update": "Application update",
   "Service restart": "Service restart",
   "This operation is taking longer than usual. Status monitoring is still active.": "This operation is taking longer than usual. Status monitoring is still active.",
+  "The maintenance process stopped reporting status. Verify the installed version before trying again.": "The maintenance process stopped reporting status. Verify the installed version before trying again.",
   "Waiting for the update process to start...": "Waiting for the update process to start...",
   "Starting the update process...": "Starting the update process...",
   "Downloading application files...": "Downloading application files...",

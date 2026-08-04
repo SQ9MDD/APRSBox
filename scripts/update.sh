@@ -245,6 +245,23 @@ parse_args() {
                 GIT_BRANCH_CLI="$2"
                 shift 2
                 ;;
+            --job-id)
+                if [ "$#" -lt 2 ]; then
+                    fail "Missing value for --job-id"
+                fi
+                case "$2" in
+                    "" | *[!0-9]*) fail "Invalid job ID: $2" ;;
+                esac
+                JOB_ID="$2"
+                shift 2
+                ;;
+            --db-path)
+                if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+                    fail "Missing value for --db-path"
+                fi
+                DB_PATH="$2"
+                shift 2
+                ;;
             --)
                 shift
                 break

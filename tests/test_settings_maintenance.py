@@ -16,9 +16,11 @@ from app.db import (
     get_app_setting,
     init_db,
     mark_system_job_running,
+    mark_unreported_system_job_error,
 )
 from app.services.content import has_enabled_modem_interface
 from app.services.system import (
+    _start_background_script,
     container_system_actions_disabled_message,
     save_update_channel,
     start_application_update_job,
@@ -372,6 +374,51 @@ class SettingsMaintenanceTests(unittest.TestCase):
             self.assertEqual(running["progress_percent"], 1)
             self.assertEqual(running["stage"], "starting")
 
+    def test_stalled_job_without_script_reporting_is_released(self) -> None:
+        with temporary_database():
+            job_id = create_system_job("update-application", message="Queued.")
+            mark_system_job_running(job_id, pid=123, message="Starting.")
+            execute(
+                "UPDATE system_jobs SET updated_at = '2000-01-01T00:00:00+00:00' WHERE id = ?",
+                (job_id,),
+            )
+
+            changed = mark_unreported_system_job_error(
+                job_id,
+                message="Updater stopped reporting.",
+                stale_after_seconds=60,
+            )
+            stalled = fetch_system_job(job_id)
+
+            self.assertTrue(changed)
+            self.assertIsNotNone(stalled)
+            self.assertEqual(stalled["status"], "error")
+            self.assertEqual(stalled["stage"], "failed")
+            self.assertEqual(stalled["message"], "Updater stopped reporting.")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in this environment")
+    def test_job_status_api_releases_orphaned_one_percent_update(self) -> None:
+        from app.models import UserIdentity
+        from app.routers.pages import settings_job_status_api
+
+        with temporary_database():
+            job_id = create_system_job("update-application", message="Queued.")
+            mark_system_job_running(job_id, pid=999_999_999, message="Running.")
+            execute(
+                "UPDATE system_jobs SET updated_at = '2000-01-01T00:00:00+00:00' WHERE id = ?",
+                (job_id,),
+            )
+
+            response = settings_job_status_api(
+                job_id,
+                _=UserIdentity(id=1, username="admin", role="admin", is_active=True),
+            )
+            payload = json.loads(response.body)
+
+            self.assertEqual(payload["job"]["status"], "error")
+            self.assertEqual(payload["job"]["stage"], "failed")
+            self.assertIn("stopped reporting status", payload["job"]["message"])
+
     def test_system_job_migration_adds_progress_to_existing_database(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "legacy.db"
@@ -428,6 +475,53 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('"100" "completed"', restart_source)
         self.assertIn('systemctl restart aprsbox-web.service', web_restart_source)
         self.assertIn('"success" "Application update finished successfully."', web_restart_source)
+
+    def test_maintenance_scripts_accept_tracking_arguments(self) -> None:
+        for script_name in (
+            "update.sh",
+            "restart-services.sh",
+            "reboot-host.sh",
+            "poweroff-host.sh",
+        ):
+            source = Path("scripts", script_name).read_text(encoding="utf-8")
+            with self.subTest(script=script_name):
+                self.assertIn("--job-id", source)
+                self.assertIn("--db-path", source)
+
+    def test_background_job_passes_tracking_as_cli_arguments_across_privilege_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "jobs.db"
+            with patch.dict(
+                os.environ,
+                {"APRSBOX_LOG_DIR": temp_dir, "APRSBOX_DB_PATH": str(database_path)},
+            ), patch(
+                "app.services.system._script_command",
+                return_value=["sudo", "-n", "/opt/aprsbox/app/scripts/update.sh"],
+            ), patch("app.services.system.subprocess.Popen") as popen:
+                popen.return_value.pid = 4321
+                result = _start_background_script(
+                    script_name="update.sh",
+                    log_filename="update-test.log",
+                    extra_args=["--git-branch", "main"],
+                    job_id=77,
+                )
+
+        self.assertTrue(result["ok"])
+        command = popen.call_args.args[0]
+        self.assertEqual(
+            command,
+            [
+                "sudo",
+                "-n",
+                "/opt/aprsbox/app/scripts/update.sh",
+                "--git-branch",
+                "main",
+                "--job-id",
+                "77",
+                "--db-path",
+                str(database_path),
+            ],
+        )
 
     def test_update_job_passes_selected_channel_as_cli_argument(self) -> None:
         with temporary_database(), patch("app.services.system._start_background_script", return_value={"ok": True}) as runner:
