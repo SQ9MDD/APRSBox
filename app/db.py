@@ -135,6 +135,8 @@ CREATE TABLE IF NOT EXISTS system_jobs (
     kind TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'success', 'error')),
     message TEXT NOT NULL DEFAULT '',
+    progress_percent INTEGER NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
+    stage TEXT NOT NULL DEFAULT '',
     protocol_comment TEXT NOT NULL DEFAULT '',
     log_file TEXT,
     pid INTEGER,
@@ -2550,25 +2552,35 @@ def _migrate_system_jobs_table(connection: sqlite3.Connection) -> None:
     exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'system_jobs' LIMIT 1"
     ).fetchone()
-    if exists is not None:
-        return
-    connection.execute(
-        """
-        CREATE TABLE system_jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            kind TEXT NOT NULL,
-            status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'success', 'error')),
-            message TEXT NOT NULL DEFAULT '',
-            log_file TEXT,
-            pid INTEGER,
-            exit_code INTEGER,
-            created_at TEXT NOT NULL,
-            started_at TEXT,
-            finished_at TEXT,
-            updated_at TEXT NOT NULL
+    if exists is None:
+        connection.execute(
+            """
+            CREATE TABLE system_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'success', 'error')),
+                message TEXT NOT NULL DEFAULT '',
+                progress_percent INTEGER NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
+                stage TEXT NOT NULL DEFAULT '',
+                log_file TEXT,
+                pid INTEGER,
+                exit_code INTEGER,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                finished_at TEXT,
+                updated_at TEXT NOT NULL
+            )
+            """
         )
-        """
-    )
+    else:
+        columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(system_jobs)").fetchall()}
+        if "progress_percent" not in columns:
+            connection.execute(
+                "ALTER TABLE system_jobs ADD COLUMN progress_percent INTEGER NOT NULL DEFAULT 0 "
+                "CHECK (progress_percent BETWEEN 0 AND 100)"
+            )
+        if "stage" not in columns:
+            connection.execute("ALTER TABLE system_jobs ADD COLUMN stage TEXT NOT NULL DEFAULT ''")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at DESC, id DESC)")
 
 
@@ -3476,8 +3488,10 @@ def create_system_job(kind: str, *, message: str = "", log_file: str | None = No
     with get_connection() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO system_jobs(kind, status, message, log_file, created_at, updated_at)
-            VALUES (?, 'queued', ?, ?, ?, ?)
+            INSERT INTO system_jobs(
+                kind, status, message, progress_percent, stage, log_file, created_at, updated_at
+            )
+            VALUES (?, 'queued', ?, 0, 'queued', ?, ?, ?)
             """,
             (kind, str(message or ""), str(log_file) if log_file else None, now, now),
         )
@@ -3497,7 +3511,9 @@ def mark_system_job_running(
             """
             UPDATE system_jobs
             SET status = 'running',
-                message = ?,
+                message = CASE WHEN status = 'queued' THEN ? ELSE message END,
+                progress_percent = MAX(progress_percent, 1),
+                stage = CASE WHEN status = 'queued' THEN 'starting' ELSE stage END,
                 pid = COALESCE(?, pid),
                 log_file = COALESCE(?, log_file),
                 started_at = COALESCE(started_at, ?),
@@ -3516,6 +3532,7 @@ def mark_system_job_error(job_id: int, *, message: str) -> None:
             UPDATE system_jobs
             SET status = 'error',
                 message = ?,
+                stage = 'failed',
                 finished_at = COALESCE(finished_at, ?),
                 updated_at = ?
             WHERE id = ?
@@ -3528,7 +3545,7 @@ def fetch_system_job(job_id: int) -> dict[str, Any] | None:
     row = fetch_one(
         """
         SELECT
-            id, kind, status, message, log_file, pid, exit_code,
+            id, kind, status, message, progress_percent, stage, log_file, pid, exit_code,
             created_at, started_at, finished_at, updated_at
         FROM system_jobs
         WHERE id = ?

@@ -2,6 +2,7 @@
 
 ## 1.9.7.dev - 2026-08-04
 - `Estaciones / filtros`: se añadió una barra compacta de tarjetas en una sola fila, con iconos y tooltips, incluido el filtro `Escuchadas directamente` para estaciones recibidas por RF sin un salto de repetidor consumido.
+- `Ajustes / actualización de la aplicación`: el modal muestra ahora la fase real y el porcentaje de progreso, mantiene el seguimiento durante el reinicio del servicio web y solo finaliza con un estado terminal del proceso, no cuando el endpoint de salud vuelve a responder.
 
 ## 1.9.6.dev - 2026-08-01
 - `Ajustes / Ayuda`: se añadió ayuda Markdown específica para 8 paneles en EN/DE/PL/ES/TLH y se simplificó la interfaz eliminando descripciones repetidas.

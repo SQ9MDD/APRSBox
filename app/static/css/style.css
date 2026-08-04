@@ -5606,6 +5606,54 @@ select:focus-visible,
     font-size: 0.96rem;
 }
 
+.settings-progress-details {
+    display: grid;
+    gap: 0.48rem;
+    margin-top: 0.28rem;
+}
+
+.settings-progress-details[hidden] {
+    display: none !important;
+}
+
+.settings-progress-summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+}
+
+.settings-progress-stage {
+    min-width: 0;
+    color: var(--text);
+    font-size: 0.88rem;
+    line-height: 1.4;
+}
+
+.settings-progress-percent {
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.settings-progress-track {
+    height: 0.58rem;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--panel-alt) 82%, var(--border) 18%);
+}
+
+.settings-progress-bar {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 78%, white), var(--accent));
+    transition: width 280ms ease;
+}
+
 .settings-progress-message {
     margin: 0;
     color: var(--muted);

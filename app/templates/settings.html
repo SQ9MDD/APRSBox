@@ -203,7 +203,7 @@
                 class="form-stack"
                 data-settings-action-id="update-application"
                 data-settings-action-group="update-controls"
-                onsubmit="return confirm({{ t('Start application update now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 45000, reloadOnSuccess: true});"
+                onsubmit="return confirm({{ t('Start application update now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
@@ -698,7 +698,7 @@
                     class="form-stack"
                     data-settings-action-id="restart-services"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 45000, reloadOnSuccess: true, reloadDelayMs: 7000});"
+                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, reloadOnSuccess: true, reloadDelayMs: 3000});"
                 >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
@@ -788,6 +788,15 @@
                     <div class="settings-progress-header">
                         <span class="settings-progress-spinner" aria-hidden="true"></span>
                         <h3 class="settings-progress-title"></h3>
+                    </div>
+                    <div class="settings-progress-details" hidden>
+                        <div class="settings-progress-summary">
+                            <span class="settings-progress-stage"></span>
+                            <strong class="settings-progress-percent">0%</strong>
+                        </div>
+                        <div class="settings-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                            <span class="settings-progress-bar"></span>
+                        </div>
                     </div>
                     <p class="settings-progress-message"></p>
                     <div class="settings-progress-actions">
@@ -954,6 +963,26 @@
             versionUpdateAvailable: {{ (t("Newer repository version detected. Use Docker image update flow.") if is_container_mode else t("Update available"))|tojson }},
             closeButton: {{ t("OK")|tojson }},
             unsupportedActionMode: {{ t("Unsupported action mode.")|tojson }},
+            updateTitle: {{ t("Application update")|tojson }},
+            restartTitle: {{ t("Service restart")|tojson }},
+            takingLonger: {{ t("This operation is taking longer than usual. Status monitoring is still active.")|tojson }},
+            jobStages: {
+                queued: {{ t("Waiting for the update process to start...")|tojson }},
+                starting: {{ t("Starting the update process...")|tojson }},
+                downloading: {{ t("Downloading application files...")|tojson }},
+                "preparing-files": {{ t("Preparing downloaded files...")|tojson }},
+                "preparing-dependencies": {{ t("Preparing application dependencies...")|tojson }},
+                "stopping-services": {{ t("Stopping application services...")|tojson }},
+                "backing-up-database": {{ t("Backing up the database...")|tojson }},
+                "replacing-files": {{ t("Replacing application files...")|tojson }},
+                "updating-database": {{ t("Updating the application database...")|tojson }},
+                "restarting-core": {{ t("Restarting the core service...")|tojson }},
+                "restarting-web": {{ t("Restarting the web service. The browser may briefly lose connection...")|tojson }},
+                "restarting-services": {{ t("Restarting application services. The browser may briefly lose connection...")|tojson }},
+                finalizing: {{ t("Finalizing the update and cleaning up...")|tojson }},
+                completed: {{ t("Application update completed successfully.")|tojson }},
+                failed: {{ t("Application update failed.")|tojson }},
+            },
         };
 
         const activeJobStorageKey = "aprsbox-settings-active-job-v1";
@@ -968,6 +997,15 @@
                     <span class="settings-progress-spinner" aria-hidden="true"></span>
                     <h3 class="settings-progress-title"></h3>
                 </div>
+                <div class="settings-progress-details" hidden>
+                    <div class="settings-progress-summary">
+                        <span class="settings-progress-stage"></span>
+                        <strong class="settings-progress-percent">0%</strong>
+                    </div>
+                    <div class="settings-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <span class="settings-progress-bar"></span>
+                    </div>
+                </div>
                 <p class="settings-progress-message"></p>
                 <div class="settings-progress-actions">
                     <button type="button" class="button button-secondary settings-progress-close">${labels.closeButton}</button>
@@ -978,6 +1016,11 @@
 
         const titleNode = backdrop.querySelector(".settings-progress-title");
         const messageNode = backdrop.querySelector(".settings-progress-message");
+        const progressDetailsNode = backdrop.querySelector(".settings-progress-details");
+        const progressStageNode = backdrop.querySelector(".settings-progress-stage");
+        const progressPercentNode = backdrop.querySelector(".settings-progress-percent");
+        const progressTrackNode = backdrop.querySelector(".settings-progress-track");
+        const progressBarNode = backdrop.querySelector(".settings-progress-bar");
         const closeButton = backdrop.querySelector(".settings-progress-close");
 
         let hideTimer = null;
@@ -1022,14 +1065,63 @@
             }
         };
 
+        const titleForAction = (actionId) => {
+            const normalized = String(actionId || "");
+            if (normalized === "update-application") return labels.updateTitle;
+            if (normalized === "restart-services") return labels.restartTitle;
+            return labels.defaultTitle;
+        };
+
+        const messageForJobStage = (stage, fallback = "") => {
+            const normalized = String(stage || "").trim();
+            if (normalized && Object.prototype.hasOwnProperty.call(labels.jobStages, normalized)) {
+                return String(labels.jobStages[normalized]);
+            }
+            return String(fallback || labels.defaultMessage);
+        };
+
+        const renderProgress = (message, options = {}) => {
+            const parsedProgress = Number(options.progressPercent);
+            const hasProgress = Number.isFinite(parsedProgress);
+            if (progressDetailsNode instanceof HTMLElement) {
+                progressDetailsNode.hidden = !hasProgress;
+            }
+            if (!hasProgress) {
+                if (messageNode instanceof HTMLElement) {
+                    messageNode.hidden = false;
+                    messageNode.textContent = String(message || labels.defaultMessage);
+                }
+                return;
+            }
+
+            const progressPercent = Math.max(0, Math.min(100, Math.round(parsedProgress)));
+            const stageLabel = String(options.stageLabel || message || labels.defaultMessage);
+            if (progressStageNode instanceof HTMLElement) {
+                progressStageNode.textContent = stageLabel;
+            }
+            if (progressPercentNode instanceof HTMLElement) {
+                progressPercentNode.textContent = `${progressPercent}%`;
+            }
+            if (progressTrackNode instanceof HTMLElement) {
+                progressTrackNode.setAttribute("aria-valuenow", String(progressPercent));
+                progressTrackNode.setAttribute("aria-valuetext", `${progressPercent}% — ${stageLabel}`);
+            }
+            if (progressBarNode instanceof HTMLElement) {
+                progressBarNode.style.width = `${progressPercent}%`;
+            }
+            if (messageNode instanceof HTMLElement) {
+                const detail = String(options.detail || "").trim();
+                messageNode.textContent = detail;
+                messageNode.hidden = !detail;
+            }
+        };
+
         const showSettingsProgress = (message, options = {}) => {
             clearTimers();
             if (titleNode instanceof HTMLElement) {
                 titleNode.textContent = String(options.title || labels.defaultTitle);
             }
-            if (messageNode instanceof HTMLElement) {
-                messageNode.textContent = String(message || labels.defaultMessage);
-            }
+            renderProgress(message, options);
             progressLocked = Boolean(options.locked);
             if (progressLocked && progressDismissed) {
                 return true;
@@ -1162,7 +1254,14 @@
             stopPolling();
             progressLocked = false;
             restoreControls();
-            showSettingsProgress(message, { locked: false, autoHideMs: options.autoHideMs });
+            showSettingsProgress(message, {
+                locked: false,
+                autoHideMs: options.autoHideMs,
+                title: options.title,
+                progressPercent: options.progressPercent,
+                stageLabel: options.stageLabel,
+                detail: options.detail,
+            });
             if (options.reload) {
                 const parsedDelay = Number(options.reloadDelayMs);
                 const reloadDelayMs = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : 1200;
@@ -1243,43 +1342,19 @@
         };
 
         const jobStatusUrl = (jobId) => `${rootPath}/api/settings/jobs/${encodeURIComponent(String(jobId || ""))}`;
-        const healthUrl = `${rootPath}/health`;
-
-        const canReloadOnHealthRecovery = (actionId, reloadOnSuccess) => {
-            if (!reloadOnSuccess) {
-                return false;
-            }
-            const normalized = String(actionId || "");
-            return normalized === "update-application" ||
-                normalized === "restart-services" ||
-                normalized === "reboot-host" ||
-                normalized === "poweroff-host";
-        };
-
-        const canFinalizeRunningJobFromHealth = (actionId, reloadOnSuccess) => {
-            if (!reloadOnSuccess) {
-                return false;
-            }
-            return String(actionId || "") === "restart-services";
-        };
 
         const pollJobStatus = async (jobId, startedAt, options) => {
             const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
             const reloadAfterFinish = Boolean(options.reloadOnSuccess);
             const actionId = String(options.actionId || "");
             const reloadDelayMs = Number(options.reloadDelayMs || 0);
+            const title = titleForAction(actionId);
+            let lastProgressPercent = 0;
+            let lastStageLabel = String(options.message || labels.defaultMessage);
 
             const pollOnce = async () => {
                 const elapsed = Date.now() - Number(startedAt || Date.now());
-                if (elapsed > lockTimeoutMs) {
-                    try {
-                        window.sessionStorage.removeItem(activeJobStorageKey);
-                    } catch (_error) {
-                        // Ignore storage errors.
-                    }
-                    finishAction(labels.timeout, { reload: false });
-                    return;
-                }
+                const overdueDetail = elapsed > lockTimeoutMs ? labels.takingLonger : "";
 
                 try {
                     const response = await window.fetch(jobStatusUrl(jobId), {
@@ -1294,6 +1369,15 @@
                     const job = payload && payload.job ? payload.job : null;
                     const status = job && job.status ? String(job.status) : "";
                     const message = job && job.message ? String(job.message) : "";
+                    const stage = job && job.stage ? String(job.stage) : "";
+                    const parsedProgress = Number(job && job.progress_percent);
+                    if (Number.isFinite(parsedProgress)) {
+                        lastProgressPercent = Math.max(0, Math.min(100, parsedProgress));
+                    }
+                    lastStageLabel = messageForJobStage(
+                        stage,
+                        message || String(options.message || labels.defaultMessage)
+                    );
 
                     if (status === "success") {
                         try {
@@ -1301,7 +1385,16 @@
                         } catch (_error) {
                             // Ignore storage errors.
                         }
-                        finishAction(message || labels.completed, { reload: reloadAfterFinish, reloadDelayMs });
+                        const successLabel = actionId === "update-application"
+                            ? messageForJobStage("completed", labels.completed)
+                            : (message || labels.completed);
+                        finishAction(successLabel, {
+                            reload: reloadAfterFinish,
+                            reloadDelayMs,
+                            title,
+                            progressPercent: 100,
+                            stageLabel: successLabel,
+                        });
                         return;
                     }
 
@@ -1311,64 +1404,40 @@
                         } catch (_error) {
                             // Ignore storage errors.
                         }
-                        finishAction(message || labels.failed, { reload: false });
+                        const failedLabel = actionId === "update-application"
+                            ? messageForJobStage("failed", labels.failed)
+                            : labels.failed;
+                        finishAction(failedLabel, {
+                            reload: false,
+                            title,
+                            progressPercent: lastProgressPercent,
+                            stageLabel: failedLabel,
+                            detail: message && message !== failedLabel ? message : "",
+                        });
                         return;
                     }
 
-                    if (canFinalizeRunningJobFromHealth(actionId, reloadAfterFinish)) {
-                        try {
-                            const healthResponse = await window.fetch(healthUrl, {
-                                cache: "no-store",
-                                credentials: "same-origin",
-                                headers: { "Accept": "application/json" },
-                            });
-                            if (healthResponse.ok) {
-                                try {
-                                    window.sessionStorage.removeItem(activeJobStorageKey);
-                                } catch (_storageError) {
-                                    // Ignore storage errors.
-                                }
-                                finishAction(message || labels.completed, { reload: true, reloadDelayMs });
-                                return;
-                            }
-                        } catch (_healthError) {
-                            // Ignore health check errors and continue polling.
-                        }
-                    }
-
-                    showSettingsProgress(message || String(options.message || labels.defaultMessage), {
+                    showSettingsProgress(lastStageLabel, {
                         locked: true,
-                        lockTimeoutMs,
+                        title,
+                        progressPercent: lastProgressPercent,
+                        stageLabel: lastStageLabel,
+                        detail: overdueDetail,
                     });
                 } catch (_error) {
-                    if (canReloadOnHealthRecovery(actionId, reloadAfterFinish)) {
-                        try {
-                            const healthResponse = await window.fetch(healthUrl, {
-                                cache: "no-store",
-                                credentials: "same-origin",
-                                headers: { "Accept": "application/json" },
-                            });
-                            if (healthResponse.ok) {
-                                try {
-                                    window.sessionStorage.removeItem(activeJobStorageKey);
-                                } catch (_storageError) {
-                                    // Ignore storage errors.
-                                }
-                                finishAction(labels.completed, { reload: true, reloadDelayMs });
-                                return;
-                            }
-                        } catch (_healthError) {
-                            // Ignore health check errors and keep polling.
-                        }
-                    }
-                    const base = String(options.message || labels.defaultMessage);
-                    showSettingsProgress(`${base}\n${labels.reconnecting}`, {
+                    const reconnectDetail = overdueDetail
+                        ? `${labels.reconnecting}\n${overdueDetail}`
+                        : labels.reconnecting;
+                    showSettingsProgress(lastStageLabel, {
                         locked: true,
-                        lockTimeoutMs,
+                        title,
+                        progressPercent: lastProgressPercent,
+                        stageLabel: lastStageLabel,
+                        detail: reconnectDetail,
                     });
                 }
 
-                activePollTimer = window.setTimeout(pollOnce, 3000);
+                activePollTimer = window.setTimeout(pollOnce, 2000);
             };
 
             pollOnce();
@@ -1436,7 +1505,16 @@
             form.dataset.settingsSubmitQueued = "1";
             disableFormControls(form, busyLabel);
             disableGroupControls(group, form);
-            showSettingsProgress(message, { locked: true, lockTimeoutMs });
+            if (mode === "job") {
+                showSettingsProgress(message, {
+                    locked: true,
+                    title: titleForAction(actionId),
+                    progressPercent: 0,
+                    stageLabel: message,
+                });
+            } else {
+                showSettingsProgress(message, { locked: true, lockTimeoutMs });
+            }
 
             if (mode === "job") {
                 startJob(form, options);
@@ -1489,7 +1567,12 @@
             const reloadDelayMs = Number(stored.reloadDelayMs || 0);
 
             progressDismissed = false;
-            showSettingsProgress(message, { locked: true, lockTimeoutMs });
+            showSettingsProgress(message, {
+                locked: true,
+                title: titleForAction(actionId),
+                progressPercent: 0,
+                stageLabel: message,
+            });
             pollJobStatus(jobId, startedAt, { actionId, lockTimeoutMs, message, reloadOnSuccess, reloadDelayMs });
         };
 

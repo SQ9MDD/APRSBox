@@ -2,6 +2,7 @@
 
 ## 1.9.7.dev - 2026-08-04
 - `Stations / filters`: added a compact, single-row card bar with icons and tooltips, including a `Directly heard` filter for stations received over RF without a consumed digipeater hop.
+- `Settings / application update`: the modal now shows the actual stage and progress percentage, preserves tracking during the web restart, and completes only on a terminal process status instead of the health endpoint merely becoming available again.
 
 ## 1.9.6.dev - 2026-08-01
 - `Settings / Help`: added dedicated Markdown help for 8 panels in EN/DE/PL/ES/TLH and simplified the interface by removing repeated descriptions.

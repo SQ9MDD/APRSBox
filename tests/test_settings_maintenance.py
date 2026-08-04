@@ -3,12 +3,20 @@ import importlib.util
 import json
 import os
 import re
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.db import execute, get_app_setting, init_db
+from app.db import (
+    create_system_job,
+    execute,
+    fetch_system_job,
+    get_app_setting,
+    init_db,
+    mark_system_job_running,
+)
 from app.services.content import has_enabled_modem_interface
 from app.services.system import (
     container_system_actions_disabled_message,
@@ -289,11 +297,24 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('data-settings-action-id="poweroff-host"', template_source)
         self.assertIn('data-settings-action-group="update-controls"', template_source)
         self.assertIn('data-settings-action-group="danger-actions"', template_source)
+        self.assertIn("settings-progress-track", template_source)
+        self.assertIn("progress_percent", template_source)
+
+    def test_job_modal_waits_for_terminal_job_state_instead_of_health_recovery(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertNotIn("canFinalizeRunningJobFromHealth", template_source)
+        self.assertNotIn("canReloadOnHealthRecovery", template_source)
+        self.assertNotIn('const healthUrl = `${rootPath}/health`', template_source)
+        self.assertIn('if (status === "success")', template_source)
+        self.assertIn('if (status === "error")', template_source)
+        self.assertIn("window.sessionStorage.removeItem(activeJobStorageKey)", template_source)
 
     def test_settings_styles_include_busy_state_spinner(self) -> None:
         style_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
         self.assertIn(".settings-action-button-busy", style_source)
         self.assertIn(".settings-progress-spinner", style_source)
+        self.assertIn(".settings-progress-track", style_source)
+        self.assertIn(".settings-progress-bar", style_source)
         self.assertIn("@keyframes settings-spin", style_source)
 
     def test_settings_router_contains_danger_zone_endpoints(self) -> None:
@@ -325,16 +346,88 @@ class SettingsMaintenanceTests(unittest.TestCase):
         unescaped_tojson = re.findall(r'onsubmit="[^"]*\|tojson(?!\|forceescape)', template_source)
         self.assertEqual([], unescaped_tojson)
 
-    def test_update_application_has_forty_five_second_timeout(self) -> None:
+    def test_update_application_has_extended_monitoring_timeout(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("actionId: 'update-application'", template_source)
-        self.assertIn("lockTimeoutMs: 45000", template_source)
+        self.assertIn("lockTimeoutMs: 1200000", template_source)
 
     def test_restart_services_has_reload_delay(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("actionId: 'restart-services'", template_source)
-        self.assertIn("lockTimeoutMs: 45000", template_source)
-        self.assertIn("reloadDelayMs: 7000", template_source)
+        self.assertIn("lockTimeoutMs: 300000", template_source)
+        self.assertIn("reloadDelayMs: 3000", template_source)
+
+    def test_system_jobs_store_progress_and_stage(self) -> None:
+        with temporary_database():
+            job_id = create_system_job("update-application", message="Queued.")
+            queued = fetch_system_job(job_id)
+            self.assertIsNotNone(queued)
+            self.assertEqual(queued["progress_percent"], 0)
+            self.assertEqual(queued["stage"], "queued")
+
+            mark_system_job_running(job_id, pid=123, message="Starting.")
+            running = fetch_system_job(job_id)
+            self.assertIsNotNone(running)
+            self.assertEqual(running["status"], "running")
+            self.assertEqual(running["progress_percent"], 1)
+            self.assertEqual(running["stage"], "starting")
+
+    def test_system_job_migration_adds_progress_to_existing_database(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "legacy.db"
+            with sqlite3.connect(database_path) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE system_jobs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        kind TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        message TEXT NOT NULL DEFAULT '',
+                        log_file TEXT,
+                        pid INTEGER,
+                        exit_code INTEGER,
+                        created_at TEXT NOT NULL,
+                        started_at TEXT,
+                        finished_at TEXT,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+            previous = os.environ.get("APRSBOX_DB_PATH")
+            os.environ["APRSBOX_DB_PATH"] = str(database_path)
+            try:
+                init_db()
+            finally:
+                if previous is None:
+                    os.environ.pop("APRSBOX_DB_PATH", None)
+                else:
+                    os.environ["APRSBOX_DB_PATH"] = previous
+
+            with sqlite3.connect(database_path) as connection:
+                columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(system_jobs)")}
+            self.assertIn("progress_percent", columns)
+            self.assertIn("stage", columns)
+
+    def test_update_scripts_publish_tracked_stages_and_defer_web_completion(self) -> None:
+        update_source = Path("scripts/update.sh").read_text(encoding="utf-8")
+        restart_source = Path("scripts/restart-services.sh").read_text(encoding="utf-8")
+        web_restart_source = Path("scripts/update-web-restart.sh").read_text(encoding="utf-8")
+
+        for stage in (
+            "downloading",
+            "replacing-files",
+            "updating-database",
+            "restarting-core",
+            "restarting-web",
+            "finalizing",
+        ):
+            self.assertIn(f'"{stage}"', update_source)
+        self.assertIn('JOB_FINALIZATION_DEFERRED="1"', update_source)
+        self.assertIn('APRSBOX_JOB_ID="" "$RESTART_SCRIPT"', update_source)
+        self.assertIn('"100" "completed"', restart_source)
+        self.assertIn('systemctl restart aprsbox-web.service', web_restart_source)
+        self.assertIn('"success" "Application update finished successfully."', web_restart_source)
 
     def test_update_job_passes_selected_channel_as_cli_argument(self) -> None:
         with temporary_database(), patch("app.services.system._start_background_script", return_value={"ok": True}) as runner:
