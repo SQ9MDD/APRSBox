@@ -12,29 +12,29 @@
             </div>
             <div class="stations-summary-toolbar">
                 <div class="stations-summary" id="stations-summary">
-                    <button type="button" class="metric-card stations-filter-card is-active" data-station-filter="all" aria-pressed="true">
+                    <button type="button" class="metric-card stations-filter-card is-active" data-station-filter="all" data-tooltip="{{ t('All stations') }}" aria-label="{{ t('All stations') }}" aria-pressed="true">
+                        <img class="stations-filter-icon" src="{{ request.scope.root_path }}/static/icons/account-group-outline.svg" alt="" aria-hidden="true">
                         <span class="metric-value" id="summary-total">{{ station_summary.total }}</span>
-                        <span class="metric-label">{{ t("All stations") }}</span>
                     </button>
-                    <button type="button" class="metric-card stations-filter-card" data-station-filter="direct" aria-pressed="false">
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="direct" data-tooltip="{{ t('Directly heard') }}" aria-label="{{ t('Directly heard') }}" aria-pressed="false">
+                        <img class="stations-filter-icon" src="{{ request.scope.root_path }}/static/icons/antenna.svg" alt="" aria-hidden="true">
                         <span class="metric-value" id="summary-direct">{{ station_summary.direct }}</span>
-                        <span class="metric-label">{{ t("Directly heard") }}</span>
                     </button>
-                    <button type="button" class="metric-card stations-filter-card" data-station-filter="mobile" aria-pressed="false">
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="mobile" data-tooltip="{{ t('Mobile stations') }}" aria-label="{{ t('Mobile stations') }}" aria-pressed="false">
+                        <img class="stations-filter-icon" src="{{ request.scope.root_path }}/static/icons/car-outline.svg" alt="" aria-hidden="true">
                         <span class="metric-value" id="summary-mobile">{{ station_summary.mobile }}</span>
-                        <span class="metric-label">{{ t("Mobile stations") }}</span>
                     </button>
-                    <button type="button" class="metric-card stations-filter-card" data-station-filter="stationary" aria-pressed="false">
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="stationary" data-tooltip="{{ t('Fixed stations') }}" aria-label="{{ t('Fixed stations') }}" aria-pressed="false">
+                        <img class="stations-filter-icon" src="{{ request.scope.root_path }}/static/icons/home-outline.svg" alt="" aria-hidden="true">
                         <span class="metric-value" id="summary-stationary">{{ station_summary.stationary }}</span>
-                        <span class="metric-label">{{ t("Fixed stations") }}</span>
                     </button>
-                    <button type="button" class="metric-card stations-filter-card" data-station-filter="object" aria-pressed="false">
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="object" data-tooltip="{{ t('Objects') }}" aria-label="{{ t('Objects') }}" aria-pressed="false">
+                        <img class="stations-filter-icon" src="{{ request.scope.root_path }}/static/icons/crosshairs.svg" alt="" aria-hidden="true">
                         <span class="metric-value" id="summary-objects">{{ station_summary.objects }}</span>
-                        <span class="metric-label">{{ t("Objects") }}</span>
                     </button>
-                    <button type="button" class="metric-card stations-filter-card" data-station-filter="weather" aria-pressed="false">
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="weather" data-tooltip="{{ t('Weather stations') }}" aria-label="{{ t('Weather stations') }}" aria-pressed="false">
+                        <img class="stations-filter-icon" src="{{ request.scope.root_path }}/static/icons/weather-partly-cloudy.svg" alt="" aria-hidden="true">
                         <span class="metric-value" id="summary-weather">0</span>
-                        <span class="metric-label">{{ t("Weather stations") }}</span>
                     </button>
                 </div>
                 <label class="stations-refresh-control">

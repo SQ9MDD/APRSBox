@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.9.7.dev - 04.08.2026
-- `Stacje / filtry`: dodano kafelek `Słyszane bezpośrednio` z licznikiem i filtrowaniem stacji odebranych przez RF bez zużytego hopu digi.
+- `Stacje / filtry`: dodano zwarty, jednorzędowy pasek kafelków z ikonami i tooltipami oraz filtr `Słyszane bezpośrednio` dla stacji odebranych przez RF bez zużytego hopu digi.
 
 ## 1.9.6.dev - 01.08.2026
 - `Ustawienia / Pomoc`: dodano osobną pomoc Markdown dla 8 paneli w EN/DE/PL/ES/TLH i uproszczono interfejs, usuwając powtórzone opisy.

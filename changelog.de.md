@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.9.7.dev - 2026-08-04
-- `Stationen / Filter`: Eine Karte `Direkt gehört` mit Zähler und Filterung für über RF ohne verbrauchten Digipeater-Hop empfangene Stationen wurde hinzugefügt.
+- `Stationen / Filter`: Eine kompakte einzeilige Kartenleiste mit Symbolen und Tooltips wurde ergänzt, einschließlich des Filters `Direkt gehört` für über RF ohne verbrauchten Digipeater-Hop empfangene Stationen.
 
 ## 1.9.6.dev - 2026-08-01
 - `Einstellungen / Hilfe`: Eigene Markdown-Hilfe für 8 Panels in EN/DE/PL/ES/TLH hinzugefügt und die Oberfläche durch Entfernen wiederholter Beschreibungen vereinfacht.

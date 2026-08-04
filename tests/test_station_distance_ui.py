@@ -274,6 +274,11 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn('data-station-filter="weather"', template_source)
         self.assertIn('id="summary-weather"', template_source)
         self.assertIn('id="summary-direct"', template_source)
+        self.assertEqual(template_source.count('class="stations-filter-icon"'), 6)
+        self.assertEqual(template_source.count("data-tooltip="), 6)
+        self.assertIn("account-group-outline.svg", template_source)
+        self.assertIn("antenna.svg", template_source)
+        self.assertIn("weather-partly-cloudy.svg", template_source)
         self.assertIn("function filteredStations(stations, filter)", template_source)
         self.assertIn("function isDirectlyHeardStation(station)", template_source)
         self.assertIn("function isWeatherStation(station)", template_source)
@@ -283,6 +288,12 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("normalizeEntityClass(station)", template_source)
         self.assertIn("updateFilterCardState()", template_source)
         self.assertIn("classList.toggle(\"is-active\", active)", template_source)
+
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn("grid-template-columns: repeat(6, 3.85rem);", stylesheet_source)
+        self.assertIn(".stations-filter-card::after", stylesheet_source)
+        self.assertIn("content: attr(data-tooltip);", stylesheet_source)
+        self.assertIn(".stations-filter-card:hover::after", stylesheet_source)
 
     def test_stations_page_supports_table_sorting(self) -> None:
         template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")

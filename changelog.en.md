@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.9.7.dev - 2026-08-04
-- `Stations / filters`: added a `Directly heard` card with a counter and filtering for stations received over RF without a consumed digipeater hop.
+- `Stations / filters`: added a compact, single-row card bar with icons and tooltips, including a `Directly heard` filter for stations received over RF without a consumed digipeater hop.
 
 ## 1.9.6.dev - 2026-08-01
 - `Settings / Help`: added dedicated Markdown help for 8 panels in EN/DE/PL/ES/TLH and simplified the interface by removing repeated descriptions.

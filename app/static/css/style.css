@@ -4637,9 +4637,9 @@ select:focus-visible,
 
 .stations-summary {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(6, 3.85rem);
     gap: var(--space-2);
-    flex: 1;
+    flex: 0 0 auto;
     min-width: 0;
 }
 
@@ -4647,12 +4647,12 @@ select:focus-visible,
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: var(--space-3);
+    gap: var(--space-2);
 }
 
 .stations-summary-toolbar {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     gap: var(--space-3);
     min-width: 0;
     flex-wrap: nowrap;
@@ -4660,13 +4660,13 @@ select:focus-visible,
 
 .stations-refresh-control {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     justify-content: center;
-    align-items: stretch;
-    gap: 0.32rem;
+    align-items: center;
+    gap: var(--space-2);
     line-height: 1.1;
-    min-width: 5.25rem;
-    padding: 0.44rem 0.52rem;
+    min-height: 3rem;
+    padding: 0.32rem 0.45rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
@@ -4675,13 +4675,17 @@ select:focus-visible,
 }
 
 .stations-refresh-control select {
-    min-width: 4.75rem;
+    min-width: 4.35rem;
     min-height: auto;
-    padding: 0.42rem 0.56rem;
+    padding: 0.38rem 0.48rem;
+}
+
+.stations-refresh-control > .muted {
+    white-space: nowrap;
 }
 
 .stations-summary-panel .metric-card {
-    padding: 0.42rem 0.5rem;
+    padding: 0.36rem 0.48rem;
 }
 
 .stations-summary-panel .metric-value {
@@ -4689,11 +4693,81 @@ select:focus-visible,
 }
 
 .stations-filter-card {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.38rem;
     width: 100%;
-    text-align: left;
+    min-width: 0;
+    min-height: 3rem;
+    text-align: center;
     color: inherit;
     font: inherit;
     cursor: pointer;
+}
+
+.stations-filter-icon {
+    width: 1.12rem;
+    height: 1.12rem;
+    flex: 0 0 auto;
+    opacity: 0.82;
+    filter: var(--icon-filter);
+}
+
+.stations-filter-card::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 0.42rem);
+    left: 50%;
+    z-index: 30;
+    max-width: min(15rem, 80vw);
+    padding: 0.34rem 0.5rem;
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius-xs);
+    background: color-mix(in srgb, var(--bg-layer) 92%, #000 8%);
+    box-shadow: var(--shadow);
+    color: var(--text);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(-50%, -0.18rem);
+    transition: opacity var(--transition-fast), transform var(--transition-fast), visibility var(--transition-fast);
+}
+
+.stations-filter-card:first-child::after {
+    left: 0;
+    transform: translate(0, -0.18rem);
+}
+
+.stations-filter-card:last-child::after {
+    right: 0;
+    left: auto;
+    transform: translate(0, -0.18rem);
+}
+
+.stations-filter-card:hover,
+.stations-filter-card:focus-visible {
+    z-index: 20;
+}
+
+.stations-filter-card:hover::after,
+.stations-filter-card:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, 0);
+}
+
+.stations-filter-card:first-child:hover::after,
+.stations-filter-card:first-child:focus-visible::after,
+.stations-filter-card:last-child:hover::after,
+.stations-filter-card:last-child:focus-visible::after {
+    transform: translate(0, 0);
 }
 
 .stations-filter-card:hover {
@@ -7968,7 +8042,8 @@ button.message-delivery-badge {
     }
 
     .stations-summary {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        width: 100%;
     }
 
     .band-condition-index {
