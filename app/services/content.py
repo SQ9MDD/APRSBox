@@ -2315,6 +2315,7 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
                 "origin": snapshot.get("origin", "heard"),
                 "source_kind": snapshot.get("source_kind", RF_SOURCE_KIND),
                 "is_rf": bool(snapshot.get("is_rf")),
+                "direct_heard": bool(snapshot.get("direct_heard")),
                 "statistics_eligible": bool(snapshot.get("statistics_eligible")),
                 "last_seen_any_at": snapshot.get("last_seen_any_at"),
                 "last_heard_rf_at": snapshot.get("last_heard_rf_at"),
@@ -2740,6 +2741,11 @@ def _normalize_interface_id(value: Any) -> int | None:
         return None
 
 
+def _station_path_is_direct(path: Any) -> bool:
+    tokens = [token.strip() for token in str(path or "").split(",") if token.strip()]
+    return not any(token.endswith("*") for token in tokens)
+
+
 def _build_station_snapshots_from_rows(
     rows: list[dict[str, Any]],
     *,
@@ -2748,6 +2754,7 @@ def _build_station_snapshots_from_rows(
 ) -> list[dict[str, Any]]:
     stations: dict[str, dict[str, Any]] = {}
     station_key_index: dict[str, str] = {}
+    direct_heard_station_keys: set[str] = set()
     killed_station_keys: set[str] = set()
     pending_status_by_station_key: dict[str, str] = {}
     device_database = get_aprs_device_identification_database()
@@ -2761,6 +2768,15 @@ def _build_station_snapshots_from_rows(
         aprs_data = dict(parsed.get("aprs_data") or {})
         station_key = (aprs_data.get("entity_name") or callsign).strip()
         station_key_folded = station_key.casefold()
+        row_source_kind = normalize_source_kind(row.get("source_kind"))
+        logical_path = str(parsed.get("logical_path") or parsed.get("path") or "")
+        if (
+            station_key_folded
+            and origin == "heard"
+            and row_source_kind == RF_SOURCE_KIND
+            and _station_path_is_direct(logical_path)
+        ):
+            direct_heard_station_keys.add(station_key_folded)
         packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
         if packet_group == "object" and str(aprs_data.get("state") or "").strip().lower() == "killed":
             existing_key = station_key_index.get(station_key_folded)
@@ -2781,8 +2797,6 @@ def _build_station_snapshots_from_rows(
 
         if not station_key:
             continue
-
-        row_source_kind = normalize_source_kind(row.get("source_kind"))
 
         if station_key not in stations:
             stations[station_key] = _new_station_snapshot(
@@ -2852,6 +2866,11 @@ def _build_station_snapshots_from_rows(
         if not station.get("position_ambiguous") and aprs_data.get("position_ambiguous"):
             station["position_ambiguous"] = True
 
+    for direct_station_key in direct_heard_station_keys:
+        stored_key = station_key_index.get(direct_station_key)
+        if stored_key is not None:
+            stations[stored_key]["direct_heard"] = True
+
     return list(stations.values())[:limit]
 
 
@@ -2884,6 +2903,7 @@ def _merge_station_snapshots(
             merged[field] = secondary[field]
     if not merged.get("position_ambiguous") and secondary.get("position_ambiguous"):
         merged["position_ambiguous"] = True
+    merged["direct_heard"] = bool(primary.get("direct_heard") or secondary.get("direct_heard"))
     if (not merged.get("data_raw")) and secondary.get("data_raw"):
         merged["data_raw"] = dict(secondary["data_raw"])
     for field in (
@@ -2951,6 +2971,7 @@ def _new_station_snapshot(
         "origin": resolved_origin,
         "source_kind": normalized_kind,
         "is_rf": is_rf_heard,
+        "direct_heard": False,
         "statistics_eligible": is_rf_heard,
         "activity_label": activity_label,
         "activity_age_label": activity_age_label,
@@ -3378,9 +3399,11 @@ def _station_detail_mic_e_fields(mic_e: dict[str, Any] | None) -> list[dict[str,
 
 
 def station_summary(stations: list[dict[str, Any]]) -> dict[str, int]:
-    summary = {"total": 0, "stationary": 0, "mobile": 0, "objects": 0}
+    summary = {"total": 0, "direct": 0, "stationary": 0, "mobile": 0, "objects": 0}
     for station in stations:
         summary["total"] += 1
+        if station.get("direct_heard"):
+            summary["direct"] += 1
         entity_class = station.get("entity_class")
         if entity_class == "object":
             summary["objects"] += 1

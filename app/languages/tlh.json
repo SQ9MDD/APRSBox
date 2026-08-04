@@ -38,6 +38,7 @@
   "Algorithm": "Algorithm",
   "All middle flow steps must be filter steps.": "flow botlh stepmey Hoch, filter stepmey 'oHnIS.",
   "All stations": "Hoch stationmey",
+  "Directly heard": "direct Qoylu'",
   "Allow cache fallback": "Allow cache fallback",
   "Allow cached values on failure": "Allow cached values on failure",
   "Allows or denies packets repeated by specific digi callsigns.": "digi callsignmey perbogh packetmey chav pagh bot.",

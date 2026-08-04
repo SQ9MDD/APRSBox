@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.7.dev - 2026-08-04
+- `Estaciones / filtros`: se añadió una tarjeta `Escuchadas directamente` con contador y filtrado de estaciones recibidas por RF sin un salto de repetidor consumido.
+
 ## 1.9.6.dev - 2026-08-01
 - `Ajustes / Ayuda`: se añadió ayuda Markdown específica para 8 paneles en EN/DE/PL/ES/TLH y se simplificó la interfaz eliminando descripciones repetidas.
 - `Ayuda / renderer`: se añadió la apertura segura de enlaces externos desde los documentos de ayuda.

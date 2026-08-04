@@ -16,6 +16,10 @@
                         <span class="metric-value" id="summary-total">{{ station_summary.total }}</span>
                         <span class="metric-label">{{ t("All stations") }}</span>
                     </button>
+                    <button type="button" class="metric-card stations-filter-card" data-station-filter="direct" aria-pressed="false">
+                        <span class="metric-value" id="summary-direct">{{ station_summary.direct }}</span>
+                        <span class="metric-label">{{ t("Directly heard") }}</span>
+                    </button>
                     <button type="button" class="metric-card stations-filter-card" data-station-filter="mobile" aria-pressed="false">
                         <span class="metric-value" id="summary-mobile">{{ station_summary.mobile }}</span>
                         <span class="metric-label">{{ t("Mobile stations") }}</span>
@@ -155,6 +159,7 @@
     const initialStations = {{ stations|tojson }};
 
     const summaryTotal = document.getElementById("summary-total");
+    const summaryDirect = document.getElementById("summary-direct");
     const summaryStationary = document.getElementById("summary-stationary");
     const summaryMobile = document.getElementById("summary-mobile");
     const summaryObjects = document.getElementById("summary-objects");
@@ -167,7 +172,7 @@
     const noStationsText = {{ t("No decoded APRS stations available yet.")|tojson }};
     const aprsClientLabel = {{ t("APRS client")|tojson }};
     const distanceLabel = {{ t("Distance")|tojson }};
-    const stationFilters = new Set(["all", "stationary", "mobile", "object", "weather"]);
+    const stationFilters = new Set(["all", "direct", "stationary", "mobile", "object", "weather"]);
     const stationsSortKeys = new Set(["last_heard", "callsign", "distance"]);
     const stationsSortDefaults = {
         last_heard: "desc",
@@ -245,6 +250,7 @@
             row.comment || "",
             row.frame_type || "",
             row.aprs_device_short || "",
+            Boolean(row.direct_heard),
             (row.data || []).map((item) => `${item.label}:${item.value}`).join("|"),
         ])));
     }
@@ -252,6 +258,7 @@
     function summarySignature(summary) {
         return JSON.stringify([
             summary?.total ?? 0,
+            summary?.direct ?? 0,
             summary?.stationary ?? 0,
             summary?.mobile ?? 0,
             summary?.objects ?? 0,
@@ -275,12 +282,24 @@
         return stations.filter((station) => isWeatherStation(station)).length;
     }
 
+    function isDirectlyHeardStation(station) {
+        return station?.direct_heard === true;
+    }
+
+    function directlyHeardStationsCount(stations) {
+        if (!Array.isArray(stations) || !stations.length) return 0;
+        return stations.filter((station) => isDirectlyHeardStation(station)).length;
+    }
+
     function stationaryWithoutWeatherCount(stations) {
         if (!Array.isArray(stations) || !stations.length) return 0;
         return stations.filter((station) => normalizeEntityClass(station) === "stationary" && !isWeatherStation(station)).length;
     }
 
     function updateDerivedSummaries(stations) {
+        if (summaryDirect) {
+            summaryDirect.textContent = String(directlyHeardStationsCount(stations));
+        }
         if (summaryStationary) {
             summaryStationary.textContent = String(stationaryWithoutWeatherCount(stations));
         }
@@ -291,6 +310,7 @@
     function filteredStations(stations, filter) {
         if (!Array.isArray(stations) || !stations.length) return [];
         if (filter === "all") return stations;
+        if (filter === "direct") return stations.filter((station) => isDirectlyHeardStation(station));
         if (filter === "stationary") {
             return stations.filter((station) => normalizeEntityClass(station) === "stationary" && !isWeatherStation(station));
         }

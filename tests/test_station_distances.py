@@ -118,6 +118,39 @@ class StationDistanceTests(unittest.TestCase):
             self.assertEqual(len(stations), 1)
             self.assertIsNone(stations[0]["distance_km"])
 
+    def test_station_list_marks_stations_heard_direct_during_the_visible_window(self) -> None:
+        with temporary_database():
+            update_station_settings(station_payload())
+            insert_position_frame(
+                "SP8AAA-1>APRS,WIDE1-1:!5218.37N\\02104.87E>Direct",
+                created_at="2026-01-01T00:00:00+00:00",
+            )
+            insert_position_frame(
+                "SP8BBB-2>APRS,WIDE1-1*:!5219.00N\\02105.30E>Repeated",
+                created_at="2026-01-01T00:01:00+00:00",
+            )
+            insert_position_frame(
+                "SP8BBB-2>APRS:>Direct status packet",
+                created_at="2026-01-01T00:01:30+00:00",
+            )
+            insert_position_frame(
+                "SP8AAA-1>APRS,WIDE1-1*:!5218.38N\\02104.88E>Latest repeated packet",
+                created_at="2026-01-01T00:02:00+00:00",
+            )
+            insert_position_frame(
+                "SP8CCC-3>APRS,WIDE2-1*:!5220.00N\\02106.00E>Repeated only",
+                created_at="2026-01-01T00:03:00+00:00",
+            )
+
+            stations = {
+                str(item["display_callsign"]): item
+                for item in heard_stations()
+            }
+
+            self.assertTrue(stations["SP8AAA-1"]["direct_heard"])
+            self.assertTrue(stations["SP8BBB-2"]["direct_heard"])
+            self.assertFalse(stations["SP8CCC-3"]["direct_heard"])
+
     def test_map_payload_exposes_interface_metadata_for_map_filtering(self) -> None:
         with temporary_database():
             update_station_settings(station_payload(latitude="51.1000", longitude="20.1000"))
