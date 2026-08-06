@@ -1,8 +1,12 @@
 # Changelog
 
+## 1.9.8.dev - 2026-08-05
+- `Ajustes / tareas del sistema`: la actualización de la aplicación, el reinicio de servicios, el reinicio del host y el apagado del host pasan explícitamente a sus scripts el identificador de la tarea y la ruta de la base de datos a través del límite de privilegios, manteniendo el estado y el progreso en el mismo registro incluso cuando se usa `sudo`.
+- `Ajustes / recuperación de tareas`: la supervisión del estado detecta tareas huérfanas de actualización o reinicio que permanecen bloqueadas durante el arranque después de que su proceso se haya detenido; las marca como fallidas y recomienda comprobar la versión instalada antes de volver a intentarlo.
+
 ## 1.9.7.dev - 2026-08-04
 - `Estaciones / filtros`: se añadió una barra compacta de tarjetas en una sola fila, con iconos y tooltips, incluido el filtro `Escuchadas directamente` para estaciones recibidas por RF sin un salto de repetidor consumido.
-- `Ajustes / actualización de la aplicación`: el modal muestra la fase real y el porcentaje de progreso, mantiene el seguimiento durante el reinicio web y solo finaliza con un estado terminal; el identificador de la tarea se pasa explícitamente a través de `sudo` y una tarea huérfana sin informes se libera de forma segura.
+- `Ajustes / actualización de la aplicación`: el modal muestra ahora la fase real y el porcentaje de progreso, mantiene el seguimiento durante el reinicio del servicio web y solo finaliza con un estado terminal del proceso, no cuando el endpoint de salud vuelve a responder.
 
 ## 1.9.6.dev - 2026-08-01
 - `Ajustes / Ayuda`: se añadió ayuda Markdown específica para 8 paneles en EN/DE/PL/ES/TLH y se simplificó la interfaz eliminando descripciones repetidas.

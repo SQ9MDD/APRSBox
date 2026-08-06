@@ -1,8 +1,12 @@
 # Changelog
 
+## 1.9.8.dev - 2026-08-05
+- `Einstellungen / Systemaufträge`: Anwendungsaktualisierung, Dienstneustart, Host-Neustart und Host-Abschaltung übergeben die Auftrags-ID und den Datenbankpfad nun explizit über die Berechtigungsgrenze an ihre Skripte, sodass Status und Fortschritt auch bei Verwendung von `sudo` im selben Datensatz bleiben.
+- `Einstellungen / Auftragswiederherstellung`: Die Statusüberwachung erkennt verwaiste Aktualisierungs- oder Neustartaufträge, die nach dem Ende ihres Prozesses beim Start hängen bleiben; sie markiert diese als fehlgeschlagen und empfiehlt, vor einem erneuten Versuch die installierte Version zu prüfen.
+
 ## 1.9.7.dev - 2026-08-04
 - `Stationen / Filter`: Eine kompakte einzeilige Kartenleiste mit Symbolen und Tooltips wurde ergänzt, einschließlich des Filters `Direkt gehört` für über RF ohne verbrauchten Digipeater-Hop empfangene Stationen.
-- `Einstellungen / Anwendungsaktualisierung`: Das Modal zeigt die tatsächliche Phase und den Fortschritt in Prozent, behält die Überwachung während des Webdienst-Neustarts bei und endet erst bei einem terminalen Prozessstatus; die Auftrags-ID wird explizit über die `sudo`-Grenze übergeben und ein verwaister Auftrag ohne Statusmeldungen sicher freigegeben.
+- `Einstellungen / Anwendungsaktualisierung`: Das Modal zeigt nun die tatsächliche Phase und den Fortschritt in Prozent, behält die Überwachung während des Webdienst-Neustarts bei und endet erst bei einem terminalen Prozessstatus statt bereits bei erneut erreichbarem Health-Endpunkt.
 
 ## 1.9.6.dev - 2026-08-01
 - `Einstellungen / Hilfe`: Eigene Markdown-Hilfe für 8 Panels in EN/DE/PL/ES/TLH hinzugefügt und die Oberfläche durch Entfernen wiederholter Beschreibungen vereinfacht.

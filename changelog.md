@@ -1,8 +1,12 @@
 # Changelog
 
+## 1.9.8.dev - 05.08.2026
+- `Ustawienia / zadania systemowe`: aktualizacja aplikacji, restart usług, restart hosta i wyłączenie hosta przekazują identyfikator zadania oraz ścieżkę bazy jawnie do skryptów przez granicę uprawnień, dzięki czemu status i postęp są zapisywane w tym samym rekordzie także po użyciu `sudo`.
+- `Ustawienia / odzyskiwanie zadań`: monitor statusu wykrywa osierocone zadania aktualizacji lub restartu, które utknęły na etapie uruchamiania i których proces już nie działa; oznacza je jako błąd i wyświetla komunikat zalecający sprawdzenie zainstalowanej wersji przed ponowną próbą.
+
 ## 1.9.7.dev - 04.08.2026
 - `Stacje / filtry`: dodano zwarty, jednorzędowy pasek kafelków z ikonami i tooltipami oraz filtr `Słyszane bezpośrednio` dla stacji odebranych przez RF bez zużytego hopu digi.
-- `Ustawienia / aktualizacja aplikacji`: modal pokazuje rzeczywisty etap i procent postępu, zachowuje stan podczas restartu WWW i kończy operację wyłącznie po terminalnym statusie procesu; identyfikator zadania jest przekazywany przez granicę `sudo`, a osierocone zadanie bez raportowania zostaje bezpiecznie zwolnione.
+- `Ustawienia / aktualizacja aplikacji`: modal pokazuje rzeczywisty etap i procent postępu, zachowuje stan podczas restartu WWW i kończy operację wyłącznie po terminalnym statusie procesu zamiast po samym powrocie endpointu zdrowia.
 
 ## 1.9.6.dev - 01.08.2026
 - `Ustawienia / Pomoc`: dodano osobną pomoc Markdown dla 8 paneli w EN/DE/PL/ES/TLH i uproszczono interfejs, usuwając powtórzone opisy.
