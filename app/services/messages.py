@@ -684,6 +684,20 @@ def delete_conversation(conversation_id: int) -> None:
         connection.execute("DELETE FROM aprs_message_conversations WHERE id = ?", (conversation_id,))
 
 
+def clear_message_inbox() -> dict[str, int]:
+    message_ids = [int(row["id"]) for row in fetch_all("SELECT id FROM aprs_messages ORDER BY id ASC")]
+    conversation_row = fetch_one("SELECT COUNT(*) AS total FROM aprs_message_conversations")
+    conversation_count = int(conversation_row["total"] or 0) if conversation_row is not None else 0
+    for message_id in message_ids:
+        cancel_pending_message_jobs(message_id)
+    with get_connection() as connection:
+        connection.execute("DELETE FROM aprs_message_conversations")
+    return {
+        "conversation_count": conversation_count,
+        "message_count": len(message_ids),
+    }
+
+
 def get_message(message_id: int) -> dict[str, Any] | None:
     row = fetch_one(
         """

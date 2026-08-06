@@ -120,6 +120,7 @@ from app.services.digi_flows import (
     set_digi_flow_enabled,
 )
 from app.services.messages import (
+    clear_message_inbox,
     create_or_update_conversation,
     delete_conversation as delete_message_conversation,
     get_messages_page_data as get_live_messages_page_data,
@@ -3943,6 +3944,14 @@ def messages_delete(
 ) -> JSONResponse:
     delete_message_conversation(conversation_id)
     return JSONResponse({"ok": True, "messages_view": get_live_messages_page_data()})
+
+
+@router.post("/api/messages/clear")
+def messages_clear(
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    deleted = clear_message_inbox()
+    return JSONResponse({"ok": True, "deleted": deleted, "messages_view": get_live_messages_page_data()})
 
 
 @router.post("/api/messages/{message_id}/retry")

@@ -7493,6 +7493,89 @@ body.modal-open {
     border-bottom: 1px solid var(--border);
 }
 
+.messages-sidebar-title-row,
+.messages-sidebar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.messages-inbox-count {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.45rem;
+    padding: 0.12rem 0.48rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.messages-sidebar-actions .table-icon-button {
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+}
+
+.messages-confirm-modal[hidden] {
+    display: none !important;
+}
+
+.messages-confirm-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1460;
+    display: grid;
+    place-items: center;
+    padding: var(--space-4);
+}
+
+.messages-confirm-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.58);
+    backdrop-filter: blur(2px);
+}
+
+.messages-confirm-dialog {
+    position: relative;
+    display: grid;
+    gap: var(--space-3);
+    width: min(31rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow-lg);
+}
+
+.messages-confirm-dialog h2,
+.messages-confirm-dialog p {
+    margin: 0;
+}
+
+.messages-confirm-summary {
+    padding: var(--space-3);
+    border: 1px solid rgba(201, 122, 122, 0.24);
+    border-radius: var(--radius-sm);
+    background: rgba(201, 122, 122, 0.08);
+    color: var(--text);
+    font-weight: 700;
+}
+
+.messages-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
 .messages-new-conversation,
 .messages-new-conversation-field {
     display: grid;
