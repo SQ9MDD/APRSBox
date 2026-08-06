@@ -1,14 +1,26 @@
 import contextlib
+import importlib.util
+import json
 import os
 import re
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.db import execute, init_db
+from app.db import (
+    create_system_job,
+    execute,
+    fetch_system_job,
+    get_app_setting,
+    init_db,
+    mark_system_job_running,
+    mark_unreported_system_job_error,
+)
 from app.services.content import has_enabled_modem_interface
 from app.services.system import (
+    _start_background_script,
     container_system_actions_disabled_message,
     save_update_channel,
     start_application_update_job,
@@ -16,6 +28,8 @@ from app.services.system import (
     start_host_reboot_job,
     start_service_restart_job,
 )
+
+FASTAPI_AVAILABLE = importlib.util.find_spec("fastapi") is not None
 
 
 @contextlib.contextmanager
@@ -93,6 +107,30 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("data-settings-action-id=\"reset-runtime-data\"", template_source)
         self.assertIn('{{ t("Reset runtime logs/data") }}', template_source)
 
+    def test_settings_template_contains_aprs_alarm_group_configuration_and_diagnostics(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('{{ t("APRS alarm settings") }}', template_source)
+        self.assertIn('action="{{ request.scope.root_path }}/settings/alarm-groups"', template_source)
+        self.assertIn('name="alarm_enabled"', template_source)
+        self.assertIn('{{ t("Enable APRS alarms") }}', template_source)
+        self.assertIn('name="alarm_groups"', template_source)
+        self.assertNotIn('placeholder="PL-WARN"', template_source)
+        self.assertIn('name="threshold_category"', template_source)
+        self.assertIn('name="alert_level_threshold"', template_source)
+        self.assertNotIn('name="map_level_threshold"', template_source)
+        self.assertIn('name="popup_level_threshold"', template_source)
+        self.assertIn('<option value="off"', template_source)
+        self.assertIn('{{ t("Alarm thresholds by event type") }}', template_source)
+        self.assertIn('{{ t("Alerts") }}', template_source)
+        self.assertIn('{{ t("Alert popup") }}', template_source)
+        self.assertNotIn("Alarm visibility on the map is managed directly", template_source)
+        self.assertIn("alarm_category_threshold_rows", template_source)
+        self.assertIn("aprs_alarm_groups|join(', ')", template_source)
+        self.assertIn('{{ t("RF receive groups") }}', template_source)
+        self.assertIn("effective_rf_message_groups|join(', ')", template_source)
+        self.assertIn('{{ t("Automatic APRS-IS filter") }}', template_source)
+        self.assertIn("automatic_aprsis_alarm_filter", template_source)
+
     def test_settings_template_keeps_global_save_button_below_coverage_controls(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('id="global-settings-form"', template_source)
@@ -102,10 +140,35 @@ class SettingsMaintenanceTests(unittest.TestCase):
             template_source.index('{{ t("Save Global Settings") }}'),
         )
 
-    def test_settings_template_uses_ten_percent_default_for_coverage_fill_opacity(self) -> None:
+    def test_settings_template_uses_global_coverage_fill_opacity(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
-        self.assertIn("const normalizeCoverageOpacityPercent = (value, fallback = 10) => {", template_source)
-        self.assertIn("const normalizedOpacity = normalizeCoverageOpacityPercent(storedOpacity, 10);", template_source)
+        router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+        self.assertIn('name="coverage_fill_opacity"', template_source)
+        self.assertIn('{% if coverage_fill_opacity == value %}selected{% endif %}', template_source)
+        self.assertNotIn("aprsbox-map-coverage-fill-opacity", template_source)
+        self.assertIn("set_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY", router_source)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in this environment")
+    def test_global_settings_save_persists_coverage_fill_opacity(self) -> None:
+        from app.models import UserIdentity
+        from app.routers.pages import settings_update_global
+
+        with temporary_database():
+            response = settings_update_global(
+                request=None,
+                language="en",
+                default_units="metric",
+                traffic_retention_minutes="60",
+                ui_palette="green-core",
+                aprs_symbol_set="legacy",
+                event_log_min_level="INFO",
+                event_log_debug_enabled=None,
+                coverage_fill_opacity="5",
+                current_user=UserIdentity(id=1, username="admin", role="admin", is_active=True),
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(get_app_setting("map_coverage_fill_opacity"), "5")
 
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
@@ -124,7 +187,105 @@ class SettingsMaintenanceTests(unittest.TestCase):
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("{% if is_container_mode %}", template_source)
         self.assertIn("Docker installation detected. System actions are disabled inside Docker.", template_source)
-        self.assertIn("Check version can be used for informational comparison only.", template_source)
+        self.assertNotIn("Check version can be used for informational comparison only.", template_source)
+
+    def test_each_settings_panel_has_dedicated_localized_markdown_help(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        help_pages = (
+            "settings_global",
+            "settings_update",
+            "settings_alarms",
+            "settings_map_sources",
+            "settings_device_identification",
+            "settings_configuration_backup",
+            "settings_database",
+            "settings_danger_zone",
+        )
+        languages = ("en", "de", "pl", "es", "tlh")
+
+        self.assertIn("static/css/help-viewer.css", template_source)
+        self.assertIn('include "partials/help_modal.html"', template_source)
+        self.assertIn("static/js/help-viewer.js", template_source)
+        for page in help_pages:
+            with self.subTest(page=page):
+                self.assertEqual(template_source.count(f'data-help-page="application/{page}"'), 1)
+                for language in languages:
+                    help_path = Path(f"help/application/{page}.{language}.md")
+                    self.assertTrue(help_path.exists(), str(help_path))
+                    self.assertTrue(help_path.read_text(encoding="utf-8").startswith("# "))
+
+        help_viewer_source = Path("app/static/js/help-viewer.js").read_text(encoding="utf-8")
+        self.assertIn('target="_blank" rel="noopener noreferrer"', help_viewer_source)
+        self.assertIn("/^https?:\\/\\//i.test(rawHref)", help_viewer_source)
+
+    def test_alarm_help_links_to_localized_cawf_and_nws_warn_guides(self) -> None:
+        languages = ("en", "de", "pl", "es", "tlh")
+        guide_names = ("settings_alarms_cawf", "settings_alarms_nws_warn")
+
+        for language in languages:
+            overview_path = Path(f"help/application/settings_alarms.{language}.md")
+            overview = overview_path.read_text(encoding="utf-8")
+            for guide_name in guide_names:
+                with self.subTest(language=language, guide=guide_name):
+                    guide_filename = f"{guide_name}.{language}.md"
+                    guide_path = Path("help/application") / guide_filename
+                    self.assertIn(f"({guide_filename})", overview)
+                    self.assertTrue(guide_path.exists(), str(guide_path))
+                    guide = guide_path.read_text(encoding="utf-8")
+                    self.assertTrue(guide.startswith("# "))
+                    self.assertRegex(
+                        guide,
+                        r"(?m)^## (?:Sources|Źródła|Quellen|Fuentes)$",
+                    )
+                    self.assertIn("https://", guide)
+                    self.assertIn(f"(settings_alarms.{language}.md)", guide)
+
+        cawf = Path("help/application/settings_alarms_cawf.en.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "EXPIRY,EVENT_LEVEL,ALERT_ID,PART/TOTAL,AREA[,AREA...]{MESSAGE_ID",
+            cawf,
+        )
+        self.assertIn("15 minutes", cawf)
+        self.assertIn("trusted publisher allowlist", cawf)
+
+        nws_warn = Path(
+            "help/application/settings_alarms_nws_warn.en.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("[A-Z]{2}C[0-9]{3}", nws_warn)
+        self.assertIn("NWS-CANCL", nws_warn)
+        self.assertIn("api.weather.gov", nws_warn)
+
+    def test_settings_explanations_live_in_panel_help_instead_of_forms(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        moved_copy = (
+            "Controls how long runtime traffic frames are kept",
+            "Update fetches code from the selected channel",
+            "Controls alarm intake, active alarm visibility",
+            "Only standard Leaflet tile providers are supported",
+            "Export and import a full GUI configuration snapshot",
+            "Event logs are pruned automatically after midnight",
+            "Restarts <code>aprsbox-core</code>",
+            "Type REBOOT in the confirmation dialog",
+            "Type POWER OFF in the confirmation dialog",
+        )
+        for copy in moved_copy:
+            with self.subTest(copy=copy):
+                self.assertNotIn(copy, template_source)
+
+        self.assertIn(
+            "Map and station visibility follow this window.",
+            Path("help/application/settings_global.en.md").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "The map layer has its own visibility control",
+            Path("help/application/settings_alarms.en.md").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "switch2osm.org/providers",
+            Path("help/application/settings_map_sources.en.md").read_text(encoding="utf-8"),
+        )
 
     def test_settings_template_uses_shared_async_action_handler(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
@@ -138,11 +299,24 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('data-settings-action-id="poweroff-host"', template_source)
         self.assertIn('data-settings-action-group="update-controls"', template_source)
         self.assertIn('data-settings-action-group="danger-actions"', template_source)
+        self.assertIn("settings-progress-track", template_source)
+        self.assertIn("progress_percent", template_source)
+
+    def test_job_modal_waits_for_terminal_job_state_instead_of_health_recovery(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertNotIn("canFinalizeRunningJobFromHealth", template_source)
+        self.assertNotIn("canReloadOnHealthRecovery", template_source)
+        self.assertNotIn('const healthUrl = `${rootPath}/health`', template_source)
+        self.assertIn('if (status === "success")', template_source)
+        self.assertIn('if (status === "error")', template_source)
+        self.assertIn("window.sessionStorage.removeItem(activeJobStorageKey)", template_source)
 
     def test_settings_styles_include_busy_state_spinner(self) -> None:
         style_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
         self.assertIn(".settings-action-button-busy", style_source)
         self.assertIn(".settings-progress-spinner", style_source)
+        self.assertIn(".settings-progress-track", style_source)
+        self.assertIn(".settings-progress-bar", style_source)
         self.assertIn("@keyframes settings-spin", style_source)
 
     def test_settings_router_contains_danger_zone_endpoints(self) -> None:
@@ -174,16 +348,180 @@ class SettingsMaintenanceTests(unittest.TestCase):
         unescaped_tojson = re.findall(r'onsubmit="[^"]*\|tojson(?!\|forceescape)', template_source)
         self.assertEqual([], unescaped_tojson)
 
-    def test_update_application_has_forty_five_second_timeout(self) -> None:
+    def test_update_application_has_extended_monitoring_timeout(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("actionId: 'update-application'", template_source)
-        self.assertIn("lockTimeoutMs: 45000", template_source)
+        self.assertIn("lockTimeoutMs: 1200000", template_source)
 
     def test_restart_services_has_reload_delay(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("actionId: 'restart-services'", template_source)
-        self.assertIn("lockTimeoutMs: 45000", template_source)
-        self.assertIn("reloadDelayMs: 7000", template_source)
+        self.assertIn("lockTimeoutMs: 300000", template_source)
+        self.assertIn("reloadDelayMs: 3000", template_source)
+
+    def test_system_jobs_store_progress_and_stage(self) -> None:
+        with temporary_database():
+            job_id = create_system_job("update-application", message="Queued.")
+            queued = fetch_system_job(job_id)
+            self.assertIsNotNone(queued)
+            self.assertEqual(queued["progress_percent"], 0)
+            self.assertEqual(queued["stage"], "queued")
+
+            mark_system_job_running(job_id, pid=123, message="Starting.")
+            running = fetch_system_job(job_id)
+            self.assertIsNotNone(running)
+            self.assertEqual(running["status"], "running")
+            self.assertEqual(running["progress_percent"], 1)
+            self.assertEqual(running["stage"], "starting")
+
+    def test_stalled_job_without_script_reporting_is_released(self) -> None:
+        with temporary_database():
+            job_id = create_system_job("update-application", message="Queued.")
+            mark_system_job_running(job_id, pid=123, message="Starting.")
+            execute(
+                "UPDATE system_jobs SET updated_at = '2000-01-01T00:00:00+00:00' WHERE id = ?",
+                (job_id,),
+            )
+
+            changed = mark_unreported_system_job_error(
+                job_id,
+                message="Updater stopped reporting.",
+                stale_after_seconds=60,
+            )
+            stalled = fetch_system_job(job_id)
+
+            self.assertTrue(changed)
+            self.assertIsNotNone(stalled)
+            self.assertEqual(stalled["status"], "error")
+            self.assertEqual(stalled["stage"], "failed")
+            self.assertEqual(stalled["message"], "Updater stopped reporting.")
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in this environment")
+    def test_job_status_api_releases_orphaned_one_percent_update(self) -> None:
+        from app.models import UserIdentity
+        from app.routers.pages import settings_job_status_api
+
+        with temporary_database():
+            job_id = create_system_job("update-application", message="Queued.")
+            mark_system_job_running(job_id, pid=999_999_999, message="Running.")
+            execute(
+                "UPDATE system_jobs SET updated_at = '2000-01-01T00:00:00+00:00' WHERE id = ?",
+                (job_id,),
+            )
+
+            response = settings_job_status_api(
+                job_id,
+                _=UserIdentity(id=1, username="admin", role="admin", is_active=True),
+            )
+            payload = json.loads(response.body)
+
+            self.assertEqual(payload["job"]["status"], "error")
+            self.assertEqual(payload["job"]["stage"], "failed")
+            self.assertIn("stopped reporting status", payload["job"]["message"])
+
+    def test_system_job_migration_adds_progress_to_existing_database(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "legacy.db"
+            with sqlite3.connect(database_path) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE system_jobs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        kind TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        message TEXT NOT NULL DEFAULT '',
+                        log_file TEXT,
+                        pid INTEGER,
+                        exit_code INTEGER,
+                        created_at TEXT NOT NULL,
+                        started_at TEXT,
+                        finished_at TEXT,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
+                )
+
+            previous = os.environ.get("APRSBOX_DB_PATH")
+            os.environ["APRSBOX_DB_PATH"] = str(database_path)
+            try:
+                init_db()
+            finally:
+                if previous is None:
+                    os.environ.pop("APRSBOX_DB_PATH", None)
+                else:
+                    os.environ["APRSBOX_DB_PATH"] = previous
+
+            with sqlite3.connect(database_path) as connection:
+                columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(system_jobs)")}
+            self.assertIn("progress_percent", columns)
+            self.assertIn("stage", columns)
+
+    def test_update_scripts_publish_tracked_stages_and_defer_web_completion(self) -> None:
+        update_source = Path("scripts/update.sh").read_text(encoding="utf-8")
+        restart_source = Path("scripts/restart-services.sh").read_text(encoding="utf-8")
+        web_restart_source = Path("scripts/update-web-restart.sh").read_text(encoding="utf-8")
+
+        for stage in (
+            "downloading",
+            "replacing-files",
+            "updating-database",
+            "restarting-core",
+            "restarting-web",
+            "finalizing",
+        ):
+            self.assertIn(f'"{stage}"', update_source)
+        self.assertIn('JOB_FINALIZATION_DEFERRED="1"', update_source)
+        self.assertIn('APRSBOX_JOB_ID="" "$RESTART_SCRIPT"', update_source)
+        self.assertIn('"100" "completed"', restart_source)
+        self.assertIn('systemctl restart aprsbox-web.service', web_restart_source)
+        self.assertIn('"success" "Application update finished successfully."', web_restart_source)
+
+    def test_maintenance_scripts_accept_tracking_arguments(self) -> None:
+        for script_name in (
+            "update.sh",
+            "restart-services.sh",
+            "reboot-host.sh",
+            "poweroff-host.sh",
+        ):
+            source = Path("scripts", script_name).read_text(encoding="utf-8")
+            with self.subTest(script=script_name):
+                self.assertIn("--job-id", source)
+                self.assertIn("--db-path", source)
+
+    def test_background_job_passes_tracking_as_cli_arguments_across_privilege_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "jobs.db"
+            with patch.dict(
+                os.environ,
+                {"APRSBOX_LOG_DIR": temp_dir, "APRSBOX_DB_PATH": str(database_path)},
+            ), patch(
+                "app.services.system._script_command",
+                return_value=["sudo", "-n", "/opt/aprsbox/app/scripts/update.sh"],
+            ), patch("app.services.system.subprocess.Popen") as popen:
+                popen.return_value.pid = 4321
+                result = _start_background_script(
+                    script_name="update.sh",
+                    log_filename="update-test.log",
+                    extra_args=["--git-branch", "main"],
+                    job_id=77,
+                )
+
+        self.assertTrue(result["ok"])
+        command = popen.call_args.args[0]
+        self.assertEqual(
+            command,
+            [
+                "sudo",
+                "-n",
+                "/opt/aprsbox/app/scripts/update.sh",
+                "--git-branch",
+                "main",
+                "--job-id",
+                "77",
+                "--db-path",
+                str(database_path),
+            ],
+        )
 
     def test_update_job_passes_selected_channel_as_cli_argument(self) -> None:
         with temporary_database(), patch("app.services.system._start_background_script", return_value={"ok": True}) as runner:
@@ -243,8 +581,76 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn(':root[data-sidebar-state="collapsed"] .sidebar', stylesheet_source)
         self.assertIn(':root[data-sidebar-state="collapsed"] .sidebar-user-panel', stylesheet_source)
         self.assertIn(':root[data-sidebar-state="collapsed"] .sidebar-utc-clock', stylesheet_source)
+        self.assertIn(
+            ':root[data-sidebar-state="collapsed"] .nav-count-badge {\n        display: none;\n    }',
+            stylesheet_source,
+        )
         self.assertIn(".sidebar-logo-icon", stylesheet_source)
         self.assertIn(".nav-label", stylesheet_source)
+
+    def test_sidebar_user_controls_use_compact_icon_strip(self) -> None:
+        base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
+        self.assertNotIn('class="role-badge">{{ current_user.username }}', base_source)
+        self.assertIn('class="sidebar-username"', base_source)
+        self.assertIn("{{ current_user.username }}", base_source)
+        self.assertIn(".sidebar-user-identity", stylesheet_source)
+        self.assertIn("margin-block: calc(-1 * var(--space-2));", stylesheet_source)
+        self.assertIn("background: var(--panel-emphasis);", stylesheet_source)
+        self.assertIn("justify-content: space-between;", stylesheet_source)
+
+    def test_sidebar_beacon_control_uses_confirmation_and_ten_second_cooldown(self) -> None:
+        base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
+        modal_source = Path("app/templates/partials/sidebar_beacon_modal.html").read_text(encoding="utf-8")
+        script_source = Path("app/static/js/sidebar-beacon.js").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
+        self.assertIn('id="sidebar-send-beacon"', base_source)
+        self.assertLess(
+            base_source.index('id="sidebar-send-beacon"'),
+            base_source.index('id="theme-toggle"'),
+        )
+        self.assertIn('{% include "partials/sidebar_beacon_modal.html" %}', base_source)
+        self.assertIn("sidebar-beacon.js", base_source)
+        self.assertIn('role="dialog"', modal_source)
+        self.assertIn("Are you sure you want to send the beacon now?", modal_source)
+        self.assertIn("/station/send-beacon-now", modal_source)
+        self.assertIn("const cooldownMs = 10_000;", script_source)
+        self.assertIn("aprsbox-beacon-send-cooldown-until", script_source)
+        self.assertIn("window.localStorage", script_source)
+        self.assertIn("place-items: center;", stylesheet_source)
+        self.assertIn(".sidebar-action-button:disabled", stylesheet_source)
+        self.assertIn("filter: grayscale(1) var(--icon-filter);", stylesheet_source)
+
+    @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in this environment")
+    def test_sidebar_beacon_endpoint_queues_saved_station_settings(self) -> None:
+        from app.models import UserIdentity
+        from app.routers.pages import station_send_beacon_now
+
+        station_settings = {"callsign": "SQ9MDD", "ssid": "7"}
+        with (
+            patch("app.routers.pages.get_station_settings", return_value=station_settings),
+            patch(
+                "app.routers.pages.enqueue_beacon_job",
+                return_value=(True, "Beacon job queued."),
+            ) as enqueue,
+        ):
+            response = station_send_beacon_now(
+                current_user=UserIdentity(
+                    id=1,
+                    username="admin",
+                    role="admin",
+                    is_active=True,
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            json.loads(response.body),
+            {"ok": True, "message": "Beacon job queued."},
+        )
+        enqueue.assert_called_once_with(station_settings)
 
 
 if __name__ == "__main__":

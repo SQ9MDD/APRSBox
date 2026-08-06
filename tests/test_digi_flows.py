@@ -12,6 +12,7 @@ from app.services.digi_flows import (
     create_digi_flow,
     get_digi_flow,
     get_digi_flow_endpoint_options,
+    get_digi_flow_reference_options,
     get_digi_flow_type_meta,
     list_digi_flows,
     move_digi_flow,
@@ -67,6 +68,28 @@ def sample_flow_payload() -> dict:
             },
         ],
     }
+
+
+def insert_aprsis_interface(*, enabled: int = 1) -> int:
+    connection = connect()
+    try:
+        cursor = connection.execute(
+            """
+            INSERT INTO modems (
+                name, modem_type, band, device_path, enabled, notes, created_at, updated_at
+            )
+            VALUES ('APRSIS-CONNECTION', 'APRSIS', '', 'm/20', ?, '', ?, ?)
+            """,
+            (
+                enabled,
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        connection.commit()
+        return int(cursor.lastrowid)
+    finally:
+        connection.close()
 
 
 def sample_rf_flow_payload(*, name: str, source_ref: str, target_ref: str, enabled: int = 1) -> dict:
@@ -177,8 +200,23 @@ class DigiFlowsTests(unittest.TestCase):
         script_source = Path("app/static/js/help-viewer.js").read_text(encoding="utf-8")
         self.assertNotIn('data-help-autoload="1"', script_source)
 
+    def test_digi_flow_form_keeps_instructional_copy_in_help(self) -> None:
+        template_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
+        self.assertNotIn('id="flow-source-help"', template_source)
+        self.assertNotIn("localTxSourceHelp", template_source)
+        self.assertNotIn("Local TX includes only frames generated locally", template_source)
+        self.assertNotIn("Define one source, optional filters and one target", template_source)
+        self.assertNotIn("Source must be first and target last", template_source)
+        self.assertNotIn("Rules are mandatory and managed automatically", template_source)
+        self.assertNotIn("Vertical pipeline from top to bottom", template_source)
+        self.assertNotIn('<span>{{ t("Source Interface") }}</span>', template_source)
+        self.assertNotIn('<span>{{ t("Target Interface") }}</span>', template_source)
+        self.assertIn("aria-label=\"{{ t('Source Interface') }}\"", template_source)
+        self.assertIn("aria-label=\"{{ t('Target Interface') }}\"", template_source)
+
     def test_init_db_creates_digi_flow_tables_and_allows_duplicate_route_pairs(self) -> None:
         with temporary_database():
+            insert_aprsis_interface()
             connection = connect()
             try:
                 table_names = {
@@ -295,6 +333,7 @@ class DigiFlowsTests(unittest.TestCase):
 
     def test_create_digi_flow_persists_steps(self) -> None:
         with temporary_database():
+            insert_aprsis_interface()
             flow_id = create_digi_flow(sample_flow_payload())
             flow = get_digi_flow(flow_id)
             assert flow is not None
@@ -472,10 +511,51 @@ class DigiFlowsTests(unittest.TestCase):
             options = get_digi_flow_endpoint_options()
             source_values = {option["value"] for option in options["source"]}
             self.assertIn("receiver_local_tx::local_tx", source_values)
+            self.assertNotIn("tx_aprsis::aprsis", {option["value"] for option in options["target"]})
 
             by_source_kind = options.get("target_by_source_kind") or {}
             local_targets = {option["kind"] for option in by_source_kind.get("receiver_local_tx") or []}
+            self.assertEqual(local_targets, {"action_log"})
+
+            insert_aprsis_interface()
+            options = get_digi_flow_endpoint_options()
+            by_source_kind = options.get("target_by_source_kind") or {}
+            local_targets = {option["kind"] for option in by_source_kind.get("receiver_local_tx") or []}
             self.assertEqual(local_targets, {"tx_aprsis", "action_log"})
+
+    def test_aprsis_endpoints_and_backend_require_a_defined_interface(self) -> None:
+        with temporary_database():
+            options = get_digi_flow_endpoint_options()
+            source_values = {option["value"] for option in options["source"]}
+            target_values = {option["value"] for option in options["target"]}
+            references = get_digi_flow_reference_options()
+            self.assertFalse(any(value.startswith("receiver_aprsis::") for value in source_values))
+            self.assertNotIn("tx_aprsis::aprsis", target_values)
+            self.assertEqual(references["receiver_aprsis"], [])
+            self.assertEqual(references["tx_aprsis"], [])
+            with self.assertRaisesRegex(ValueError, "requires a defined APRSIS interface"):
+                normalize_digi_flow_payload(sample_flow_payload())
+
+            interface_id = insert_aprsis_interface(enabled=0)
+            options = get_digi_flow_endpoint_options()
+            self.assertIn(
+                "receiver_aprsis::APRSIS-CONNECTION",
+                {option["value"] for option in options["source"]},
+            )
+            self.assertIn("tx_aprsis::aprsis", {option["value"] for option in options["target"]})
+            self.assertEqual(get_digi_flow_reference_options()["tx_aprsis"], ["aprsis"])
+
+            payload = sample_flow_payload()
+            payload["enabled"] = 0
+            flow_id = create_digi_flow(payload)
+            connection = connect()
+            try:
+                connection.execute("DELETE FROM modems WHERE id = ?", (interface_id,))
+                connection.commit()
+            finally:
+                connection.close()
+            with self.assertRaisesRegex(ValueError, "requires a defined APRSIS interface"):
+                set_digi_flow_enabled(flow_id, True)
 
     def test_type_meta_exposes_runtime_status_for_filters(self) -> None:
         with temporary_database():
@@ -534,6 +614,7 @@ class DigiFlowsTests(unittest.TestCase):
 
     def test_update_digi_flow_preserves_existing_step_ids_when_step_identity_matches(self) -> None:
         with temporary_database():
+            insert_aprsis_interface()
             flow_id = create_digi_flow(sample_flow_payload())
             original = get_digi_flow(flow_id)
             assert original is not None
@@ -1151,6 +1232,7 @@ class DigiFlowsTests(unittest.TestCase):
 
     def test_local_tx_to_aprsis_and_black_hole_are_valid(self) -> None:
         with temporary_database():
+            insert_aprsis_interface()
             aprsis_normalized = normalize_digi_flow_payload(
                 sample_local_tx_flow_payload(name="Local uplink", target_kind="tx_aprsis", target_ref="aprsis")
             )
@@ -1235,6 +1317,7 @@ class DigiFlowsTests(unittest.TestCase):
 
     def test_enabling_tx_aprsis_flow_without_enabled_strict_guard_is_blocked(self) -> None:
         with temporary_database():
+            insert_aprsis_interface()
             connection = connect()
             try:
                 connection.execute(
@@ -1305,6 +1388,7 @@ class DigiFlowsTests(unittest.TestCase):
 
     def test_enabling_local_tx_aprsis_flow_without_enabled_strict_guard_is_blocked(self) -> None:
         with temporary_database():
+            insert_aprsis_interface()
             connection = connect()
             try:
                 connection.execute(

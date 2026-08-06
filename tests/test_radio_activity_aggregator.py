@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import connect, execute, fetch_one, init_db
 from app.services.radio_activity import (
@@ -116,6 +117,42 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             _floor_to_bucket_start(value, bucket_minutes=1440).isoformat(),
             datetime(2026, 5, 5, 0, 0, 0, tzinfo=timezone.utc).isoformat(),
         )
+
+    def test_band_condition_runtime_is_skipped_when_no_interface_has_assessment_enabled(self) -> None:
+        with temporary_database():
+            bucket_start = datetime(2026, 5, 4, 10, 0, tzinfo=timezone.utc)
+            insert_frame(
+                source="Main TNC",
+                interface_id=1,
+                direction="RX",
+                frame_format="TNC2",
+                line="SP8ABC-9>APRS:!5218.37N/02104.87E>Test",
+                created_at=(bucket_start + timedelta(minutes=1)).isoformat(),
+            )
+
+            with (
+                patch("app.services.radio_activity.aggregate_band_condition_parsed_bucket") as aggregate_band,
+                patch("app.services.radio_activity.finalize_band_condition_hours") as finalize_band,
+            ):
+                result = run_radio_activity_aggregation(
+                    now_utc=datetime(2026, 5, 4, 10, 7, tzinfo=timezone.utc),
+                    safety_delay_seconds=30,
+                )
+
+            self.assertGreaterEqual(int(result.get("processed_buckets") or 0), 1)
+            aggregate_band.assert_not_called()
+            finalize_band.assert_not_called()
+            activity_row = fetch_one(
+                """
+                SELECT rx_total
+                FROM radio_activity_5m
+                WHERE bucket_start_utc = ? AND source_name = 'Main TNC'
+                """,
+                (bucket_start.isoformat(),),
+            )
+            self.assertIsNotNone(activity_row)
+            assert activity_row is not None
+            self.assertEqual(int(activity_row["rx_total"]), 1)
 
     def test_aggregates_single_closed_bucket_and_saves_state(self) -> None:
         with temporary_database():
@@ -351,6 +388,7 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
             bucket_start = _floor_to_bucket_start(now_utc - timedelta(minutes=10), bucket_minutes=5)
             bucket_end = bucket_start + timedelta(minutes=5)
+            hour_start = bucket_start.replace(minute=0, second=0, microsecond=0)
             execute(
                 """
                 INSERT INTO radio_activity_5m(
@@ -374,6 +412,17 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 """,
                 (bucket_start.isoformat(), bucket_end.isoformat(), now_utc.isoformat(), now_utc.isoformat()),
             )
+            for station_key in ("SP5ABC-1", "SP5XYZ-2"):
+                execute(
+                    """
+                    INSERT INTO traffic_device_station_device_hourly(
+                        bucket_start_utc, station_key, device_key, destination_key,
+                        device_label, recognized_flag, frame_count, last_seen_at
+                    )
+                    VALUES (?, ?, 'unknown', 'APRS', 'Unknown', 0, 1, ?)
+                    """,
+                    (hour_start.isoformat(), station_key, bucket_start.isoformat()),
+                )
 
             from fastapi.testclient import TestClient
             from app.dependencies import get_current_user
@@ -395,6 +444,8 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertIn("rx_total", payload["series"])
                 self.assertGreaterEqual(sum(payload["series"]["rx_total"]), 5)
                 self.assertEqual(payload.get("range"), "24h")
+                self.assertEqual(int((payload.get("kpis") or {}).get("heard_stations") or 0), 2)
+                self.assertEqual(int((payload.get("kpis") or {}).get("aprs_frames") or 0), 5)
 
                 response_1h = client.get("/api/dashboard/radio-activity?range=1h")
                 self.assertEqual(response_1h.status_code, 200)
@@ -402,6 +453,8 @@ class RadioActivityAggregatorTests(unittest.TestCase):
                 self.assertEqual(payload_1h.get("range"), "1h")
                 self.assertEqual(int(payload_1h.get("output_bucket_minutes") or 0), 5)
                 self.assertFalse(bool(payload_1h.get("downsampled")))
+                self.assertEqual(int((payload_1h.get("kpis") or {}).get("heard_stations") or 0), 2)
+                self.assertEqual(int((payload_1h.get("kpis") or {}).get("aprs_frames") or 0), 5)
 
                 response_3h = client.get("/api/dashboard/radio-activity?range=3h")
                 self.assertEqual(response_3h.status_code, 200)

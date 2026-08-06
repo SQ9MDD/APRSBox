@@ -1,5 +1,6 @@
 (function () {
-    const pageRoot = document.getElementById("station-detail-page");
+    const pageRoot = document.getElementById("station-detail-page")
+        || document.querySelector("[data-station-detail-map-page]");
     const mapRoot = document.getElementById("station-detail-map-root");
     const mapCanvas = document.getElementById("station-detail-map-canvas");
     const mapPlaceholder = document.getElementById("station-map-placeholder");

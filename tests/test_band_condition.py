@@ -12,8 +12,10 @@ from app.services.band_condition import (
     _model_progress,
     _score_condition,
     aggregate_band_condition_bucket,
+    finalize_band_condition_hours,
     format_band_label,
     get_band_condition_history,
+    get_band_condition_snapshot,
     monitored_band_options,
 )
 
@@ -47,6 +49,100 @@ def insert_interface(*, band: str) -> int:
     row = fetch_one("SELECT id FROM modems WHERE name = ?", (f"RF-{band or 'off'}",))
     assert row is not None
     return int(row["id"])
+
+
+def insert_normal_band_history(
+    *,
+    interface_id: int,
+    band: str,
+    assessed_hour: datetime,
+    hours: int,
+) -> None:
+    for offset in range(hours, 0, -1):
+        history_hour = assessed_hour - timedelta(hours=offset)
+        execute(
+            """
+            INSERT INTO band_condition_hourly(
+                hour_start_utc, interface_id, interface_name, band,
+                condition_index, confidence_score, fixed_station_count,
+                positioned_station_count, direct_station_count,
+                median_distance_km, p90_distance_km, max_confirmed_distance_km,
+                normal_station_count, normal_p90_distance_km,
+                far_station_count, very_far_station_count, new_area_count,
+                history_hours, created_at
+            )
+            VALUES (?, ?, ?, ?, 2, 0.3, 10, 10, 8,
+                    70, 100, 110, 10, 100, 0, 0, 0, ?, ?)
+            """,
+            (
+                history_hour.isoformat(),
+                interface_id,
+                f"RF-{band}",
+                band,
+                hours - offset,
+                history_hour.isoformat(),
+            ),
+        )
+
+
+def insert_fixed_station_observations(
+    *,
+    interface_id: int,
+    band: str,
+    hour_start: datetime,
+    count: int,
+    segment_mask: int,
+) -> None:
+    for index in range(count):
+        execute(
+            """
+            INSERT INTO band_condition_station_hours(
+                hour_start_utc, interface_id, interface_name, band,
+                station_key, segment_mask, direct_segment_mask,
+                fixed_hint, mobile_hint, latitude, longitude, distance_km, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, 100, ?)
+            """,
+            (
+                hour_start.isoformat(),
+                interface_id,
+                f"RF-{band}",
+                band,
+                f"SP5B{index:02d}",
+                segment_mask,
+                segment_mask,
+                52.0 + (index / 1000.0),
+                21.0 + (index / 1000.0),
+                hour_start.isoformat(),
+            ),
+        )
+
+
+def insert_radio_activity(
+    *,
+    interface_id: int,
+    band: str,
+    bucket_start: datetime,
+    rx_total: int,
+) -> None:
+    execute(
+        """
+        INSERT INTO radio_activity_5m(
+            bucket_start_utc, bucket_end_utc, interface_id, source_name,
+            rx_total, created_at_utc, updated_at_utc
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            bucket_start.isoformat(),
+            (bucket_start + timedelta(minutes=5)).isoformat(),
+            interface_id,
+            f"RF-{band}",
+            rx_total,
+            bucket_start.isoformat(),
+            bucket_start.isoformat(),
+        ),
+    )
 
 
 class BandConditionHelpersTests(unittest.TestCase):
@@ -345,6 +441,180 @@ class BandConditionHelpersTests(unittest.TestCase):
             self.assertEqual(progress["learned_positioned_station_count"], 1)
             self.assertEqual(progress["repeatable_station_count"], 1)
 
+    def test_same_hour_baseline_does_not_make_a_ready_model_unready(self) -> None:
+        with temporary_database():
+            interface_id = insert_interface(band="2m")
+            assessed_hour = datetime(2026, 5, 4, 14, 0, tzinfo=timezone.utc)
+            insert_normal_band_history(
+                interface_id=interface_id,
+                band="2m",
+                assessed_hour=assessed_hour,
+                hours=72,
+            )
+            insert_fixed_station_observations(
+                interface_id=interface_id,
+                band="2m",
+                hour_start=assessed_hour,
+                count=10,
+                segment_mask=7,
+            )
+            insert_radio_activity(
+                interface_id=interface_id,
+                band="2m",
+                bucket_start=assessed_hour,
+                rx_total=50,
+            )
+
+            evaluation = _evaluate_hour(
+                interface_id=interface_id,
+                interface_name="RF-2m",
+                band="2m",
+                hour_start=assessed_hour,
+            )
+
+            self.assertEqual(evaluation["history_hours"], 72)
+            self.assertTrue(evaluation["model_ready"])
+            self.assertEqual(evaluation["condition_index"], 2)
+            self.assertEqual(evaluation["label"], "Normal conditions")
+            self.assertEqual(evaluation["rx_total"], 50)
+
+    def test_recent_unscored_hour_with_rf_is_recalculated_for_snapshot_fallback(self) -> None:
+        with temporary_database():
+            interface_id = insert_interface(band="2m")
+            current_hour = datetime(2026, 5, 4, 15, 0, tzinfo=timezone.utc)
+            saved_hour = current_hour - timedelta(hours=1)
+            insert_normal_band_history(
+                interface_id=interface_id,
+                band="2m",
+                assessed_hour=saved_hour,
+                hours=72,
+            )
+            insert_fixed_station_observations(
+                interface_id=interface_id,
+                band="2m",
+                hour_start=saved_hour,
+                count=10,
+                segment_mask=0xFFF,
+            )
+            insert_radio_activity(
+                interface_id=interface_id,
+                band="2m",
+                bucket_start=saved_hour,
+                rx_total=50,
+            )
+            execute(
+                """
+                INSERT INTO band_condition_hourly(
+                    hour_start_utc, interface_id, interface_name, band,
+                    condition_index, confidence_score, fixed_station_count,
+                    positioned_station_count, direct_station_count,
+                    median_distance_km, p90_distance_km, max_confirmed_distance_km,
+                    normal_station_count, normal_p90_distance_km,
+                    far_station_count, very_far_station_count, new_area_count,
+                    history_hours, created_at
+                )
+                VALUES (?, ?, 'RF-2m', '2m', NULL, 0.4, 10, 10, 10,
+                        100, 100, 100, 10, 100, 0, 0, 0, 72, ?)
+                """,
+                (saved_hour.isoformat(), interface_id, current_hour.isoformat()),
+            )
+            insert_fixed_station_observations(
+                interface_id=interface_id,
+                band="2m",
+                hour_start=current_hour,
+                count=1,
+                segment_mask=1,
+            )
+            insert_radio_activity(
+                interface_id=interface_id,
+                band="2m",
+                bucket_start=current_hour,
+                rx_total=5,
+            )
+
+            snapshot = get_band_condition_snapshot(
+                now_utc=current_hour + timedelta(minutes=6),
+            )["interfaces"][0]
+
+            self.assertEqual(snapshot["hour_start_utc"], saved_hour.isoformat())
+            self.assertTrue(snapshot["model_ready"])
+            self.assertEqual(snapshot["condition_index"], 2)
+            self.assertEqual(snapshot["label"], "Normal conditions")
+            self.assertEqual(snapshot["fixed_station_count"], 10)
+            self.assertEqual(snapshot["rx_total"], 50)
+
+            finalization = finalize_band_condition_hours(
+                now_utc=current_hour + timedelta(minutes=30),
+            )
+            repaired = fetch_one(
+                """
+                SELECT condition_index
+                FROM band_condition_hourly
+                WHERE hour_start_utc = ? AND interface_id = ? AND band = '2m'
+                """,
+                (saved_hour.isoformat(), interface_id),
+            )
+            self.assertEqual(finalization["repaired_hours"], 1)
+            self.assertIsNotNone(repaired)
+            self.assertEqual(int((repaired or {"condition_index": -1})["condition_index"]), 2)
+
+    def test_snapshot_evaluates_previous_closed_hour_before_aggregator_saves_it(self) -> None:
+        with temporary_database():
+            interface_id = insert_interface(band="2m")
+            current_hour = datetime(2026, 5, 4, 15, 0, tzinfo=timezone.utc)
+            previous_hour = current_hour - timedelta(hours=1)
+            insert_normal_band_history(
+                interface_id=interface_id,
+                band="2m",
+                assessed_hour=previous_hour,
+                hours=72,
+            )
+            insert_fixed_station_observations(
+                interface_id=interface_id,
+                band="2m",
+                hour_start=previous_hour,
+                count=10,
+                segment_mask=0xFFF,
+            )
+            insert_radio_activity(
+                interface_id=interface_id,
+                band="2m",
+                bucket_start=previous_hour,
+                rx_total=50,
+            )
+
+            snapshot = get_band_condition_snapshot(
+                now_utc=current_hour + timedelta(minutes=4),
+            )["interfaces"][0]
+
+            self.assertEqual(snapshot["hour_start_utc"], previous_hour.isoformat())
+            self.assertTrue(snapshot["model_ready"])
+            self.assertEqual(snapshot["condition_index"], 2)
+            self.assertEqual(snapshot["label"], "Normal conditions")
+            self.assertEqual(snapshot["fixed_station_count"], 10)
+            self.assertEqual(snapshot["rx_total"], 50)
+
+    def test_snapshot_does_not_reuse_stale_index_when_previous_hour_has_no_rf(self) -> None:
+        with temporary_database():
+            interface_id = insert_interface(band="2m")
+            current_hour = datetime(2026, 5, 4, 15, 0, tzinfo=timezone.utc)
+            previous_hour = current_hour - timedelta(hours=1)
+            insert_normal_band_history(
+                interface_id=interface_id,
+                band="2m",
+                assessed_hour=previous_hour,
+                hours=72,
+            )
+
+            snapshot = get_band_condition_snapshot(
+                now_utc=current_hour + timedelta(minutes=4),
+            )["interfaces"][0]
+
+            self.assertEqual(snapshot["hour_start_utc"], current_hour.isoformat())
+            self.assertTrue(snapshot["model_ready"])
+            self.assertIsNone(snapshot["condition_index"])
+            self.assertEqual(snapshot["label"], "No current RF data")
+
     def test_disabled_interface_does_not_collect_band_condition_rows(self) -> None:
         with temporary_database():
             interface_id = insert_interface(band="")
@@ -454,6 +724,17 @@ class BandConditionHelpersTests(unittest.TestCase):
         self.assertIn("band-condition-model-data", template)
         self.assertIn("30-day baseline", template)
         self.assertIn("/api/band-condition/history?days=365", template)
+        self.assertIn("const historyRangeHours = Object.freeze([24, 168, 720, 8760]);", template)
+        self.assertIn('data-history-range-hours="24"', template)
+        self.assertIn('data-history-range-hours="168"', template)
+        self.assertIn('data-history-range-hours="720"', template)
+        self.assertIn('data-history-range-hours="8760"', template)
+        self.assertIn('data-current-hour="{{ item.hour_start_utc }}"', template)
+        self.assertIn("currentHour === String(payload.end_utc || \"\")", template)
+        self.assertIn("pointRadius: 2", template)
+        self.assertIn("pointRadius: 5", template)
+        stylesheet = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn(".band-condition-chart-empty[hidden]", stylesheet)
         self.assertLess(
             template.index('<article class="panel band-condition-card">'),
             template.index('<article class="panel band-condition-model-card">'),

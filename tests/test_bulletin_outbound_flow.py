@@ -10,7 +10,7 @@ from unittest.mock import patch
 from app.db import execute, fetch_one, init_db
 from app.services.bulletin_scheduler import BulletinSchedulerService
 from app.services.content import update_station_settings
-from app.services.outbound import build_message_tnc2, claim_next_outbound_job, get_outbound_job
+from app.services.outbound import build_message_tnc2, claim_next_outbound_job, enqueue_message_job, get_outbound_job
 from app.services.outbound_runtime import OutboundService
 
 
@@ -292,6 +292,57 @@ class BulletinOutboundFlowTests(unittest.IsolatedAsyncioTestCase):
             source_row = fetch_one("SELECT is_enabled FROM bulletins WHERE id = ?", (bulletin_id,))
             assert source_row is not None
             self.assertEqual(int(source_row["is_enabled"]), 0)
+
+    async def test_outbound_runtime_sends_force_send_bulletin_even_when_disabled(self) -> None:
+        with temporary_database():
+            insert_modem(device_path="127.0.0.1:9016")
+            bulletin_id = insert_message_record(message_kind="bulletin")
+            execute("UPDATE bulletins SET is_enabled = 0 WHERE id = ?", (bulletin_id,))
+            station_settings = {
+                "callsign": "SQ9MDD",
+                "ssid": "4",
+                "beacon_interface_id": "1",
+            }
+            row = fetch_one("SELECT * FROM bulletins WHERE id = ?", (bulletin_id,))
+            assert row is not None
+            success, message = enqueue_message_job(
+                dict(row),
+                station_settings,
+                trigger="manual",
+                force_send=True,
+            )
+            self.assertTrue(success)
+            self.assertIn("queued", message.lower())
+            job = claim_next_outbound_job()
+            assert job is not None
+
+            written_frames: list[bytes] = []
+
+            class FakeWriter:
+                def write(self, data: bytes) -> None:
+                    written_frames.append(data)
+
+                async def drain(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
+
+                async def wait_closed(self) -> None:
+                    return None
+
+            async def fake_open_connection(host: str, port: int):
+                self.assertEqual(host, "127.0.0.1")
+                self.assertEqual(port, 9016)
+                return object(), FakeWriter()
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection", side_effect=fake_open_connection):
+                await outbound_service._process_job(job)
+
+            self.assertTrue(written_frames)
+            traffic_row = fetch_one("SELECT line FROM traffic_frames ORDER BY id DESC LIMIT 1")
+            self.assertIsNotNone(traffic_row)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 {% block extra_head %}
 {% if section.slug in ['objects', 'items'] %}
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
-<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}-map-alert-panel-8">
 {% endif %}
 {% if section.slug in ['objects', 'modems', 'bulletins'] %}
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
@@ -18,15 +18,9 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t(section.title) }}</h2>
-                <p class="section-lead">{{ t(section.description) }}</p>
             </div>
         </div>
         <div class="notice">{{ t(section.readonly_message) }}</div>
-        {% if section.slug == 'objects' %}
-        <div class="notice">{{ t("Use object names up to 9 printable ASCII characters. The sender will later pad them to the fixed APRS 9-character object field and add the mandatory timestamp automatically.") }}</div>
-        {% elif section.slug == 'items' %}
-        <div class="notice">{{ t("Use item names from 3 to 9 printable ASCII characters. Avoid item format on RF unless you specifically need it; objects are generally the safer interoperable choice.") }}</div>
-        {% endif %}
         {% if flash %}
         <div class="alert">{{ t(flash) }}</div>
         {% endif %}
@@ -90,7 +84,8 @@
                 <table class="data-table prepared-entity-table message-entry-table">
                     <thead>
                         <tr>
-                            <th class="prepared-entity-col-active">{{ t("Active") }}</th>
+                            <th class="prepared-entity-col-active" title="{{ t('Enabled') }}">{{ t("Enabled") }}</th>
+                            <th class="prepared-entity-col-active" title="{{ t('Active now') }}">{{ t("Active now") }}</th>
                             <th class="prepared-entity-col-schedule">{{ t("Schedule") }}</th>
                             <th class="prepared-entity-col-interval">{{ t("Every") }}</th>
                             <th class="message-entry-col-type">{{ t("Type") }}</th>
@@ -102,9 +97,13 @@
                         {% for row in rows %}
                         <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
                             <td class="prepared-entity-col-active">
-                                <span class="tnc-badge {{ 'tnc-badge-enabled' if row.activation_active_now else 'tnc-badge-disabled' }}" title="{{ row.activation_summary }}">
-                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.activation_active_now else 'close-circle.svg' }}" alt="">
-                                    <span>{{ t('On' if row.activation_active_now else 'Off') }}</span>
+                                <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.is_enabled else 'tnc-status-icon-disabled' }}" title="{{ t('Enabled' if row.is_enabled else 'Disabled') }}" aria-label="{{ t('Enabled' if row.is_enabled else 'Disabled') }}">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
+                                </span>
+                            </td>
+                            <td class="prepared-entity-col-active">
+                                <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.activation_active_now else 'tnc-status-icon-disabled' }}" title="{{ row.activation_summary }}" aria-label="{{ t('Active now' if row.activation_active_now else 'Inactive now') }}">
+                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'play-circle.svg' if row.activation_active_now else 'close-circle.svg' }}" alt="">
                                 </span>
                             </td>
                             <td class="prepared-entity-col-schedule" title="{{ row.activation_summary }}">{{ t(row.activation_short_label) }}</td>
@@ -115,7 +114,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="6">{{ t("No records yet.") }}</td>
+                            <td colspan="7">{{ t("No records yet.") }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -129,7 +128,7 @@
                             {% elif section.slug == 'modems' and field.name == 'enabled' %}
                             <th>{{ t("Status") }}</th>
                             {% elif section.slug == 'modems' and field.name == 'tx_blocked' %}
-                            <th>{{ t("TX Block") }}</th>
+                            <th>{{ t("TX control") }}</th>
                             {% elif section.slug == 'modems' and field.name == 'expose_port_enabled' %}
                             <th>{{ t("LAN") }}</th>
                             {% else %}
@@ -153,7 +152,7 @@
                             <td class="modems-summary-icon-cell">
                                 <span
                                     class="tnc-status-icon tnc-status-icon-{{ row.modem_runtime_status or ('enabled' if row[field.name] else 'disabled') }}"
-                                    title="{{ t(row.modem_runtime_label or ('Enabled' if row[field.name] else 'Disabled')) }}{% if row.modem_runtime_title %} · {{ row.modem_runtime_title }}{% endif %}"
+                                    title="{{ t(row.modem_runtime_label or ('Enabled' if row[field.name] else 'Disabled')) }}{% if row.modem_runtime_title %} · {{ t(row.modem_runtime_title) }}{% endif %}{% if row.aprsis_direction_title %} · {{ t(row.aprsis_direction_title) }}{% endif %}"
                                     aria-label="{{ t(row.modem_runtime_label or ('Enabled' if row[field.name] else 'Disabled')) }}"
                                 >
                                     <img
@@ -166,6 +165,21 @@
                             <td{% if section.slug == 'modems' and field.type == 'checkbox' %} class="modems-summary-icon-cell"{% endif %}>
                                 {% if field.type == 'checkbox' %}
                                 {% if section.slug == 'modems' and field.name == 'tx_blocked' %}
+                                {% if row.modem_type|upper == 'APRSIS' %}
+                                {% set aprsis_tx_enabled = row.aprsis_tx_enabled %}
+                                {% set aprsis_tx_configured = row.aprsis_tx_configured %}
+                                {% set aprsis_tx_title = 'APRS-IS TX is enabled by Packet Routing.' if aprsis_tx_enabled else ('APRS-IS TX flow is configured, but the APRS-IS connection is disabled.' if aprsis_tx_configured else 'APRS-IS TX is disabled because no active TX APRS-IS flow exists.') %}
+                                <span
+                                    class="tnc-status-icon {{ 'tnc-status-icon-enabled' if aprsis_tx_enabled else 'tnc-status-icon-disabled' }}"
+                                    title="{{ t(aprsis_tx_title) }}"
+                                    aria-label="{{ t(aprsis_tx_title) }}"
+                                >
+                                    <img
+                                        src="{{ request.scope.root_path }}/static/icons/{{ 'source-branch-check.svg' if aprsis_tx_enabled else 'source-branch-minus.svg' }}"
+                                        alt="{{ t('On' if aprsis_tx_enabled else 'Off') }}"
+                                    >
+                                </span>
+                                {% else %}
                                 {% set tx_blocked = row[field.name] %}
                                 <span
                                     class="tnc-status-icon {{ 'tnc-status-icon-error' if tx_blocked else 'tnc-status-icon-enabled' }}"
@@ -177,6 +191,7 @@
                                         alt="{{ t('On' if tx_blocked else 'Off') }}"
                                     >
                                 </span>
+                                {% endif %}
                                 {% elif section.slug == 'modems' and field.name == 'expose_port_enabled' %}
                                 {% set lan_enabled = row[field.name] %}
                                 <span
@@ -247,19 +262,24 @@
                 {% endif %}
             </div>
             {% if can_edit %}
+            {% if section.slug in ['objects', 'items', 'modems', 'bulletins'] and flash %}
+            <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
+            {% endif %}
             <form method="post" class="form-grid" id="{{ section.slug }}-form">
                 {% if section.supports_editing and edit_row %}
                 <input type="hidden" name="record_id" value="{{ edit_row.id }}">
                 {% endif %}
+                {% if section.slug == 'modems' %}
+                {% include "partials/modem_form_fields.html" %}
+                {% else %}
                 {% for field in section.fields %}
                 {% if section.slug == 'objects' and field.name == 'latitude' %}
-                <label class="full">
-                    <span>{{ t("Get location") }}</span>
+                <div class="full">
                     <button type="button" class="button button-secondary location-picker-button" id="objects-open-map-picker">
                         <img src="{{ request.scope.root_path }}/static/icons/map-marker-plus-outline.svg" alt="">
                         <span>{{ t("Get location") }}</span>
                     </button>
-                </label>
+                </div>
                 {% endif %}
                 {% if field.form_visible|default(true) %}
                 {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_from_utc' %}
@@ -284,7 +304,7 @@
                     <textarea name="{{ field.name }}" {% if section.slug == 'bulletins' and field.name == 'message_text' %}id="bulletins-message-text"{% endif %}{% if section.slug == 'objects' and field.name == 'comment' %}id="objects-comment-text"{% endif %}{% if section.slug == 'modems' and field.name == 'expose_whitelist' %}id="modems-expose-whitelist"{% endif %}{% if field.required %}required{% endif %}{% if field.maxlength %} maxlength="{{ field.maxlength }}"{% endif %}{% if field.placeholder %} placeholder="{{ t(field.placeholder) }}"{% endif %}>{{ edit_row[field.name] if edit_row else (field.default if field.default is defined else '') }}</textarea>
                     {% elif field.type == 'checkbox' %}
                     <input type="checkbox" name="{{ field.name }}" value="1" {% if section.slug == 'modems' and field.name == 'expose_port_enabled' %}id="modems-expose-port-enabled"{% endif %} {% if edit_row and edit_row[field.name] %}checked{% endif %}>
-                    <span>{% if section.slug == 'modems' and field.name == 'tx_blocked' %}{{ t("Block TX on this interface") }}{% else %}{{ t(field.label) }}{% endif %}</span>
+                    <span{% if section.slug == 'modems' and field.name == 'enabled' %} id="modems-enabled-label"{% endif %}>{% if section.slug == 'modems' and field.name == 'tx_blocked' %}{{ t("Block TX on this interface") }}{% else %}{{ t(field.label) }}{% endif %}</span>
                     {% elif field.type == 'select' %}
                     <span>{{ t(field.label) }}</span>
                     <select
@@ -400,48 +420,16 @@
                     </button>
                     {% endif %}
                     {% endif %}
-                    {% if section.slug == 'modems' and field.name == 'device_path' %}
-                    <small class="muted" id="modems-aprsis-filter-help" hidden>{{ t("APRS-IS server filter, e.g. m/20 or r/52.23/21.01/50.") }}</small>
-                    {% endif %}
-                    {% if section.slug in ['objects', 'items'] and field.name == 'path' %}
-                    <small class="muted">{{ t("Recommended path is blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
-                    {% elif section.slug in ['objects', 'items'] and field.name == 'interval_minutes' %}
-                    <small class="muted">{{ t("Prepared scheduling only. Default is 30m.") }}</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'bulletin_code' %}
-                    <small class="muted">{{ t("Use <code>0-9</code> for general/group bulletins and <code>A-Z</code> for announcements.")|safe }}</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'group_name' %}
-                    <small class="muted">{{ t("Group suffix, 1-5 chars: <code>A-Z</code> or <code>0-9</code>.")|safe }}</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'path' %}
-                    <small class="muted">{{ t("Leave blank for direct. If needed, use <code>WIDE2-1</code>; <code>RFONLY</code> or <code>NOGATE</code> may also be used.")|safe }}</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'interval_minutes' %}
-                    <small class="muted">{{ t("Uses the same outbound queue and scheduler path as beacon, status and objects.") }}</small>
-                    {% elif section.slug in ['objects', 'items', 'bulletins'] and field.name == 'activation_mode' %}
-                    <small class="muted">{{ t("Activation schedule controls when sending is allowed. Send interval remains separate.") }}</small>
-                    {% elif section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_until_utc' %}
-                    <small class="muted">{{ t("Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.") }}</small>
-                    {% elif section.slug == 'bulletins' and field.name == 'message_text' %}
+                    {% if section.slug == 'bulletins' and field.name == 'message_text' %}
                     <div class="field-counter-row">
                         <small class="muted" id="bulletins-message-count">0 / 67</small>
                         <small class="field-validation-error" id="bulletins-message-error" hidden>{{ t("Only printable ASCII is allowed. National characters are blocked.") }}</small>
                     </div>
-                    {% elif section.slug == 'modems' and field.name == 'expose_bind_address' %}
-                    <small class="muted">{{ t("LAN listen address. Use <code>0.0.0.0</code> for all interfaces.")|safe }}</small>
-                    {% elif section.slug == 'modems' and field.name == 'expose_port' %}
-                    <small class="muted">{{ t("TCP port exposed by APRSBox for LAN clients. Maximum simultaneous clients: 3.") }}</small>
-                    {% elif section.slug == 'modems' and field.name == 'serial_rx_silence_reconnect_seconds' %}
-                    <small class="muted">{{ t("Serial-only watchdog timeout. 0 disables forced reconnect on RX silence.") }}</small>
-                    {% elif section.slug == 'modems' and field.name == 'tx_min_gap_seconds' %}
-                    <small class="muted">{{ t("Per-TNC TX pacing gap, from 0.2s to 1.2s.") }}</small>
-                    {% elif section.slug == 'modems' and field.name == 'expose_whitelist' %}
-                    <small class="muted">{{ t("Optional allow-list. Enter one IPv4 address or CIDR per line; commas are also accepted.") }}</small>
                     {% elif section.slug == 'objects' and field.name == 'comment' %}
-                    <small class="muted">{{ t("Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.") }}</small>
                     <div class="field-counter-row">
                         <small class="muted" id="objects-comment-count">0 / 43</small>
                         <small class="field-validation-error" id="objects-comment-error" hidden>{{ t("Only printable ASCII is allowed. National characters are blocked.") }}</small>
                     </div>
-                    {% elif section.slug == 'items' and field.name == 'comment' %}
-                    <small class="muted">{{ t("Keep the comment within 43 printable ASCII characters if you want a plain item report without extra data extensions.") }}</small>
                     {% endif %}
                 </label>
                 {% if section.slug in ['objects', 'items', 'bulletins'] and field.name == 'active_until_utc' %}
@@ -452,6 +440,7 @@
                 {% endif %}
                 {% endif %}
                 {% endfor %}
+                {% endif %}
                 {% if section.slug in ['objects', 'items', 'bulletins'] %}
                 <div class="full activation-summary-panel">
                     <strong>{{ t("Activation summary") }}</strong>
@@ -461,8 +450,16 @@
                 {% endif %}
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save") }}</button>
-                    {% if section.slug == 'objects' and edit_row %}
-                    <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/settings/objects/{{ edit_row.id }}/send" formmethod="post">{{ t("Send now") }}</button>
+                    {% if section.slug in ['objects', 'bulletins'] and edit_row %}
+                    <button
+                        type="submit"
+                        class="button button-secondary button-label-icon"
+                        formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/send"
+                        formmethod="post"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/send-outline.svg" alt="">
+                        <span>{{ t("Send now") }}</span>
+                    </button>
                     {% endif %}
                     {% if section.supports_editing and edit_row %}
                     <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else ('/bulletins' if section.slug == 'bulletins' else '/settings/' ~ section.slug)) }}" class="button button-secondary">{{ t("Cancel") }}</a>
@@ -472,6 +469,9 @@
                     {% endif %}
                 </div>
             </form>
+            {% if section.slug == 'modems' %}
+            {% include "partials/aprsis_interface_status.html" %}
+            {% endif %}
             {% if section.slug in ['objects', 'items'] %}
             <div class="location-picker-modal" id="{{ section.slug }}-location-picker" hidden>
                 <div class="location-picker-backdrop" data-close-location-picker></div>
@@ -524,7 +524,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t('Objects TX Log' if section.slug == 'objects' else 'Bulletins TX Log') }}</h2>
-                <p class="section-lead">{{ t('Recent object jobs with delivery state and transmitted frame preview.' if section.slug == 'objects' else 'Recent bulletin jobs with delivery state and transmitted frame preview.') }}</p>
             </div>
         </div>
         <div class="table-wrap">
@@ -571,6 +570,9 @@
 {% endif %}
 {% if section.slug in ['objects', 'modems', 'bulletins'] %}
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
+{% endif %}
+{% if section.slug == 'modems' %}
+<script src="{{ request.scope.root_path }}/static/js/aprsis-interface-status.js?v={{ app_version }}"></script>
 {% endif %}
 <script>
     (() => {
@@ -741,71 +743,46 @@
         const modemForm = document.getElementById("modems-form");
         if (modemForm) {
             const typeSelect = modemForm.querySelector('select[name="modem_type"]');
-            const baudInput = modemForm.querySelector('input[name="baud_rate"]');
-            const devicePathInput = document.getElementById("modems-device-path");
-            const aprsisFilterHelp = document.getElementById("modems-aprsis-filter-help");
-            const exposeToggle = document.getElementById("modems-expose-port-enabled");
-            const exposeRows = [
-                document.getElementById("modems-expose-allow-tx-row"),
-                document.getElementById("modems-expose-bind-row"),
-                document.getElementById("modems-expose-port-row"),
-                document.getElementById("modems-expose-whitelist-row"),
-            ].filter(Boolean);
-            if (typeSelect && baudInput) {
+            const typePanels = Array.from(modemForm.querySelectorAll("[data-modem-type-panel]"));
+            const enabledLabel = document.getElementById("modems-enabled-label");
+            const aprsisStatusPanel = document.querySelector("[data-aprsis-interface-status]");
+            const exposeToggles = Array.from(modemForm.querySelectorAll("[data-expose-toggle]"));
+
+            const syncExposeFields = (toggle) => {
+                const panel = toggle.closest("[data-modem-type-panel]");
+                const details = panel ? panel.querySelector("[data-expose-details]") : null;
+                if (!details) return;
+                const showDetails = !panel.disabled && toggle.checked;
+                details.hidden = !showDetails;
+                for (const input of details.querySelectorAll("input, textarea, select")) {
+                    input.disabled = !showDetails;
+                }
+            };
+
+            if (typeSelect) {
                 const syncModemFields = () => {
-                    const isTcp = typeSelect.value === "TCP";
-                    const isOpenWebRxMqtt = typeSelect.value === "OPENWEBRX_MQTT";
                     const isAprsis = typeSelect.value === "APRSIS";
-                    const aprsisHiddenFieldNames = [
-                        "band",
-                        "baud_rate",
-                        "serial_rx_silence_reconnect_seconds",
-                        "tx_blocked",
-                        "tx_min_gap_seconds",
-                        "expose_port_enabled",
-                        "expose_allow_tx",
-                        "expose_bind_address",
-                        "expose_port",
-                        "expose_whitelist",
-                    ];
-                    for (const fieldName of aprsisHiddenFieldNames) {
-                        const row = modemForm.querySelector(`[data-modem-field-row="${fieldName}"]`);
-                        if (!row) continue;
-                        row.hidden = isAprsis;
-                        for (const input of row.querySelectorAll("input, textarea, select")) {
-                            input.disabled = isAprsis;
-                        }
+                    for (const panel of typePanels) {
+                        const isActive = panel.dataset.modemTypePanel === typeSelect.value;
+                        panel.hidden = !isActive;
+                        panel.disabled = !isActive;
                     }
-                    const disableBaud = isTcp || isOpenWebRxMqtt || isAprsis;
-                    baudInput.disabled = disableBaud;
-                    if (disableBaud) {
-                        baudInput.value = "";
+                    if (enabledLabel) {
+                        enabledLabel.textContent = isAprsis
+                            ? {{ t("Enable APRS-IS connection")|tojson }}
+                            : {{ t("Enabled")|tojson }};
                     }
-                    if (aprsisFilterHelp) {
-                        aprsisFilterHelp.hidden = !isAprsis;
+                    if (aprsisStatusPanel) {
+                        aprsisStatusPanel.hidden = !isAprsis;
                     }
-                    if (isAprsis && devicePathInput && !devicePathInput.value.trim()) {
-                        devicePathInput.value = "m/20";
-                    }
-                    if (exposeToggle) {
-                        exposeToggle.disabled = isOpenWebRxMqtt || isAprsis;
-                        if (isOpenWebRxMqtt || isAprsis) {
-                            exposeToggle.checked = false;
-                        }
-                    }
-                    const showExposeFields = Boolean(!isOpenWebRxMqtt && !isAprsis && exposeToggle && exposeToggle.checked);
-                    for (const row of exposeRows) {
-                        row.hidden = !showExposeFields;
-                        const rowInputs = row.querySelectorAll("input, textarea, select");
-                        for (const input of rowInputs) {
-                            input.disabled = !showExposeFields;
-                        }
+                    for (const toggle of exposeToggles) {
+                        syncExposeFields(toggle);
                     }
                 };
 
                 typeSelect.addEventListener("change", syncModemFields);
-                if (exposeToggle) {
-                    exposeToggle.addEventListener("change", syncModemFields);
+                for (const toggle of exposeToggles) {
+                    toggle.addEventListener("change", () => syncExposeFields(toggle));
                 }
                 syncModemFields();
             }

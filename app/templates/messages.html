@@ -13,7 +13,6 @@
                 <div class="panel-header">
                     <div class="panel-header-copy">
                         <h2>{{ t("Conversations") }}</h2>
-                        <p class="section-lead">{{ t("Stored APRS message conversations from the local SQLite database.") }}</p>
                     </div>
                     <button
                         class="help-icon-button page-help-button"
@@ -53,13 +52,10 @@
             <header class="messages-thread-header" id="messages-thread-header">
                 <div class="panel-header-copy">
                     <h2>{{ t("Select a conversation") }}</h2>
-                    <p class="section-lead">{{ t("Choose a callsign on the left or start a new APRS message thread.") }}</p>
                 </div>
             </header>
 
-            <div class="messages-thread-history" id="messages-thread-history">
-                <div class="empty-state muted">{{ t("Select a conversation or start a new message.") }}</div>
-            </div>
+            <div class="messages-thread-history" id="messages-thread-history"></div>
 
             <form class="messages-composer" id="messages-composer">
                 <label class="messages-composer-field">
@@ -166,7 +162,7 @@
     const requestedCallsign = new URLSearchParams(window.location.search).get("callsign");
     const i18n = Object.freeze({
         requestFailed: {{ t("Request failed.")|tojson }},
-        noSavedConversations: {{ t("No saved conversations yet. Start a new APRS message thread above.")|tojson }},
+        noSavedConversations: {{ t("No conversations loaded.")|tojson }},
         unreadWithCount: {{ t("Unread ({count})")|tojson }},
         read: {{ t("Read")|tojson }},
         heardRecently: {{ t("Heard recently")|tojson }},
@@ -174,8 +170,6 @@
         deleteConversation: {{ t("Delete conversation")|tojson }},
         deleteConversationWithCallsign: {{ t("Delete conversation {callsign}")|tojson }},
         selectConversation: {{ t("Select a conversation")|tojson }},
-        chooseConversationLead: {{ t("Choose a callsign on the left or start a new APRS message thread.")|tojson }},
-        startNewMessageFromLeft: {{ t("Or start a new message from the left panel.")|tojson }},
         noMessagesInConversationYet: {{ t("No messages in this conversation yet.")|tojson }},
         queued: {{ t("Queued")|tojson }},
         sent: {{ t("Sent")|tojson }},
@@ -549,7 +543,6 @@
             threadHeader.innerHTML = `
                 <div class="panel-header-copy">
                     <h2>${escapeHtml(i18n.selectConversation)}</h2>
-                    <p class="section-lead">${escapeHtml(i18n.chooseConversationLead)}</p>
                 </div>
             `;
             return;
@@ -572,7 +565,7 @@
 
     function renderThreadHistory(conversation, options = {}) {
         if (!conversation) {
-            historyNode.innerHTML = `<div class="messages-thread-empty"><strong>${escapeHtml(i18n.selectConversation)}</strong><span class="muted">${escapeHtml(i18n.startNewMessageFromLeft)}</span></div>`;
+            historyNode.replaceChildren();
             return;
         }
         if (!conversation.messages.length) {

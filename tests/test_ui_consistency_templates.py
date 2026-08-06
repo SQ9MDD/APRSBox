@@ -3,6 +3,76 @@ from pathlib import Path
 
 
 class UiConsistencyTemplateTests(unittest.TestCase):
+    def test_explanatory_copy_is_kept_in_help_instead_of_repeated_on_screens(self) -> None:
+        forbidden_by_template = {
+            "alerts.html": [
+                "Logical APRS emergency alerts consolidated by source callsign.",
+            ],
+            "notifications.html": [
+                "Use commas or line breaks. Wildcards are supported.",
+                "Distance is measured from My Station coordinates.",
+            ],
+            "messages.html": [
+                "Stored APRS message conversations from the local SQLite database.",
+                "Choose a callsign on the left or start a new APRS message thread.",
+                "startNewMessageFromLeft",
+            ],
+            "wx.html": [
+                "Prepare one WX identity for this APRSBox instance.",
+                "Map APRS WX parameters to configured sources.",
+                "Store HTTP source definitions for Home Assistant and Domoticz.",
+                "Recent WX jobs with delivery state",
+            ],
+            "station.html": [
+                "Configure the APRS position beacon.",
+                "Internal TX does not use physical RF transport.",
+                "Proportional Path sends frequent local beacons",
+                "Status is sent as a separate APRS frame",
+                "Set power, antenna height above ground",
+                "Recent beacon and APRS Status jobs",
+                "beacon-schedule-note",
+            ],
+            "section.html": [
+                "Recommended path is blank for direct.",
+                "Prepared scheduling only.",
+                "Activation schedule controls when sending is allowed.",
+                "Manual: Leave empty to keep sending",
+                "Uses the same outbound queue and scheduler path",
+                "Recent object jobs with delivery state",
+                "Recent bulletin jobs with delivery state",
+            ],
+            "digi_flow_form.html": [
+                "Each block below shows one packet running through this flow",
+                "appendFieldHelp",
+                "stepMeta.description",
+            ],
+            "settings.html": [
+                "Configure the interface language and default measurement units",
+                "Applies globally across the GUI.",
+                "Configure the update channel and run application update",
+                "Use Check version to compare local VERSION",
+                "Use a local cached APRS device identification database",
+            ],
+            "band_condition.html": [
+                "What has been collected and how close the model is to a stable baseline.",
+                "Confidence grows mainly with regular observations",
+            ],
+            "dashboard.html": [
+                "Historical activity from 5-minute aggregates.",
+            ],
+            "logs.html": [
+                "This log currently captures application and configuration events",
+            ],
+            "users.html": [
+                "Only administrators can manage accounts and assign one of the built-in roles",
+            ],
+        }
+
+        for template_name, forbidden_fragments in forbidden_by_template.items():
+            template_source = Path("app/templates", template_name).read_text(encoding="utf-8")
+            for fragment in forbidden_fragments:
+                self.assertNotIn(fragment, template_source, msg=f"{fragment!r} remains in {template_name}")
+
     def test_changelog_uses_standard_panel_body_header_structure(self) -> None:
         template_source = Path("app/templates/changelog.html").read_text(encoding="utf-8")
         self.assertIn('<section class="panel">\n    <div class="panel-body">\n        <div class="panel-header">', template_source)
@@ -15,6 +85,10 @@ class UiConsistencyTemplateTests(unittest.TestCase):
         self.assertNotIn('style="', template_source)
         self.assertIn('class="panel-subsection"', template_source)
         self.assertIn('class="panel-subsection-header"', template_source)
+        self.assertIn("const telegramOnlyRows", template_source)
+        self.assertIn("const webhookOnlyRows", template_source)
+        self.assertIn("row.hidden = !isTelegram", template_source)
+        self.assertIn("row.hidden = !isWebhook", template_source)
         self.assertIn(".panel-subsection {", stylesheet_source)
         self.assertIn(".panel-subsection + .panel-subsection {", stylesheet_source)
         self.assertIn(".panel-subsection-header {", stylesheet_source)

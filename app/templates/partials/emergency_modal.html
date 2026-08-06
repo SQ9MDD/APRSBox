@@ -1,0 +1,87 @@
+<div
+    id="aprs-emergency-root"
+    data-root-path="{{ request.scope.root_path }}"
+    data-static-root="{{ request.scope.root_path }}/static/"
+    data-traffic-stream-endpoint="{{ request.scope.root_path }}/api/traffic/stream"
+    data-tile-url="{{ alert_modal_map_config.tile_url }}"
+    data-tile-attribution="{{ alert_modal_map_config.tile_attribution }}"
+    data-tile-min-zoom="{{ alert_modal_map_config.tile_min_zoom }}"
+    data-tile-max-zoom="{{ alert_modal_map_config.tile_max_zoom }}"
+    data-tile-subdomains="{{ alert_modal_map_config.tile_subdomains }}"
+    data-i18n-emergency-frame-received="{{ t('Emergency frame received') }}"
+    data-i18n-active-emergency="{{ t('Active emergency') }}"
+    data-i18n-aprs-alert-received="{{ t('APRS alert received') }}"
+    data-i18n-active-aprs-alert="{{ t('Active APRS alert') }}"
+    data-i18n-alert-muted="{{ t('Alert muted') }}"
+>
+    <audio
+        id="aprs-emergency-audio"
+        src="{{ request.scope.root_path }}/static/audio/aprs-audio-alert.mp3"
+        preload="auto"
+        autoplay
+        muted
+        loop
+        playsinline
+        hidden
+    ></audio>
+    <div id="aprs-emergency-modal" class="aprs-emergency-modal" hidden>
+        <div class="aprs-emergency-backdrop"></div>
+        <div
+            class="aprs-emergency-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="aprs-emergency-title"
+            tabindex="-1"
+        >
+            <header class="aprs-emergency-header">
+                <div class="aprs-emergency-header-copy">
+                    <div class="aprs-emergency-title-row">
+                        <span class="aprs-emergency-icon" aria-hidden="true">
+                            <img src="{{ request.scope.root_path }}/static/icons/car-emergency.svg" alt="">
+                        </span>
+                        <div class="aprs-emergency-title-stack">
+                            <div class="aprs-emergency-title" id="aprs-emergency-title">{{ t("Emergency frame received") }}</div>
+                            <div class="aprs-emergency-callsign" id="aprs-emergency-callsign">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="aprs-emergency-status-badge" id="aprs-emergency-status">{{ t("Active emergency") }}</div>
+            </header>
+            <div class="aprs-emergency-body">
+                <div class="aprs-emergency-newer" id="aprs-emergency-newer" hidden>{{ t("Newer emergency received") }}</div>
+                <dl class="aprs-emergency-grid">
+                    <div class="aprs-emergency-row">
+                        <dt>{{ t("UTC timestamp") }}</dt>
+                        <dd id="aprs-emergency-timestamp">-</dd>
+                    </div>
+                    <div class="aprs-emergency-row">
+                        <dt>{{ t("Source interface") }}</dt>
+                        <dd id="aprs-emergency-source">-</dd>
+                    </div>
+                    <div class="aprs-emergency-row">
+                        <dt>{{ t("Path") }}</dt>
+                        <dd id="aprs-emergency-path">-</dd>
+                    </div>
+                    <div class="aprs-emergency-row">
+                        <dt>{{ t("Comment / summary") }}</dt>
+                        <dd id="aprs-emergency-summary">-</dd>
+                    </div>
+                </dl>
+                <div class="aprs-emergency-map-wrap">
+                    <div id="aprs-emergency-map" class="aprs-emergency-map"></div>
+                    <div id="aprs-emergency-no-position" class="aprs-emergency-no-position" hidden>{{ t("No position available in this frame") }}</div>
+                </div>
+                <div class="aprs-emergency-raw-block">
+                    <div class="aprs-emergency-raw-label">{{ t("Raw APRS frame") }}</div>
+                    <pre id="aprs-emergency-raw" class="aprs-emergency-raw"></pre>
+                </div>
+            </div>
+            <footer class="aprs-emergency-actions">
+                <button type="button" class="button button-secondary" id="aprs-emergency-copy">{{ t("Copy frame") }}</button>
+                <button type="button" class="button button-secondary" id="aprs-emergency-open-map" disabled>{{ t("Open on map") }}</button>
+                <a class="button button-secondary" id="aprs-emergency-open-alert" href="{{ request.scope.root_path }}/alerts" hidden>{{ t("Show alert") }}</a>
+                <button type="button" class="button" id="aprs-emergency-close">{{ t("Close") }}</button>
+            </footer>
+        </div>
+    </div>
+</div>

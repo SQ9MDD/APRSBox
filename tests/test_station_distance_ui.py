@@ -30,6 +30,32 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function buildRenderSignature()", script_source)
         self.assertIn("if (!forceRender && nextSignature === lastStationsSignature)", script_source)
 
+    def test_map_script_progressively_renders_visible_station_markers(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+
+        self.assertIn("const initialMarkerBatchSize = 20;", script_source)
+        self.assertIn("const markerBatchSize = 40;", script_source)
+        self.assertIn("const markerBatchTimeBudgetMs = 8;", script_source)
+        self.assertIn("function cancelPendingMarkerRender()", script_source)
+        self.assertIn("function prioritizeMarkerRecords(records)", script_source)
+        self.assertIn("record.visiblePriority = currentBounds && currentBounds.contains([", script_source)
+        self.assertIn("function renderMarkerBatch(records, startIndex, renderGeneration, maximumBatchSize)", script_source)
+        self.assertIn("renderGeneration !== markerRenderGeneration", script_source)
+        self.assertIn(
+            "renderMarkerBatch(prioritizedRecords, 0, renderGeneration, initialMarkerBatchSize);",
+            script_source,
+        )
+        self.assertIn(
+            "renderMarkerBatch(records, nextIndex, renderGeneration, markerBatchSize);",
+            script_source,
+        )
+
+        render_start = script_source.index("function renderStations(stations, mobileTracks)")
+        render_end = script_source.index("async function loadStationDetails", render_start)
+        render_source = script_source[render_start:render_end]
+        self.assertLess(render_source.index("reconcileMarkers(stations);"), render_source.index("reconcileCoverage(stations);"))
+        self.assertLess(render_source.index("reconcileCoverage(stations);"), render_source.index("reconcileTracks(mobileTracks);"))
+
     def test_map_script_renders_track_dots_for_older_positions(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("window.L.circleMarker", script_source)
@@ -201,6 +227,16 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertNotIn("filter: brightness(var(--map-tile-brightness));", map_stylesheet_source)
         self.assertNotIn("filter: brightness(var(--map-tile-brightness));", app_stylesheet_source)
 
+    def test_map_uses_global_coverage_fill_opacity_with_five_percent_default(self) -> None:
+        map_script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        map_template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
+
+        self.assertIn('data-coverage-fill-opacity="{{ map_config.coverage_fill_opacity }}"', map_template_source)
+        self.assertIn('root.dataset.coverageFillOpacity || ""', map_script_source)
+        self.assertIn("normalizeCoverageOpacityPercent(configuredOpacity, 5)", map_script_source)
+        self.assertIn("let coverageFillOpacity = 0.05;", map_script_source)
+        self.assertNotIn("aprsbox-map-coverage-fill-opacity", map_script_source)
+
     def test_map_latest_overlay_script_handles_overlay_toggle_and_qsy(self) -> None:
         script_source = Path("app/static/js/map-latest-overlay.js").read_text(encoding="utf-8")
         self.assertIn("const stationsRefreshEventName = \"aprsbox:map-stations-refreshed\";", script_source)
@@ -231,12 +267,20 @@ class StationDistanceUiTests(unittest.TestCase):
     def test_stations_page_supports_metric_card_filtering(self) -> None:
         template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")
         self.assertIn('data-station-filter="all"', template_source)
+        self.assertIn('data-station-filter="direct"', template_source)
         self.assertIn('data-station-filter="stationary"', template_source)
         self.assertIn('data-station-filter="mobile"', template_source)
         self.assertIn('data-station-filter="object"', template_source)
         self.assertIn('data-station-filter="weather"', template_source)
         self.assertIn('id="summary-weather"', template_source)
+        self.assertIn('id="summary-direct"', template_source)
+        self.assertEqual(template_source.count('class="stations-filter-icon"'), 6)
+        self.assertEqual(template_source.count("data-tooltip="), 6)
+        self.assertIn("account-group-outline.svg", template_source)
+        self.assertIn("antenna.svg", template_source)
+        self.assertIn("weather-partly-cloudy.svg", template_source)
         self.assertIn("function filteredStations(stations, filter)", template_source)
+        self.assertIn("function isDirectlyHeardStation(station)", template_source)
         self.assertIn("function isWeatherStation(station)", template_source)
         self.assertIn("function updateDerivedSummaries(stations)", template_source)
         self.assertIn('filter === "stationary"', template_source)
@@ -244,6 +288,12 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("normalizeEntityClass(station)", template_source)
         self.assertIn("updateFilterCardState()", template_source)
         self.assertIn("classList.toggle(\"is-active\", active)", template_source)
+
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn("grid-template-columns: repeat(6, 3.85rem);", stylesheet_source)
+        self.assertIn(".stations-filter-card::after", stylesheet_source)
+        self.assertIn("content: attr(data-tooltip);", stylesheet_source)
+        self.assertIn(".stations-filter-card:hover::after", stylesheet_source)
 
     def test_stations_page_supports_table_sorting(self) -> None:
         template_source = Path("app/templates/stations.html").read_text(encoding="utf-8")

@@ -1,11 +1,12 @@
 import contextlib
+from datetime import datetime, timedelta, timezone
 import os
 import tempfile
 import unittest
 from pathlib import Path
 
 from app.db import execute, fetch_one, init_db
-from app.services.content import dashboard_home_data, update_station_settings
+from app.services.content import dashboard_home_data, dashboard_traffic_summary, update_station_settings
 
 
 @contextlib.contextmanager
@@ -80,6 +81,38 @@ def station_payload(interface_id: int) -> dict[str, str]:
 
 
 class DashboardHomeTests(unittest.TestCase):
+    def test_dashboard_kpis_use_last_24_hours_only(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+            recent_at = (now_utc - timedelta(hours=2)).isoformat()
+            old_at = (now_utc - timedelta(hours=25)).isoformat()
+            for source_kind, line, created_at in (
+                ("rf", "SP5ABC-1>APRS:!5212.00N/02057.00E-Test", recent_at),
+                ("rf", "SP5OLD-1>APRS:!5212.00N/02057.00E-Old", old_at),
+                ("aprsis", "SP5NET-1>APRS:!5212.00N/02057.00E-Net", recent_at),
+            ):
+                execute(
+                    """
+                    INSERT INTO traffic_frames(
+                        source, source_kind, interface_id, direction, band, format,
+                        line, port, command, length, hex, created_at
+                    )
+                    VALUES ('test', ?, NULL, 'RX', '2m', 'TNC2', ?, NULL, NULL, ?, NULL, ?)
+                    """,
+                    (source_kind, line, len(line), created_at),
+                )
+
+            traffic = dashboard_traffic_summary(
+                heard_snapshots=[
+                    {"last_heard_rf_at": recent_at},
+                    {"last_heard_rf_at": old_at},
+                ]
+            )
+
+            self.assertEqual(traffic["window_hours"], 24)
+            self.assertEqual(traffic["decoded_aprs"], 1)
+            self.assertEqual(traffic["heard_stations"], 1)
+
     def test_dashboard_exposes_activity_chart_series(self) -> None:
         with temporary_database():
             interface_id = insert_modem(name="Chart TNC", enabled=1, tx_blocked=0)
@@ -97,6 +130,21 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertEqual(len(series.get("rx") or []), len(labels))
             self.assertEqual(len(series.get("tx") or []), len(labels))
             self.assertEqual(sum(series.get("total") or []), int((chart.get("totals") or {}).get("total", 0)))
+
+    def test_dashboard_uses_initial_activity_range_kpis(self) -> None:
+        with temporary_database():
+            view = dashboard_home_data(
+                dashboard_activity={
+                    "kpis": {
+                        "heard_stations": 17,
+                        "aprs_frames": 1234,
+                    }
+                }
+            )
+            stats = {item["label"]: item for item in view["stats"]}
+
+            self.assertEqual(stats["Heard stations"]["value"], "17")
+            self.assertEqual(stats["APRS frames"]["value"], "1234")
 
     def test_dashboard_exposes_compact_station_readiness_lists(self) -> None:
         with temporary_database():
@@ -129,6 +177,37 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertEqual(services["iGate enabled"], "Disabled")
             service_names = [entry["name"] for entry in checks["Enabled services"].get("entries") or []]
             self.assertLess(service_names.index("Digi routine"), service_names.index("iGate enabled"))
+            runtime_entries = {entry["name"]: entry for entry in checks["Runtime readiness"].get("entries") or []}
+            self.assertEqual(runtime_entries["TX queue"]["status_key"], "Idle")
+            self.assertEqual(runtime_entries["TX queue"]["status_params"], {})
+
+    def test_dashboard_template_uses_visual_first_pack(self) -> None:
+        template = Path("app/templates/dashboard.html").read_text(encoding="utf-8")
+        stylesheet = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
+        self.assertIn("dashboard-v2-radio-visual", template)
+        self.assertIn("dashboard-v2-link-statuses", template)
+        self.assertIn("dashboard-v2-kpi-icon", template)
+        self.assertIn("dashboard-v2-kpi-meta", template)
+        self.assertIn("dashboard-kpi-heard-stations", template)
+        self.assertIn("dashboard-kpi-aprs-frames", template)
+        self.assertIn("rawPayload?.kpis?.heard_stations", template)
+        self.assertIn('`${rangePrefix}: ${rangeLabel}`', template)
+        self.assertIn("dashboard-v2-band-meter", template)
+        self.assertIn('aria-current="true"', template)
+        self.assertNotIn("dashboard_home.band_updated_at", template)
+        self.assertNotIn("Current estimate for", template)
+        self.assertNotIn("dashboard-v2-band-meter-current", template)
+        self.assertIn("dashboard-v2-event-marker", template)
+        self.assertIn("Open detailed statistics", template)
+        self.assertIn("point: { radius: 0", template)
+        self.assertNotIn("dashboard_home.hero.title", template)
+        self.assertNotIn('{{ t("Last RF activity") }}: {{ t(station.last_rf) }}', template)
+        self.assertNotIn("last_rf=", template)
+        self.assertIn(".dashboard-v2-station-panel::before", stylesheet)
+        self.assertIn("min-height: 7.6rem", stylesheet)
+        self.assertIn(".dashboard-v2-band-meter .is-current", stylesheet)
+        self.assertIn(".dashboard-v2-event-item:not(:last-child)", stylesheet)
 
     def test_dashboard_does_not_expose_traffic_monitor_check(self) -> None:
         with temporary_database():

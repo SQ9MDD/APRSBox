@@ -1,10 +1,5 @@
 {% extends "base.html" %}
 
-{% block extra_head %}
-<link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
-<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
-{% endblock %}
-
 {% block content %}
 <section class="panel map-panel">
     <div class="panel-body">
@@ -16,6 +11,7 @@
             data-station-source-key="{{ map_station_source_key }}"
             data-default-zoom="{{ map_config.default_zoom }}"
             data-stations-endpoint="{{ map_stations_endpoint }}"
+            data-alert-areas-endpoint="{{ map_alert_areas_endpoint }}"
             data-station-details-endpoint="{{ map_station_details_endpoint }}"
             data-mobile-tracks-endpoint="{{ map_mobile_tracks_endpoint }}"
             data-map-tile-events-endpoint="{{ map_tile_events_endpoint }}"
@@ -26,6 +22,7 @@
             data-tile-min-zoom="{{ map_config.tile_min_zoom }}"
             data-tile-max-zoom="{{ map_config.tile_max_zoom }}"
             data-tile-subdomains="{{ map_config.tile_subdomains }}"
+            data-coverage-fill-opacity="{{ map_config.coverage_fill_opacity }}"
             data-static-root="{{ request.scope.root_path }}/static/"
             data-root-path="{{ request.scope.root_path }}"
             data-i18n-aprs-client="{{ t('APRS client') }}"
@@ -52,6 +49,16 @@
             data-i18n-hide-tracks="{{ t('Hide tracks') }}"
             data-i18n-show-coverage="{{ t('Show coverage') }}"
             data-i18n-hide-coverage="{{ t('Hide coverage') }}"
+            data-i18n-show-alarm-list="{{ t('Show alarm list') }}"
+            data-i18n-hide-alarm-list="{{ t('Hide alarm list') }}"
+            data-i18n-active-alarms="{{ t('Active alarms') }}"
+            data-i18n-no-active-map-alarms="{{ t('No active alarms with map areas.') }}"
+            data-i18n-visible-on-map="{{ t('Visible on map') }}"
+            data-i18n-no-map-area="{{ t('No map area available') }}"
+            data-i18n-area-count="{{ t('Area count') }}"
+            data-i18n-expires-at="{{ t('Expires at') }}"
+            data-i18n-details="{{ t('Details') }}"
+            data-i18n-severity-level="{{ t('Severity level') }}"
             data-i18n-show-latest-overlay="{{ t('Show latest packet widget') }}"
             data-i18n-hide-latest-overlay="{{ t('Hide latest packet widget') }}"
             data-i18n-show-ruler="{{ t('Show ruler') }}"
@@ -60,6 +67,8 @@
             data-i18n-tile-provider-recovered="{{ t('Tile provider recovered') }}"
             data-i18n-show="{{ t('Show') }}"
             data-i18n-hide="{{ t('Hide') }}"
+            data-i18n-emergency-frame-received="{{ t('Emergency frame received') }}"
+            data-i18n-active-emergency="{{ t('Active emergency') }}"
         >
             <div class="map-toolbar" role="toolbar" aria-label="{{ t('Map controls') }}">
                 <div class="map-toolbar-actions">
@@ -89,6 +98,17 @@
                         title="{{ t('Hide coverage') }}"
                     >
                         <img id="map-toggle-coverage-icon" src="{{ request.scope.root_path }}/static/icons/map-marker-radius.svg" alt="">
+                    </button>
+                    <button
+                        type="button"
+                        class="button button-secondary button-icon"
+                        id="map-toggle-alarm-areas"
+                        aria-label="{{ t('Show alarm list') }}"
+                        title="{{ t('Show alarm list') }}"
+                        aria-expanded="false"
+                        aria-controls="map-alerts-overlay"
+                    >
+                        <img id="map-toggle-alarm-areas-icon" src="{{ request.scope.root_path }}/static/icons/alarm-light-outline.svg" alt="">
                     </button>
                     <button
                         type="button"
@@ -138,68 +158,32 @@
             </div>
             <div id="map-stage" class="map-stage">
                 <div id="map-canvas" class="map-canvas" aria-label="{{ t('Map viewer') }}"></div>
+                <aside
+                    id="map-alerts-overlay"
+                    class="map-alerts-overlay"
+                    aria-labelledby="map-alerts-overlay-title"
+                    hidden
+                >
+                    <div class="map-alerts-overlay-header">
+                        <h2 id="map-alerts-overlay-title">{{ t("Active alarms") }}</h2>
+                        <button
+                            type="button"
+                            class="map-alerts-overlay-close"
+                            id="map-alerts-overlay-close"
+                            aria-label="{{ t('Close') }}"
+                            title="{{ t('Close') }}"
+                        >
+                            <img src="{{ request.scope.root_path }}/static/icons/close.svg" alt="">
+                        </button>
+                    </div>
+                    <div id="map-alerts-overlay-list" class="map-alerts-overlay-list" aria-live="polite">
+                        <p class="map-alerts-overlay-empty">{{ t("No active alarms with map areas.") }}</p>
+                    </div>
+                    <div class="map-alerts-overlay-bottom-gap" aria-hidden="true"></div>
+                </aside>
                 <div id="map-overlay-stack" class="map-overlay-stack">
                     <aside id="map-latest-overlay" class="map-latest-overlay" aria-live="polite"></aside>
                     <aside id="map-scroller-overlay" class="map-scroller-overlay" aria-live="polite"></aside>
-                </div>
-            </div>
-            <div id="aprs-emergency-modal" class="aprs-emergency-modal" hidden>
-                <div class="aprs-emergency-backdrop"></div>
-                <div
-                    class="aprs-emergency-dialog"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="aprs-emergency-title"
-                    tabindex="-1"
-                >
-                    <header class="aprs-emergency-header">
-                        <div class="aprs-emergency-header-copy">
-                            <div class="aprs-emergency-title-row">
-                                <span class="aprs-emergency-icon" aria-hidden="true">
-                                    <img src="{{ request.scope.root_path }}/static/icons/car-emergency.svg" alt="">
-                                </span>
-                                <div class="aprs-emergency-title-stack">
-                                    <div class="aprs-emergency-title" id="aprs-emergency-title">EMERGENCY FRAME RECEIVED</div>
-                                    <div class="aprs-emergency-callsign" id="aprs-emergency-callsign">-</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="aprs-emergency-status-badge" id="aprs-emergency-status">ACTIVE EMERGENCY</div>
-                    </header>
-                    <div class="aprs-emergency-body">
-                        <div class="aprs-emergency-newer" id="aprs-emergency-newer" hidden>Newer emergency received</div>
-                        <dl class="aprs-emergency-grid">
-                            <div class="aprs-emergency-row">
-                                <dt>UTC timestamp</dt>
-                                <dd id="aprs-emergency-timestamp">-</dd>
-                            </div>
-                            <div class="aprs-emergency-row">
-                                <dt>Source interface</dt>
-                                <dd id="aprs-emergency-source">-</dd>
-                            </div>
-                            <div class="aprs-emergency-row">
-                                <dt>Path</dt>
-                                <dd id="aprs-emergency-path">-</dd>
-                            </div>
-                            <div class="aprs-emergency-row">
-                                <dt>Comment / summary</dt>
-                                <dd id="aprs-emergency-summary">-</dd>
-                            </div>
-                        </dl>
-                        <div class="aprs-emergency-map-wrap">
-                            <div id="aprs-emergency-map" class="aprs-emergency-map"></div>
-                            <div id="aprs-emergency-no-position" class="aprs-emergency-no-position" hidden>No position available in this frame</div>
-                        </div>
-                        <div class="aprs-emergency-raw-block">
-                            <div class="aprs-emergency-raw-label">Raw APRS frame</div>
-                            <pre id="aprs-emergency-raw" class="aprs-emergency-raw"></pre>
-                        </div>
-                    </div>
-                    <footer class="aprs-emergency-actions">
-                        <button type="button" class="button button-secondary" id="aprs-emergency-copy">Copy frame</button>
-                        <button type="button" class="button button-secondary" id="aprs-emergency-open-map" disabled>Open on map</button>
-                        <button type="button" class="button" id="aprs-emergency-close">Acknowledge / Close</button>
-                    </footer>
                 </div>
             </div>
         </div>
@@ -208,9 +192,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
-<script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}"></script>
-<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}"></script>
-<script src="{{ request.scope.root_path }}/static/js/map-emergency-modal.js?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}-alerts-global-2"></script>
+<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-deferred-alerts-1"></script>
 {% endblock %}

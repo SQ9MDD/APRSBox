@@ -25,6 +25,8 @@ Pakiet zawsze idzie od góry do dołu. Gdy którykolwiek blok go odrzuci, kolejn
 3. Dodaj tylko te bloki, które są potrzebne dla danej ścieżki.
 4. Zapisz regułę i sprawdź log wykonania.
 
+Źródło i cel APRS-IS pojawiają się tylko wtedy, gdy w zakładce `Interfejsy` istnieje zdefiniowany interfejs APRSIS. Jego przełącznik `Włącz połączenie APRS-IS` musi być aktywny, aby flow mogły rzeczywiście odbierać lub wysyłać dane.
+
 ## Bloki źródłowe
 
 - [Odbiornik RF](packet_routing_flow_receiver_rf.pl.md)

@@ -10,18 +10,22 @@ from app.datetime_utils import format_display_datetime
 from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
 from app.ui_palette import normalize_ui_palette
 from app.services.content import get_aprs_symbol_icon_fallback_path, get_aprs_symbol_set
+from app.services.alerts import attention_alert_count
+from app.services.band_condition import is_band_condition_enabled
+from app.services.map_service import get_map_page_config
 from app.services.messages import get_unread_inbox_count
 
 
 PRIMARY_NAV = [
     {"key": "dashboard", "label": "Dashboard", "href": "/dashboard", "roles": ("admin", "operator", "viewer"), "icon": "view-dashboard-outline.svg"},
-    {"key": "stations", "label": "Stations", "href": "/stations", "roles": ("admin", "operator", "viewer"), "icon": "account-multiple.svg"},
     {"key": "map", "label": "Map", "href": "/map", "roles": ("admin", "operator", "viewer"), "icon": "map-outline.svg"},
-    {"key": "modems", "label": "Interfaces", "href": "/settings/modems", "roles": ("admin", "operator", "viewer"), "icon": "radio-handheld.svg"},
+    {"key": "stations", "label": "Stations", "href": "/stations", "roles": ("admin", "operator", "viewer"), "icon": "account-multiple.svg"},
     {"key": "traffic", "label": "Traffic Monitor", "href": "/traffic", "roles": ("admin", "operator", "viewer"), "icon": "radio-tower.svg"},
+    {"key": "alerts", "label": "Alerts", "href": "/alerts", "roles": ("admin", "operator", "viewer"), "icon": "alarm-light-outline.svg"},
     {"key": "band-condition", "label": "Band Condition", "href": "/band-condition", "roles": ("admin", "operator", "viewer"), "icon": "chart-line.svg"},
     {"key": "statistics", "label": "Statistics", "href": "/statistics", "roles": ("admin", "operator", "viewer"), "icon": "chart-bar-stacked.svg"},
     {"key": "nav-separator-primary", "separator": True, "roles": ("admin", "operator"), "visible_roles": ("viewer",)},
+    {"key": "modems", "label": "Interfaces", "href": "/settings/modems", "roles": ("admin", "operator", "viewer"), "icon": "radio-handheld.svg"},
     {"key": "station", "label": "My Station", "href": "/station", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "antenna.svg"},
     {"key": "wx", "label": "WX", "href": "/wx", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "weather-partly-snowy.svg"},
     {"key": "messages", "label": "Messages", "href": "/messages", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "message-reply-text-outline.svg"},
@@ -29,7 +33,6 @@ PRIMARY_NAV = [
     {"key": "objects", "label": "Objects / Items", "href": "/objects", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "crosshairs.svg"},
     {"key": "bulletins", "label": "Bulletins", "href": "/bulletins", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "message-text-outline.svg"},
     {"key": "digi-flows", "label": "Packet Routing", "href": "/digi-flows", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "source-branch-check.svg"},
-    {"key": "igate", "label": "iGATE settings", "href": "/igate", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "lan-connect.svg"},
     {"key": "nav-separator-secondary", "separator": True, "roles": ("admin", "operator"), "visible_roles": ("viewer",)},
     {"key": "logs", "label": "Logs", "href": "/logs", "roles": ("admin", "operator"), "visible_roles": ("viewer",), "icon": "book-open-variant.svg"},
     {"key": "users", "label": "Users / Roles", "href": "/admin/users", "roles": ("admin",), "visible_roles": ("viewer",), "icon": "account-cog.svg"},
@@ -81,9 +84,18 @@ def build_template_context(
     current_aprs_symbol_set = get_aprs_symbol_set()
     aprs_symbol_icon_fallback = get_aprs_symbol_icon_fallback_path()
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
+    current_alert_count = attention_alert_count() if current_user else 0
+    band_condition_enabled = is_band_condition_enabled() if current_user else False
+    alert_modal_map_config = (
+        get_map_page_config(root_path=request.scope.get("root_path", ""))
+        if current_user
+        else {}
+    )
     navigation: list[dict[str, Any]] = []
     for item in PRIMARY_NAV:
         visible_roles = tuple(item.get("visible_roles") or ())
+        if item["key"] == "band-condition" and not band_condition_enabled:
+            continue
         if current_user and (current_user.role in item["roles"] or current_user.role in visible_roles):
             translated_item = dict(item)
             translated_item["disabled"] = current_user.role not in item["roles"]
@@ -94,6 +106,9 @@ def build_template_context(
                     translated_item["unread_count"] = unread_inbox_count
                     if unread_inbox_count > 0:
                         translated_item["icon"] = "message-alert-outline.svg"
+                elif item["key"] == "alerts" and not translated_item["disabled"]:
+                    translated_item["attention_count"] = current_alert_count
+                    translated_item["has_attention"] = current_alert_count > 0
             navigation.append(translated_item)
 
     return {
@@ -114,5 +129,6 @@ def build_template_context(
         "current_ui_palette": current_ui_palette,
         "current_aprs_symbol_set": current_aprs_symbol_set,
         "aprs_symbol_icon_fallback": aprs_symbol_icon_fallback,
+        "alert_modal_map_config": alert_modal_map_config,
         **extra,
     }

@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 from app.db import fetch_all, fetch_one, get_connection, get_app_setting, log_event, set_app_setting, utc_now
 from app.i18n import get_app_language, get_translator
+from app.services.alarm_groups import is_configured_aprs_alarm_group
 from app.services.content import get_station_settings, get_visible_station_snapshots
 from app.services.wx import get_wx_config
 
@@ -422,6 +423,8 @@ def queue_aprs_message_notification(
     message_number: str | None = None,
     timestamp: str | None = None,
 ) -> None:
+    if is_configured_aprs_alarm_group(destination):
+        return
     settings = get_notification_settings()
     if not settings["messages_enabled"]:
         return
@@ -587,6 +590,11 @@ def _send_notification_event(event: dict[str, Any]) -> None:
     if not isinstance(event, dict):
         return
     event_type = str(event.get("event_type") or "").strip()
+    event_data = event.get("data")
+    if event_type == "aprs_message" and is_configured_aprs_alarm_group(
+        event_data.get("destination") if isinstance(event_data, dict) else None
+    ):
+        return
     settings = get_notification_settings()
     if event_type == "aprs_message" and not settings["messages_enabled"]:
         return

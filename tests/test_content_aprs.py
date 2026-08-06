@@ -189,6 +189,10 @@ class AprsContentParsingTests(unittest.TestCase):
         self.assertEqual(aprs_data.get("packet_type_code"), "mic_e")
         self.assertEqual(aprs_data.get("mice_message"), "EMERGENCY")
         self.assertEqual(aprs_data.get("emergency_source"), "mic-e")
+        self.assertEqual(
+            aprs_data.get("emergency_comment"),
+            "144.800MHz op. Rysiek&",
+        )
         self.assertTrue(bool(aprs_data.get("emergency")))
 
     def test_parse_tnc2_frame_decodes_mic_e_details_for_known_identifier(self) -> None:

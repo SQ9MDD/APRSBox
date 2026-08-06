@@ -452,6 +452,9 @@
     function applySnapshot(snapshot) {
         lastSnapshotPayload = snapshot;
         window.__APRSBOX_TRAFFIC_SNAPSHOT__ = snapshot;
+        window.dispatchEvent(new window.CustomEvent(trafficSnapshotEventName, {
+            detail: snapshot,
+        }));
         root.dispatchEvent(new window.CustomEvent(trafficSnapshotEventName, {
             detail: snapshot,
         }));
@@ -509,6 +512,7 @@
         refreshFromLastSnapshot();
     });
 
+    window.__APRSBOX_TRAFFIC_STREAM_MANAGED__ = true;
     connectTrafficStream();
 
     window.addEventListener("beforeunload", function () {

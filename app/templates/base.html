@@ -33,7 +33,11 @@
         window.APRSBOX_APRS_SYMBOL_SET = {{ current_aprs_symbol_set|tojson }};
         document.documentElement.setAttribute("data-aprs-symbol-set", window.APRSBOX_APRS_SYMBOL_SET || "legacy");
     </script>
-    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/style.css?v={{ app_version }}-sidebar-beacon-2-aprsis-interface-3-alert-detail-map-2-own-alerts-1-sidebar-count-1">
+    {% if current_user %}
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
+    <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}-map-alert-panel-8">
+    {% endif %}
     {% block extra_head %}{% endblock %}
 </head>
 <body class="app-shell{% if body_class %} {{ body_class }}{% endif %}">
@@ -50,9 +54,12 @@
             >
         </div>
         <div class="sidebar-user-panel">
-            <div class="sidebar-user-meta">
-                <span class="role-badge">{{ current_user.username }}</span>
-                <span class="sidebar-role-icon" title="{{ current_user.role }}" aria-label="{{ current_user.role }}">
+            <div class="sidebar-user-identity">
+                <span
+                    class="sidebar-role-icon"
+                    title="{{ current_user.role }}"
+                    aria-label="{{ current_user.role }}"
+                >
                     {% if current_user.role == "admin" %}
                     <img src="{{ request.scope.root_path }}/static/icons/shield-crown-outline.svg" alt="">
                     {% elif current_user.role == "operator" %}
@@ -61,34 +68,46 @@
                     <img src="{{ request.scope.root_path }}/static/icons/eye-circle-outline.svg" alt="">
                     {% endif %}
                 </span>
+                <span class="sidebar-username" title="{{ current_user.username }}">
+                    {{ current_user.username }}
+                </span>
             </div>
-            <div class="sidebar-user-actions">
-                <button
-                    type="button"
-                    class="sidebar-action-button"
-                    id="theme-toggle"
-                    aria-label="{{ t('Switch theme') }}"
-                    title="{{ t('Switch theme') }}"
+            {% if current_user.role in ["admin", "operator"] %}
+            <button
+                type="button"
+                class="sidebar-action-button"
+                id="sidebar-send-beacon"
+                aria-label="{{ t('Send beacon') }}"
+                title="{{ t('Send beacon') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/satellite-uplink.svg" alt="">
+            </button>
+            {% endif %}
+            <button
+                type="button"
+                class="sidebar-action-button"
+                id="theme-toggle"
+                aria-label="{{ t('Switch theme') }}"
+                title="{{ t('Switch theme') }}"
+            >
+                <img
+                    id="theme-toggle-icon"
+                    src="{{ request.scope.root_path }}/static/icons/theme-light-dark.svg"
+                    data-day-icon="{{ request.scope.root_path }}/static/icons/white-balance-sunny.svg"
+                    data-night-icon="{{ request.scope.root_path }}/static/icons/weather-night.svg"
+                    alt=""
                 >
-                    <img
-                        id="theme-toggle-icon"
-                        src="{{ request.scope.root_path }}/static/icons/theme-light-dark.svg"
-                        data-day-icon="{{ request.scope.root_path }}/static/icons/white-balance-sunny.svg"
-                        data-night-icon="{{ request.scope.root_path }}/static/icons/weather-night.svg"
-                        alt=""
-                    >
+            </button>
+            <form action="{{ request.scope.root_path }}/logout" method="post" class="sidebar-logout-form">
+                <button
+                    type="submit"
+                    class="sidebar-action-button sidebar-logout"
+                    aria-label="{{ t('Logout') }}"
+                    title="{{ t('Logout') }}"
+                >
+                    <img src="{{ request.scope.root_path }}/static/icons/logout-variant.svg" alt="">
                 </button>
-                <form action="{{ request.scope.root_path }}/logout" method="post" class="sidebar-logout-form">
-                    <button
-                        type="submit"
-                        class="sidebar-action-button sidebar-logout"
-                        aria-label="{{ t('Logout') }}"
-                        title="{{ t('Logout') }}"
-                    >
-                        <img src="{{ request.scope.root_path }}/static/icons/logout-variant.svg" alt="">
-                    </button>
-                </form>
-            </div>
+            </form>
         </div>
         <div class="sidebar-utc-clock" id="sidebar-utc-clock" role="button" tabindex="0">
             <div class="sidebar-utc-clock-value">
@@ -116,7 +135,7 @@
             {% else %}
             <a
                 href="{{ request.scope.root_path }}{{ item.href }}"
-                class="nav-link {% if active_nav == item.key %}active{% endif %}{% if item.key == 'messages' and item.has_unread %} nav-link-unread{% endif %}"
+                class="nav-link {% if active_nav == item.key %}active{% endif %}{% if (item.key == 'messages' and item.has_unread) or item.has_attention %} nav-link-unread{% endif %}"
                 data-nav-key="{{ item.key }}"
                 aria-label="{{ item.label }}"
                 title="{{ item.label }}"
@@ -128,6 +147,9 @@
             >
                 <img class="nav-icon" src="{{ request.scope.root_path }}/static/icons/{{ item.icon }}" alt="">
                 <span class="nav-label">{{ item.label }}</span>
+                {% if item.attention_count %}
+                <span class="nav-count-badge" aria-label="{{ item.attention_count }}">{{ item.attention_count }}</span>
+                {% endif %}
             </a>
             {% endif %}
             {% endfor %}
@@ -163,6 +185,12 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+    {% if current_user %}
+    {% include "partials/emergency_modal.html" %}
+    {% endif %}
+    {% if current_user and current_user.role in ["admin", "operator"] %}
+    {% include "partials/sidebar_beacon_modal.html" %}
+    {% endif %}
     <script>
         (() => {
             const labels = {
@@ -375,6 +403,15 @@
             syncSidebarState();
         })();
     </script>
+    {% if current_user %}
+    <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
+    {% endif %}
     {% block extra_scripts %}{% endblock %}
+    {% if current_user %}
+    <script src="{{ request.scope.root_path }}/static/js/map-emergency-modal.js?v={{ app_version }}-alerts-global-7"></script>
+    {% endif %}
+    {% if current_user and current_user.role in ["admin", "operator"] %}
+    <script src="{{ request.scope.root_path }}/static/js/sidebar-beacon.js?v={{ app_version }}-1"></script>
+    {% endif %}
 </body>
 </html>

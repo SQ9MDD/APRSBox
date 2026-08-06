@@ -1,12 +1,11 @@
 (function () {
-    const root = document.getElementById("map-root");
+    const root = document.getElementById("aprs-emergency-root");
     const modal = document.getElementById("aprs-emergency-modal");
     if (!root || !modal) {
         return;
     }
 
     const eventName = "aprsbox:traffic-snapshot";
-    const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
     const dialog = modal.querySelector(".aprs-emergency-dialog");
     const title = document.getElementById("aprs-emergency-title");
     const callsign = document.getElementById("aprs-emergency-callsign");
@@ -22,6 +21,15 @@
     const closeButton = document.getElementById("aprs-emergency-close");
     const copyButton = document.getElementById("aprs-emergency-copy");
     const openMapButton = document.getElementById("aprs-emergency-open-map");
+    const openAlertLink = document.getElementById("aprs-emergency-open-alert");
+    const rootPath = String(root.dataset.rootPath || "");
+    const streamEndpoint = String(root.dataset.trafficStreamEndpoint || "").trim();
+    const emergencyFrameReceivedText = String(root.dataset.i18nEmergencyFrameReceived || "Emergency frame received");
+    const activeEmergencyText = String(root.dataset.i18nActiveEmergency || "Active emergency");
+    const aprsAlertReceivedText = String(root.dataset.i18nAprsAlertReceived || "APRS alert received");
+    const activeAprsAlertText = String(root.dataset.i18nActiveAprsAlert || "Active APRS alert");
+    const alertMutedText = String(root.dataset.i18nAlertMuted || "Alert muted");
+    const handledFramesStorageKey = "aprsbox-emergency-frames-shown";
 
     const mapTileUrl = String(root.dataset.tileUrl || "").trim();
     const mapTileAttribution = String(root.dataset.tileAttribution || "").trim();
@@ -39,13 +47,18 @@
     let miniMapMarker = null;
     let newEmergencyTimer = null;
     let currentEmergencyFrame = null;
+    let eventSource = null;
+    let audioPriming = false;
+    let pendingAlarmPlayback = false;
     const emergencyAlarmSrc = `${String(root.dataset.staticRoot || "/static/")}audio/aprs-audio-alert.mp3`;
-    const emergencyAlarmAudio = new Audio(emergencyAlarmSrc);
+    const emergencyAlarmAudio = document.getElementById("aprs-emergency-audio") || new Audio(emergencyAlarmSrc);
     emergencyAlarmAudio.preload = "auto";
     emergencyAlarmAudio.playsInline = true;
     emergencyAlarmAudio.loop = true;
-    emergencyAlarmAudio.volume = 1;
-    emergencyAlarmAudio.load();
+    emergencyAlarmAudio.volume = 0;
+    if (!emergencyAlarmAudio.getAttribute("src")) {
+        emergencyAlarmAudio.src = emergencyAlarmSrc;
+    }
 
     function textOrDash(value) {
         const text = String(value ?? "").trim();
@@ -53,6 +66,9 @@
     }
 
     function parseCoordinate(value) {
+        if (value === null || value === undefined || String(value).trim() === "") {
+            return null;
+        }
         const number = Number(value);
         return Number.isFinite(number) ? number : null;
     }
@@ -69,31 +85,82 @@
         return date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
     }
 
+    function popupFrameData(frame) {
+        if (!frame || typeof frame !== "object") {
+            return {};
+        }
+        return frame.alert_popup_data || frame.emergency_data || {};
+    }
+
     function emergencySignature(frame) {
-        const emergencyData = frame && typeof frame === "object" ? (frame.emergency_data || {}) : {};
+        if (
+            frame
+            && frame.alert_popup_kind === "alarm_group"
+            && frame.alert_id
+        ) {
+            return `alarm-group|${frame.alert_id}`;
+        }
+        const emergencyData = popupFrameData(frame);
         return [
+            frame.alert_id || "",
             emergencyData.timestamp_utc || frame.timestamp || "",
             emergencyData.raw_frame || frame.line || "",
-            emergencyData.callsign || frame.display_callsign || frame.source || "",
         ].join("|");
     }
 
     function emergencyFrameSortValue(frame) {
-        const emergencyData = frame && typeof frame === "object" ? (frame.emergency_data || {}) : {};
+        const emergencyData = popupFrameData(frame);
         const rawTimestamp = String(emergencyData.timestamp_utc || frame.timestamp || "").trim();
         const parsedTimestamp = Date.parse(rawTimestamp);
         return Number.isFinite(parsedTimestamp) ? parsedTimestamp : -Infinity;
+    }
+
+    function readHandledFrameSignatures() {
+        try {
+            const parsed = JSON.parse(window.sessionStorage.getItem(handledFramesStorageKey) || "[]");
+            if (!Array.isArray(parsed)) {
+                return new Set();
+            }
+            return new Set(parsed.map((value) => String(value || "")).filter(Boolean));
+        } catch (_error) {
+            return new Set();
+        }
+    }
+
+    function isFrameHandled(frame) {
+        const signature = emergencySignature(frame);
+        return Boolean(signature) && readHandledFrameSignatures().has(signature);
+    }
+
+    function markFrameHandled(frame) {
+        const signature = emergencySignature(frame);
+        if (!signature) {
+            return;
+        }
+        const handledSignatures = readHandledFrameSignatures();
+        handledSignatures.add(signature);
+        try {
+            window.sessionStorage.setItem(
+                handledFramesStorageKey,
+                JSON.stringify(Array.from(handledSignatures).slice(-200))
+            );
+        } catch (_error) {
+        }
     }
 
     function selectNewestEmergencyFrame(frames) {
         if (!Array.isArray(frames) || frames.length === 0) {
             return null;
         }
-        const newestFrame = frames[0];
-        if (!newestFrame || !newestFrame.emergency) {
-            return null;
-        }
-        return newestFrame;
+        const candidates = frames.filter((frame) =>
+            frame
+            && (frame.alert_popup || frame.emergency)
+            && frame.alert_should_notify
+            && !frame.alert_muted
+            && !isFrameHandled(frame)
+        );
+        candidates.sort((left, right) => emergencyFrameSortValue(right) - emergencyFrameSortValue(left));
+        return candidates[0] || null;
     }
 
     function destroyMiniMap() {
@@ -172,40 +239,101 @@
         miniMap.invalidateSize();
     }
 
-    function primeEmergencyAlarmAudio() {
+    function warmEmergencyAlarmAudio() {
         try {
+            emergencyAlarmAudio.volume = 0;
             emergencyAlarmAudio.muted = true;
-            const primePromise = emergencyAlarmAudio.play();
-            if (primePromise && typeof primePromise.then === "function") {
-                primePromise.then(() => {
-                    emergencyAlarmAudio.pause();
-                    emergencyAlarmAudio.currentTime = 0;
-                    emergencyAlarmAudio.muted = false;
-                }).catch(() => {
-                    emergencyAlarmAudio.muted = false;
+            const warmPromise = emergencyAlarmAudio.play();
+            if (warmPromise && typeof warmPromise.catch === "function") {
+                warmPromise.catch(() => {
+                    emergencyAlarmAudio.volume = 0;
+                    emergencyAlarmAudio.muted = true;
                 });
-                return;
             }
         } catch (_error) {
         }
-        emergencyAlarmAudio.muted = false;
     }
 
-    function playOpenBeep() {
+    function unlockEmergencyAlarmAudio() {
+        if (audioPriming) {
+            return;
+        }
+        audioPriming = true;
         try {
             emergencyAlarmAudio.pause();
             emergencyAlarmAudio.currentTime = 0;
+            emergencyAlarmAudio.volume = 0;
+            emergencyAlarmAudio.muted = false;
+            const unlockPromise = emergencyAlarmAudio.play();
+            if (unlockPromise && typeof unlockPromise.then === "function") {
+                unlockPromise.then(() => {
+                    audioPriming = false;
+                    if (pendingAlarmPlayback && isVisible) {
+                        pendingAlarmPlayback = false;
+                        playOpenBeep();
+                    }
+                }).catch(() => {
+                    emergencyAlarmAudio.volume = 0;
+                    emergencyAlarmAudio.muted = true;
+                    audioPriming = false;
+                });
+                return;
+            }
+            audioPriming = false;
+            if (pendingAlarmPlayback && isVisible) {
+                pendingAlarmPlayback = false;
+                playOpenBeep();
+            }
+            return;
+        } catch (_error) {
+            audioPriming = false;
+        }
+        emergencyAlarmAudio.volume = 0;
+        emergencyAlarmAudio.muted = true;
+    }
+
+    function playOpenBeep() {
+        if (audioPriming) {
+            pendingAlarmPlayback = true;
+            return;
+        }
+        try {
+            emergencyAlarmAudio.currentTime = 0;
+            emergencyAlarmAudio.volume = 1;
+            emergencyAlarmAudio.muted = false;
             const playPromise = emergencyAlarmAudio.play();
             if (playPromise && typeof playPromise.catch === "function") {
-                playPromise.catch(() => {});
+                playPromise.then(() => {
+                    pendingAlarmPlayback = false;
+                }).catch(() => {
+                    pendingAlarmPlayback = true;
+                });
             }
         } catch (_error) {
+            pendingAlarmPlayback = true;
         }
         try {
             if (navigator.vibrate) {
                 navigator.vibrate([150, 60, 150, 60, 300]);
             }
         } catch (_error) {
+        }
+    }
+
+    function stopAlarmSound({ keepChannelWarm = true } = {}) {
+        pendingAlarmPlayback = false;
+        emergencyAlarmAudio.volume = 0;
+        emergencyAlarmAudio.muted = true;
+        try {
+            emergencyAlarmAudio.currentTime = 0;
+        } catch (_error) {
+        }
+        if (!keepChannelWarm) {
+            emergencyAlarmAudio.pause();
+            return;
+        }
+        if (keepChannelWarm && emergencyAlarmAudio.paused) {
+            warmEmergencyAlarmAudio();
         }
     }
 
@@ -271,8 +399,7 @@
 
     function hideModal() {
         isVisible = false;
-        emergencyAlarmAudio.pause();
-        emergencyAlarmAudio.currentTime = 0;
+        stopAlarmSound();
         modal.hidden = true;
         document.body.classList.remove("modal-open");
         dismissedSignature = currentSignature;
@@ -280,8 +407,11 @@
         destroyMiniMap();
     }
 
-    function showModal() {
+    function showModal({ playSound = false } = {}) {
         if (isVisible) {
+            if (playSound) {
+                playOpenBeep();
+            }
             return;
         }
         isVisible = true;
@@ -290,11 +420,14 @@
         if (dialog instanceof HTMLElement) {
             dialog.focus();
         }
-        playOpenBeep();
+        if (playSound) {
+            playOpenBeep();
+        }
     }
 
-    function renderEmergencyFrame(frame) {
-        const emergencyData = frame && typeof frame === "object" ? (frame.emergency_data || {}) : {};
+    function renderEmergencyFrame(frame, { playSound = false, remember = false } = {}) {
+        const emergencyData = popupFrameData(frame);
+        const isAlarmGroupPopup = frame && frame.alert_popup_kind === "alarm_group";
         const call = textOrDash(emergencyData.callsign || frame.display_callsign || frame.source);
         const sourceLabel = textOrDash(
             [emergencyData.source_interface || frame.source, emergencyData.source_port].filter(Boolean).join(" · ")
@@ -309,13 +442,17 @@
         currentEmergencyFrame = frame;
         currentSignature = emergencySignature(frame);
         if (title) {
-            title.textContent = "EMERGENCY FRAME RECEIVED";
+            title.textContent = isAlarmGroupPopup
+                ? aprsAlertReceivedText
+                : emergencyFrameReceivedText;
         }
         if (callsign) {
             callsign.textContent = call;
         }
         if (status) {
-            status.textContent = "ACTIVE EMERGENCY";
+            status.textContent = frame.alert_muted
+                ? alertMutedText
+                : (isAlarmGroupPopup ? activeAprsAlertText : activeEmergencyText);
         }
         if (timestamp) {
             timestamp.textContent = timestampLabel;
@@ -332,10 +469,25 @@
         if (raw) {
             raw.textContent = rawFrame;
         }
+        if (openAlertLink) {
+            if (frame.alert_href) {
+                openAlertLink.href = `${rootPath}${frame.alert_href}`;
+                openAlertLink.hidden = false;
+            } else {
+                openAlertLink.hidden = true;
+            }
+        }
 
         renderMiniMap(latitude, longitude);
         updateOpenMapButton(latitude, longitude);
-        showModal();
+        if (remember) {
+            markFrameHandled(frame);
+        }
+        const shouldPlaySound = Boolean(playSound && !frame.alert_muted);
+        if (!shouldPlaySound) {
+            stopAlarmSound({ keepChannelWarm: !frame.alert_muted });
+        }
+        showModal({ playSound: shouldPlaySound });
     }
 
     function handleSnapshot(snapshot) {
@@ -347,7 +499,6 @@
 
         const nextSignature = emergencySignature(emergencyFrame);
         if (nextSignature && nextSignature === currentSignature && isVisible) {
-            playOpenBeep();
             return;
         }
         if (!isVisible && nextSignature && nextSignature === dismissedSignature) {
@@ -358,7 +509,7 @@
             showNewerNotice();
         }
         dismissedSignature = "";
-        renderEmergencyFrame(emergencyFrame);
+        renderEmergencyFrame(emergencyFrame, { playSound: true, remember: true });
     }
 
     if (closeButton) {
@@ -371,7 +522,7 @@
 
     if (openMapButton) {
         openMapButton.addEventListener("click", function () {
-            const emergencyData = currentEmergencyFrame && currentEmergencyFrame.emergency_data ? currentEmergencyFrame.emergency_data : {};
+            const emergencyData = popupFrameData(currentEmergencyFrame);
             const latitude = parseCoordinate(emergencyData.latitude);
             const longitude = parseCoordinate(emergencyData.longitude);
             if (Number.isFinite(latitude) && Number.isFinite(longitude) && typeof window.aprsboxCenterMapOn === "function") {
@@ -383,27 +534,52 @@
     const audioUnlockEvents = ["pointerdown", "keydown", "touchstart"];
     for (const eventType of audioUnlockEvents) {
         window.addEventListener(eventType, function () {
-            primeEmergencyAlarmAudio();
+            unlockEmergencyAlarmAudio();
         }, { once: true, passive: true });
     }
 
-    root.addEventListener(eventName, function (event) {
+    window.addEventListener(eventName, function (event) {
         handleSnapshot(event && event.detail ? event.detail : {});
     });
 
-    root.addEventListener(mapViewRefreshEventName, function () {
-        if (isVisible && currentEmergencyFrame) {
-            playOpenBeep();
+    window.aprsboxOpenEmergencyModal = function (frame) {
+        if (
+            !frame
+            || typeof frame !== "object"
+            || (!frame.emergency && !frame.alert_popup)
+        ) {
+            return false;
         }
-    });
+        dismissedSignature = "";
+        renderEmergencyFrame(frame, { playSound: !frame.alert_muted, remember: false });
+        return true;
+    };
 
-    window.addEventListener("visibilitychange", function () {
-        if (!document.hidden && isVisible && currentEmergencyFrame) {
-            playOpenBeep();
-        }
-    });
+    warmEmergencyAlarmAudio();
 
     if (window.__APRSBOX_TRAFFIC_SNAPSHOT__) {
         handleSnapshot(window.__APRSBOX_TRAFFIC_SNAPSHOT__);
     }
+
+    if (!window.__APRSBOX_TRAFFIC_STREAM_MANAGED__ && streamEndpoint) {
+        window.__APRSBOX_TRAFFIC_STREAM_MANAGED__ = true;
+        eventSource = new window.EventSource(streamEndpoint);
+        eventSource.onmessage = function (event) {
+            try {
+                const snapshot = JSON.parse(event.data || "{}");
+                window.__APRSBOX_TRAFFIC_SNAPSHOT__ = snapshot;
+                window.dispatchEvent(new window.CustomEvent(eventName, {
+                    detail: snapshot,
+                }));
+            } catch (_error) {
+            }
+        };
+    }
+
+    window.addEventListener("beforeunload", function () {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+    }, { once: true });
 })();

@@ -25,6 +25,8 @@ Los paquetes siempre avanzan de arriba hacia abajo. Si cualquier bloque rechaza 
 3. Añade solo los bloques necesarios para ese camino.
 4. Guarda la regla y revisa el registro de ejecución.
 
+El origen y el destino APRS-IS solo aparecen cuando hay una interfaz APRSIS definida en `Interfaces`. Su interruptor `Activar conexión APRS-IS` debe estar activo para que los flows puedan recibir o transmitir datos.
+
 ## Bloques de fuente
 
 - [Receptor RF](packet_routing_flow_receiver_rf.es.md)

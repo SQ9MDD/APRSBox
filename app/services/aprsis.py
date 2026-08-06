@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from app import get_version
 from app.db import fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
+from app.services.alarm_groups import build_effective_aprsis_filter
 from app.services.traffic_source import DEFAULT_APRSIS_FILTER, normalize_aprsis_filter
 
 DEFAULT_APRSIS_SERVER = "rotate.aprs2.net"
@@ -172,17 +173,27 @@ def _normalize_aprsis_passcode_override(value: Any) -> str:
     return passcode
 
 
-def save_aprsis_config(payload: dict[str, Any]) -> dict[str, Any]:
+def normalize_aprsis_config_payload(payload: dict[str, Any]) -> dict[str, Any]:
     server = _normalize_aprsis_server(payload.get("server"))
     port = _normalize_aprsis_port(payload.get("port"))
     login_override = _normalize_aprsis_login_override(payload.get("login"))
     passcode_override = _normalize_aprsis_passcode_override(payload.get("passcode"))
+    return {
+        "server": server,
+        "port": port,
+        "login": login_override,
+        "passcode": passcode_override,
+    }
 
-    set_app_setting("aprsis_server", server)
-    set_app_setting("aprsis_port", str(port))
-    set_app_setting("aprsis_login", login_override)
-    set_app_setting("aprsis_passcode", passcode_override)
-    log_event("INFO", "config", "Updated APRS-IS Packet Routing settings")
+
+def save_aprsis_config(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = normalize_aprsis_config_payload(payload)
+
+    set_app_setting("aprsis_server", str(normalized["server"]))
+    set_app_setting("aprsis_port", str(normalized["port"]))
+    set_app_setting("aprsis_login", str(normalized["login"]))
+    set_app_setting("aprsis_passcode", str(normalized["passcode"]))
+    log_event("INFO", "config", "Updated APRS-IS interface connection settings")
     return get_aprsis_config()
 
 
@@ -226,22 +237,19 @@ def get_enabled_aprsis_interface() -> dict[str, Any] | None:
     except ValueError as exc:
         result["filter"] = DEFAULT_APRSIS_FILTER
         log_event("WARNING", "aprsis", f"Invalid stored APRS-IS filter; using {DEFAULT_APRSIS_FILTER}: {exc}")
+    result["effective_filter"] = build_effective_aprsis_filter(result["filter"])
     return result
 
 
 def aprsis_connection_required() -> bool:
-    return get_enabled_aprsis_interface() is not None or has_enabled_aprsis_target_flow()
+    return get_enabled_aprsis_interface() is not None
 
 
 def build_aprsis_login_line(*, login: str, passcode: str, server_filter: str = "") -> str:
     line = f"user {login} pass {passcode or '-1'} vers APRSBox {get_version()}"
-    normalized_filter = (
-        normalize_aprsis_filter(server_filter)
-        if str(server_filter or "").strip()
-        else ""
-    )
-    if normalized_filter:
-        line += f" filter {normalized_filter}"
+    effective_filter = build_effective_aprsis_filter(server_filter)
+    if effective_filter:
+        line += f" filter {effective_filter}"
     return line
 
 
@@ -1161,9 +1169,7 @@ class AprsisClientService:
         while not self._stop_event.is_set():
             rx_interface = get_enabled_aprsis_interface()
             self._desired_rx_interface = dict(rx_interface) if rx_interface is not None else None
-            aprsis_rx_enabled = rx_interface is not None
-            aprsis_tx_required = has_enabled_aprsis_target_flow()
-            desired_active = aprsis_rx_enabled or aprsis_tx_required
+            desired_active = rx_interface is not None
             config = get_aprsis_config()
             config_key = (
                 str(config["server"]),
@@ -1174,7 +1180,7 @@ class AprsisClientService:
 
             if not desired_active:
                 await self._disconnect(
-                    reason="APRS-IS inactive because neither RX nor TX requires a connection.",
+                    reason="APRS-IS inactive because the interface connection is disabled.",
                     status=APRSIS_STATUS_INACTIVE,
                 )
                 await self._sleep(self._poll_interval)
@@ -1371,7 +1377,10 @@ class AprsisClientService:
             interface_id = int(rx_interface["id"])
         except (KeyError, TypeError, ValueError):
             return None
-        return interface_id, str(rx_interface.get("filter") or "").strip()
+        effective_filter = str(rx_interface.get("effective_filter") or "").strip()
+        if not effective_filter:
+            effective_filter = build_effective_aprsis_filter(rx_interface.get("filter"))
+        return interface_id, effective_filter
 
     def _connection_needs_reconnect(
         self,
@@ -1385,12 +1394,11 @@ class AprsisClientService:
             return False
         if self._connected_config != config_key:
             return True
-        # Disabling APRS-IS RX must not tear down a session still needed for
-        # TX.  The reader stops dispatching immediately via
-        # _desired_rx_interface, while a later reconnect (if needed for any
-        # other reason) logs in without the RX filter.
+        # A connection without an enabled APRSIS interface is no longer
+        # desired. The run loop normally disconnects before reaching this
+        # check, but returning True keeps the decision safe for direct callers.
         if desired_rx_signature is None:
-            return False
+            return True
         return self._connected_rx_signature != desired_rx_signature
 
     def _process_server_line(self, raw_line: bytes | str) -> bool:

@@ -8,11 +8,13 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.db import init_db, log_event
 from app.services.aprsis import AprsisClientService
+from app.services.alerts import expire_aprs_alerts
 from app.services.beacon_scheduler import BeaconSchedulerService
 from app.services.bulletin_scheduler import BulletinSchedulerService
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
 from app.services.maintenance_scheduler import MaintenanceSchedulerService
 from app.services.object_scheduler import ObjectSchedulerService
+from app.services.own_alert_scheduler import OwnAlertSchedulerService
 from app.services.outbound_runtime import OutboundService
 from app.services.radio_activity import RadioActivityAggregatorService
 from app.services.traffic import TrafficMonitorService
@@ -22,6 +24,7 @@ from app.services.wx_scheduler import WxSchedulerService
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     init_db()
+    expire_aprs_alerts()
     aprsis_uplink = AprsisClientService()
     digi_flow_runtime = DigiFlowRuntimeService(aprsis_client=aprsis_uplink)
     aprsis_uplink.set_frame_consumer(digi_flow_runtime.enqueue_aprsis_tnc2_frame)
@@ -31,6 +34,7 @@ async def lifespan(app_instance: FastAPI):
     bulletin_scheduler = BulletinSchedulerService()
     maintenance_scheduler = MaintenanceSchedulerService(poll_interval=30.0)
     object_scheduler = ObjectSchedulerService()
+    own_alert_scheduler = OwnAlertSchedulerService()
     wx_scheduler = WxSchedulerService()
     radio_activity_aggregator = RadioActivityAggregatorService()
     app_instance.state.aprsis_uplink = aprsis_uplink
@@ -41,6 +45,7 @@ async def lifespan(app_instance: FastAPI):
     app_instance.state.bulletin_scheduler = bulletin_scheduler
     app_instance.state.maintenance_scheduler = maintenance_scheduler
     app_instance.state.object_scheduler = object_scheduler
+    app_instance.state.own_alert_scheduler = own_alert_scheduler
     app_instance.state.wx_scheduler = wx_scheduler
     app_instance.state.radio_activity_aggregator = radio_activity_aggregator
     await aprsis_uplink.start()
@@ -51,6 +56,7 @@ async def lifespan(app_instance: FastAPI):
     await bulletin_scheduler.start()
     await maintenance_scheduler.start()
     await object_scheduler.start()
+    await own_alert_scheduler.start()
     await wx_scheduler.start()
     await radio_activity_aggregator.start()
     log_event("INFO", "system", "APRSBox core started")
@@ -60,6 +66,7 @@ async def lifespan(app_instance: FastAPI):
         await radio_activity_aggregator.stop()
         await wx_scheduler.stop()
         await object_scheduler.stop()
+        await own_alert_scheduler.stop()
         await maintenance_scheduler.stop()
         await bulletin_scheduler.stop()
         await beacon_scheduler.stop()

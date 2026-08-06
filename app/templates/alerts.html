@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+{% endblock %}
+
+{% block content %}
+{% if flash %}
+<section class="panel">
+    <div class="panel-body">
+        <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
+    </div>
+</section>
+{% endif %}
+
+{% if can_manage_alerts %}
+<div class="own-alert-modal" id="own-alert-cancel-modal" data-root-path="{{ request.scope.root_path }}" hidden>
+    <div class="own-alert-modal-backdrop" data-close-own-alert-cancel></div>
+    <div class="own-alert-modal-dialog own-alert-modal-dialog-small" role="dialog" aria-modal="true" aria-labelledby="own-alert-cancel-title" tabindex="-1">
+        <h2 id="own-alert-cancel-title">{{ t("Cancel alarm") }}</h2>
+        <p>{{ t("This stops repeats and sends a protocol CANCEL with the same logical ID.") }}</p>
+        <p><strong id="own-alert-cancel-label"></strong></p>
+        <form method="post" id="own-alert-cancel-form">
+            <div class="own-alert-modal-actions">
+                <button type="button" class="button button-secondary" data-close-own-alert-cancel>{{ t("Back") }}</button>
+                <button type="submit" class="button button-secondary button-danger">{{ t("Cancel alarm") }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<section class="panel alerts-page-panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Alerts") }}</h2>
+            </div>
+            <button
+                class="help-icon-button page-help-button"
+                type="button"
+                data-help-page="application/alerts"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
+        </div>
+
+        <div class="table-wrap">
+            <table class="data-table compact-table alerts-table">
+                <colgroup>
+                    {% if can_manage_alerts %}
+                    <col class="alerts-col-select">
+                    {% endif %}
+                    <col class="alerts-col-source">
+                    <col class="alerts-col-category">
+                    <col class="alerts-col-areas">
+                    <col class="alerts-col-relevant-time">
+                    <col class="alerts-col-actions">
+                </colgroup>
+                <thead>
+                    <tr>
+                        {% if can_manage_alerts %}
+                        <th class="alerts-select-column">
+                            <input type="checkbox" id="alerts-select-all" aria-label="{{ t('Select all') }}">
+                        </th>
+                        {% endif %}
+                        <th>{{ t("Source") }}</th>
+                        <th>{{ t("Category") }}</th>
+                        <th>{{ t("Area count") }}</th>
+                        <th>{{ t("Expiry / last received") }}</th>
+                        <th>{{ t("Actions") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alert in alerts_page["items"] %}
+                    {% if not alert.destination_group %}
+                    {% set category_class = "alert-category-badge-emergency" %}
+                    {% elif alert.severity_level == 1 %}
+                    {% set category_class = "alert-category-badge-level-1" %}
+                    {% elif alert.severity_level == 2 %}
+                    {% set category_class = "alert-category-badge-level-2" %}
+                    {% elif alert.severity_level == 3 %}
+                    {% set category_class = "alert-category-badge-level-3" %}
+                    {% else %}
+                    {% set category_class = "alert-category-badge-unknown" %}
+                    {% endif %}
+                    <tr
+                        class="clickable-row{% if alert.muted %} alert-row-muted{% endif %}"
+                        data-alert-id="{{ alert.id }}"
+                        data-alert-detail-href="{{ request.scope.root_path }}{{ alert.detail_href }}"
+                        tabindex="0"
+                        aria-label="{{ t('Alert') }} #{{ alert.id }} {{ alert.source_callsign }}"
+                    >
+                        {% if can_manage_alerts %}
+                        <td class="alerts-select-cell" onclick="event.stopPropagation();">
+                            <input
+                                type="checkbox"
+                                name="alert_ids"
+                                value="{{ alert.id }}"
+                                form="bulk-delete-form"
+                                aria-label="{{ t('Select') }} #{{ alert.id }}"
+                                data-alert-select
+                            >
+                        </td>
+                        {% endif %}
+                        <td>
+                            <strong>
+                                <a class="station-link" href="{{ request.scope.root_path }}{{ alert.related_entity.detail_href }}">
+                                    {{ alert.source_callsign }}
+                                </a>
+                            </strong>
+                        </td>
+                        <td>
+                            <div class="alert-list-category">
+                                <span class="frame-type-badge alert-category-badge {{ category_class }}">
+                                    <img
+                                        class="alert-category-event-icon"
+                                        src="{{ request.scope.root_path }}/static/icons/{{ alert.event_icon }}"
+                                        alt=""
+                                        aria-hidden="true"
+                                    >
+                                    {{ alert.event_code or alert.alert_type }}
+                                </span>
+                                {% if alert.muted %}
+                                <span
+                                    class="alert-list-muted-indicator"
+                                    role="img"
+                                    title="{% if alert.muted_indefinitely %}{{ t('Alert muted indefinitely') }}{% else %}{{ t('Muted until') }} {{ alert.muted_until_label }}{% endif %}"
+                                    aria-label="{% if alert.muted_indefinitely %}{{ t('Alert muted indefinitely') }}{% else %}{{ t('Muted until') }} {{ alert.muted_until_label }}{% endif %}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/volume-off.svg" alt="">
+                                </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            {% if alert.destination_group %}
+                            {{ alert.area_count }}
+                            {% else %}
+                            <span class="muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="alert-list-time">
+                            {% if alert.destination_group and alert.expires_at_label %}
+                            <time title="{{ t('Expires at') }}">{{ alert.expires_at_label }}</time>
+                            {% elif alert.destination_group %}
+                            <span class="muted">-</span>
+                            {% else %}
+                            <time title="{{ t('Last received') }}">{{ alert.last_seen_label }}</time>
+                            {% endif %}
+                        </td>
+                        <td class="alerts-actions-cell" onclick="event.stopPropagation();">
+                            <div class="table-actions">
+                                <button
+                                    type="button"
+                                    class="table-icon-button"
+                                    title="{{ t('Details') }}"
+                                    aria-label="{{ t('Details') }} #{{ alert.id }}"
+                                    aria-haspopup="dialog"
+                                    data-open-alert-modal="{{ alert.id }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/eye-outline.svg" alt="">
+                                </button>
+                                <a
+                                    href="{{ request.scope.root_path }}{{ alert.detail_href }}"
+                                    class="table-icon-button"
+                                    title="{{ t('Alert details') }} #{{ alert.id }}"
+                                    aria-label="{{ t('Alert details') }} #{{ alert.id }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/file-document-alert-outline.svg" alt="">
+                                </a>
+                                {% if can_manage_alerts and alert.can_cancel_protocol %}
+                                <button
+                                    type="button"
+                                    class="table-icon-button table-icon-button-danger"
+                                    title="{{ t('Cancel alarm') }}"
+                                    aria-label="{{ t('Cancel alarm') }} {{ alert.logical_alert_id }}"
+                                    data-alert-protocol-cancel="{{ alert.id }}"
+                                    data-alert-protocol-label="{{ alert.protocol_cancel_label }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/alarm-off.svg" alt="">
+                                </button>
+                                {% elif can_manage_alerts %}
+                                <button
+                                    type="button"
+                                    class="table-icon-button"
+                                    title="{{ t('Cancel alarm') }}"
+                                    aria-label="{{ t('Cancel alarm') }} #{{ alert.id }}"
+                                    data-alert-protocol-cancel-placeholder
+                                    disabled
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/alarm-off.svg" alt="">
+                                </button>
+                                {% endif %}
+                                {% if can_manage_alerts %}
+                                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/mute" class="table-action-form alert-mute-form">
+                                    <input type="hidden" name="return_to" value="/alerts?page={{ alerts_page.page }}">
+                                    <select name="duration" aria-label="{{ t('Mute') }} #{{ alert.id }}">
+                                        <option value="1h">{{ t("Mute for 1 hour") }}</option>
+                                        <option value="4h">{{ t("Mute for 4 hours") }}</option>
+                                        <option value="24h">{{ t("Mute for 24 hours") }}</option>
+                                        <option value="indefinite">{{ t("Mute indefinitely") }}</option>
+                                    </select>
+                                    <button type="submit" class="table-icon-button" title="{{ t('Mute') }}" aria-label="{{ t('Mute') }} #{{ alert.id }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/volume-off.svg" alt="">
+                                    </button>
+                                </form>
+                                {% if alert.muted %}
+                                <form method="post" action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/unmute" class="table-action-form">
+                                    <input type="hidden" name="return_to" value="/alerts?page={{ alerts_page.page }}">
+                                    <button type="submit" class="table-icon-button" title="{{ t('Cancel mute') }}" aria-label="{{ t('Cancel mute') }} #{{ alert.id }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/volume-high.svg" alt="">
+                                    </button>
+                                </form>
+                                {% else %}
+                                <button
+                                    type="button"
+                                    class="table-icon-button"
+                                    title="{{ t('Cancel mute') }}"
+                                    aria-label="{{ t('Cancel mute') }} #{{ alert.id }}"
+                                    data-alert-unmute-placeholder
+                                    disabled
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/volume-high.svg" alt="">
+                                </button>
+                                {% endif %}
+                                <form
+                                    method="post"
+                                    action="{{ request.scope.root_path }}/alerts/{{ alert.id }}/delete"
+                                    class="table-action-form"
+                                    onsubmit="return confirm({{ t('Delete this alert? Original frames remain in Traffic Monitor.')|tojson|forceescape }});"
+                                >
+                                    <button type="submit" class="table-icon-button table-icon-button-danger" title="{{ t('Delete') }}" aria-label="{{ t('Delete') }} #{{ alert.id }}">
+                                        <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{{ 6 if can_manage_alerts else 5 }}" class="muted">{{ t("No alerts received yet.") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="alerts-pagination" aria-label="{{ t('Pagination') }}">
+            <div class="alerts-pagination-summary">
+                <span class="muted">
+                    {{ tf("Page {page} of {pages}", {"page": alerts_page.page, "pages": alerts_page.total_pages}) }}
+                    · {{ tf("{count} alerts", {"count": alerts_page.total}) }}
+                </span>
+                {% if can_manage_alerts and alerts_page["items"] %}
+                <form
+                    id="bulk-delete-form"
+                    method="post"
+                    action="{{ request.scope.root_path }}/alerts/delete-selected"
+                    onsubmit="return confirm({{ t('Delete selected alerts? Original frames remain in Traffic Monitor.')|tojson|forceescape }});"
+                >
+                    <button type="submit" class="button button-secondary button-danger">{{ t("Delete selected") }}</button>
+                </form>
+                {% endif %}
+                {% if can_manage_alerts %}
+                <a class="button" href="{{ request.scope.root_path }}/alerts/send">{{ t("Send alarm") }}</a>
+                {% endif %}
+            </div>
+            <div class="form-actions">
+                {% if alerts_page.has_previous %}
+                <a class="button button-secondary" href="{{ request.scope.root_path }}/alerts?page={{ alerts_page.previous_page }}">{{ t("Previous") }}</a>
+                {% endif %}
+                {% if alerts_page.has_next %}
+                <a class="button button-secondary" href="{{ request.scope.root_path }}/alerts?page={{ alerts_page.next_page }}">{{ t("Next") }}</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+{% include "partials/help_modal.html" %}
+
+<script type="application/json" id="alerts-modal-data">
+[
+{% for alert in alerts_page["items"] %}
+    {{ alert.modal_frame|tojson }}{% if not loop.last %},{% endif %}
+{% endfor %}
+]
+</script>
+<script>
+(() => {
+    const modalDataNode = document.getElementById("alerts-modal-data");
+    let modalFrames = new Map();
+    try {
+        const frames = JSON.parse(modalDataNode?.textContent || "[]");
+        modalFrames = new Map(frames.map((frame) => [String(frame.alert_id || ""), frame]));
+    } catch (_) {
+        modalFrames = new Map();
+    }
+
+    const openAlertModal = (alertId, fallbackHref) => {
+        const frame = modalFrames.get(String(alertId || ""));
+        if (
+            frame
+            && typeof window.aprsboxOpenEmergencyModal === "function"
+            && window.aprsboxOpenEmergencyModal(frame)
+        ) {
+            return;
+        }
+        if (fallbackHref) {
+            window.location.href = fallbackHref;
+        }
+    };
+
+    const rows = Array.from(document.querySelectorAll(".alerts-table tr[data-alert-id]"));
+    rows.forEach((row) => {
+        row.addEventListener("click", (event) => {
+            if (event.target.closest("a, button, input, select, form")) return;
+            openAlertModal(row.dataset.alertId, row.dataset.alertDetailHref);
+        });
+        row.addEventListener("keydown", (event) => {
+            if (event.target !== row || (event.key !== "Enter" && event.key !== " ")) return;
+            event.preventDefault();
+            openAlertModal(row.dataset.alertId, row.dataset.alertDetailHref);
+        });
+    });
+
+    document.querySelectorAll("[data-open-alert-modal]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const alertId = button.dataset.openAlertModal || "";
+            const row = button.closest("tr[data-alert-id]");
+            openAlertModal(alertId, row?.dataset.alertDetailHref || "");
+        });
+    });
+
+    const selectAll = document.getElementById("alerts-select-all");
+    const selections = Array.from(document.querySelectorAll("[data-alert-select]"));
+    if (selectAll) {
+        selectAll.addEventListener("change", () => {
+            selections.forEach((checkbox) => {
+                checkbox.checked = selectAll.checked;
+            });
+        });
+    }
+})();
+</script>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/js/alerts-compose.js?v={{ app_version }}"></script>
+{% endblock %}

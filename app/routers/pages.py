@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import quote
@@ -32,6 +33,7 @@ from app.db import (
     log_event,
     mark_system_job_error,
     mark_system_job_running,
+    mark_unreported_system_job_error,
     normalize_event_log_level,
     normalize_traffic_retention_minutes,
     reset_runtime_operational_data,
@@ -80,6 +82,24 @@ from app.services.content import (
 )
 from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, INTERNAL_TX_INTERFACE_OPTION_VALUE
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, mask_mqtt_url
+from app.services.alarm_groups import (
+    APRS_ALARM_LEVEL_THRESHOLDS,
+    build_automatic_aprsis_alarm_filter,
+    get_aprs_alarm_enabled,
+    get_aprs_alarm_category_thresholds,
+    get_aprs_alarm_groups,
+    get_global_alarm_level_threshold,
+    get_map_alarm_level_threshold,
+    normalize_aprs_alarm_category_thresholds,
+    normalize_aprs_alarm_groups,
+    normalize_aprs_alarm_level_threshold,
+    save_aprs_alarm_category_thresholds,
+    save_aprs_alarm_enabled,
+    save_aprs_alarm_groups,
+    save_global_alarm_level_threshold,
+    save_map_alarm_level_threshold,
+)
+from app.services.alert_event_icons import ALERT_EVENT_CATEGORIES
 from app.services.digi_flows import (
     FILTER_STEP_TYPES,
     SOURCE_STEP_TYPES,
@@ -103,9 +123,11 @@ from app.services.messages import (
     create_or_update_conversation,
     delete_conversation as delete_message_conversation,
     get_messages_page_data as get_live_messages_page_data,
+    get_effective_message_target_groups,
     get_unread_inbox_count,
     mark_conversation_read,
     queue_outgoing_message,
+    reconcile_effective_message_group_conversations,
     retry_failed_message,
     save_message_settings,
     update_conversation_path,
@@ -119,6 +141,24 @@ from app.services.notifications import (
     safe_save_notification_transport,
     test_notification_transport,
 )
+from app.services.alerts import (
+    delete_alert,
+    delete_alerts,
+    get_alert,
+    get_traffic_frame,
+    list_alerts,
+    mute_alert,
+    unmute_alert,
+)
+from app.services.own_alerts import (
+    cancel_station_aprs_alert,
+    cancel_own_alert,
+    create_own_alert,
+    get_own_alert_area_options,
+    get_own_alert_compose_context,
+    preview_own_alert,
+    send_own_alert_now,
+)
 from app.services.band_condition import (
     get_band_condition_history,
     get_band_condition_page_data,
@@ -129,6 +169,8 @@ from app.services.aprsis import (
     get_aprsis_config,
     get_aprsis_diagnostics,
     get_aprsis_runtime_status,
+    normalize_aprsis_config_payload,
+    save_aprsis_config,
     safe_save_aprsis_config,
 )
 from app.services.aprs_device_identification import (
@@ -149,22 +191,28 @@ from app.services.config_backup import (
     safe_import_configuration_backup,
 )
 from app.services.map_service import (
+    COVERAGE_FILL_OPACITY_SETTING_KEY,
+    DEFAULT_COVERAGE_FILL_OPACITY_PERCENT,
     get_map_source,
     list_map_sources,
+    get_coverage_fill_opacity_percent,
+    get_map_alert_areas_payload,
     get_map_page_config,
     get_map_mobile_tracks_payload,
     get_map_station_details_payload,
     get_map_station_markers_payload,
     get_map_station_payload,
+    get_alert_detail_map_config,
     safe_move_map_source,
     safe_delete_map_source,
     safe_save_map_source,
     safe_set_default_map_source,
     get_station_detail_map_config,
     get_station_detail_track_payload,
+    normalize_coverage_fill_opacity_percent,
 )
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
-from app.services.outbound import enqueue_beacon_job, enqueue_object_job, enqueue_status_job
+from app.services.outbound import enqueue_beacon_job, enqueue_message_job, enqueue_object_job, enqueue_status_job
 from app.services.system import (
     container_system_actions_disabled_message,
     current_update_channel,
@@ -235,6 +283,24 @@ def _translate(message: object) -> str:
     return get_translator(get_app_language())(message)
 
 
+def _system_job_process_is_running(pid: object) -> bool:
+    try:
+        normalized_pid = int(pid or 0)
+    except (TypeError, ValueError):
+        return False
+    if normalized_pid <= 0:
+        return False
+    try:
+        os.kill(normalized_pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 def _container_mode_system_action_denied_response() -> JSONResponse:
     return JSONResponse(
         {"ok": False, "error": _translate(container_system_actions_disabled_message())},
@@ -265,6 +331,10 @@ def _section_template_context(
     slug: str,
     flash: str | None = None,
     edit_row: dict | None = None,
+    *,
+    flash_success: bool = False,
+    form_data: dict[str, object] | None = None,
+    initial_modem_type: str | None = None,
 ) -> dict:
     definition = SECTION_DEFINITIONS[slug]
     context = build_template_context(
@@ -277,7 +347,36 @@ def _section_template_context(
         flash=flash,
         can_edit=current_user.role in definition.create_roles,
         edit_row=edit_row,
+        flash_success=flash_success,
     )
+    if slug == "modems":
+        aprsis_config = get_aprsis_config()
+        modem_form_data: dict[str, object] = dict(edit_row or {})
+        if form_data:
+            modem_form_data.update(form_data)
+        if not edit_row and not form_data and initial_modem_type:
+            modem_form_data["modem_type"] = initial_modem_type
+        modem_form_data.setdefault("modem_type", "SERIALL")
+        modem_form_data.setdefault("aprsis_server", aprsis_config["server"])
+        modem_form_data.setdefault("aprsis_port", aprsis_config["port"])
+        modem_form_data.setdefault(
+            "aprsis_login",
+            "" if aprsis_config["login_is_default"] else aprsis_config["login"],
+        )
+        modem_form_data.setdefault(
+            "aprsis_passcode",
+            "" if aprsis_config["passcode_is_default"] else aprsis_config["passcode"],
+        )
+        aprsis_runtime = get_aprsis_runtime_status()
+        context.update(
+            {
+                "modem_form_data": modem_form_data,
+                "aprsis_config": aprsis_config,
+                "aprsis_runtime": aprsis_runtime,
+                "aprsis_diagnostics": get_aprsis_diagnostics(),
+                "aprsis_runtime_badge": aprsis_runtime_badge(aprsis_runtime.get("status", "")),
+            }
+        )
     if slug in {"objects", "items"}:
         context.update(
             {
@@ -333,6 +432,15 @@ def _station_detail_context(callsign: str, unit_system: str, *, root_path: str =
 
 def _path(request: Request, suffix: str) -> str:
     return f"{request.scope.get('root_path', '')}{suffix}"
+
+
+def _aprsis_interface_settings_path() -> str:
+    aprsis_interface = fetch_one(
+        "SELECT id FROM modems WHERE UPPER(modem_type) = 'APRSIS' ORDER BY id ASC LIMIT 1"
+    )
+    if aprsis_interface is None:
+        return "/settings/modems?new_type=APRSIS"
+    return f"/settings/modems?edit={int(aprsis_interface['id'])}"
 
 
 def _safe_positive_int(value: Any) -> int:
@@ -515,30 +623,6 @@ def _digi_flow_editor_context(
         map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         symbol_table_options=station_form_options["symbol_table_options"],
         symbol_code_options=station_form_options["symbol_code_options"],
-        flash=flash,
-        flash_success=flash_success,
-    )
-
-
-def _igate_settings_page_context(
-    request: Request,
-    current_user: UserIdentity,
-    *,
-    flash: str | None = None,
-    flash_success: bool = False,
-) -> dict[str, object]:
-    aprsis_runtime = get_aprsis_runtime_status()
-    aprsis_diagnostics = get_aprsis_diagnostics()
-    return build_template_context(
-        request,
-        page_title="iGATE settings",
-        current_user=current_user,
-        active_nav="igate",
-        aprsis_config=get_aprsis_config(),
-        aprsis_runtime=aprsis_runtime,
-        aprsis_diagnostics=aprsis_diagnostics,
-        aprsis_runtime_badge=aprsis_runtime_badge(aprsis_runtime.get("status", "")),
-        can_edit=current_user.role in {"admin", "operator"},
         flash=flash,
         flash_success=flash_success,
     )
@@ -850,6 +934,7 @@ def _settings_page_context(
     event_log_min_level = _normalize_event_log_min_level(get_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY))
     event_log_debug_enabled = get_event_log_debug_enabled()
     traffic_retention_minutes = _normalize_traffic_retention_minutes_option(get_traffic_retention_minutes())
+    coverage_fill_opacity = get_coverage_fill_opacity_percent()
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
     update_channel_options = [
@@ -857,6 +942,22 @@ def _settings_page_context(
         for name in (update_channels.get("channels") or [selected_update_channel])
     ]
     update_log_snapshot = read_update_log()
+    aprs_alarm_enabled = get_aprs_alarm_enabled()
+    aprs_alarm_groups = get_aprs_alarm_groups()
+    effective_rf_message_groups = get_effective_message_target_groups(
+        alarm_groups=aprs_alarm_groups
+    )
+    automatic_aprsis_alarm_filter = build_automatic_aprsis_alarm_filter(
+        aprs_alarm_groups
+    )
+    alarm_category_thresholds = get_aprs_alarm_category_thresholds()
+    alarm_category_threshold_rows = [
+        {
+            **category,
+            **alarm_category_thresholds[str(category["key"])],
+        }
+        for category in ALERT_EVENT_CATEGORIES
+    ]
     return build_template_context(
         request,
         page_title="Settings",
@@ -894,6 +995,7 @@ def _settings_page_context(
             {"value": value, "label": _format_traffic_retention_minutes_option(value)}
             for value in TRAFFIC_RETENTION_ALLOWED_MINUTES
         ],
+        coverage_fill_opacity=coverage_fill_opacity,
         database_vacuum_blocked=database_vacuum_blocked,
         database_maintenance_snapshot=db_maintenance_snapshot,
         database_path=str(db_maintenance_snapshot.get("database_path") or ""),
@@ -925,6 +1027,12 @@ def _settings_page_context(
         update_log_content=str(update_log_snapshot.get("content") or ""),
         update_log_path=str(update_log_snapshot.get("path") or ""),
         update_log_truncated=bool(update_log_snapshot.get("truncated")),
+        aprs_alarm_groups=aprs_alarm_groups,
+        aprs_alarm_enabled=aprs_alarm_enabled,
+        alarm_level_threshold_options=APRS_ALARM_LEVEL_THRESHOLDS,
+        alarm_category_threshold_rows=alarm_category_threshold_rows,
+        effective_rf_message_groups=effective_rf_message_groups,
+        automatic_aprsis_alarm_filter=automatic_aprsis_alarm_filter,
         is_container_mode=container_mode,
         map_sources=map_sources,
         map_source_form=resolved_map_source_form,
@@ -945,13 +1053,14 @@ def dashboard(
 ) -> object:
     templates = request.app.state.templates
     dashboard_band = _dashboard_band_condition_card()
+    dashboard_activity = get_dashboard_radio_activity(range_value="24h")
     context = build_template_context(
         request,
         page_title="Dashboard",
         current_user=current_user,
         active_nav="dashboard",
         dashboard_band=dashboard_band,
-        dashboard_home=dashboard_home_data(dashboard_band),
+        dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
     )
     return templates.TemplateResponse("dashboard.html", context)
 
@@ -1114,10 +1223,27 @@ def modems_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
     edit: int | None = None,
+    new_type: str | None = None,
+    flash: str | None = None,
+    success: int = 0,
 ) -> object:
     templates = request.app.state.templates
     edit_row = get_section_row("modems", edit) if edit is not None else None
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "modems", edit_row=edit_row))
+    normalized_initial_type = str(new_type or "").strip().upper()
+    if normalized_initial_type not in {"SERIALL", "TCP", OPENWEBRX_MQTT_MODEM_TYPE, APRSIS_MODEM_TYPE}:
+        normalized_initial_type = None
+    return templates.TemplateResponse(
+        "section.html",
+        _section_template_context(
+            request,
+            current_user,
+            "modems",
+            edit_row=edit_row,
+            flash=flash,
+            flash_success=bool(success),
+            initial_modem_type=normalized_initial_type,
+        ),
+    )
 
 
 @router.post("/settings/modems")
@@ -1139,6 +1265,10 @@ def modems_create(
     expose_bind_address: str = Form("0.0.0.0"),
     expose_port: int | None = Form(8002),
     expose_whitelist: str = Form(""),
+    aprsis_server: str = Form(""),
+    aprsis_port: str = Form(""),
+    aprsis_login: str = Form(""),
+    aprsis_passcode: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
     normalized_modem_type = modem_type.strip().upper()
@@ -1171,6 +1301,34 @@ def modems_create(
         "expose_port": expose_port,
         "expose_whitelist": expose_whitelist,
     }
+    aprsis_form_data = {
+        "aprsis_server": aprsis_server,
+        "aprsis_port": aprsis_port,
+        "aprsis_login": aprsis_login,
+        "aprsis_passcode": aprsis_passcode,
+    }
+    normalized_aprsis_config: dict[str, Any] | None = None
+    if normalized_modem_type == APRSIS_MODEM_TYPE:
+        try:
+            normalized_aprsis_config = normalize_aprsis_config_payload(
+                {
+                    "server": aprsis_server,
+                    "port": aprsis_port,
+                    "login": aprsis_login,
+                    "passcode": aprsis_passcode,
+                }
+            )
+        except ValueError as exc:
+            edit_row = get_section_row("modems", record_id) if record_id is not None else None
+            context = _section_template_context(
+                request,
+                current_user,
+                "modems",
+                flash=str(exc),
+                edit_row=edit_row,
+                form_data={**payload, **aprsis_form_data},
+            )
+            return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     if record_id is None:
         if normalized_modem_type == APRSIS_MODEM_TYPE:
             existing_aprsis = fetch_one("SELECT id FROM modems WHERE UPPER(modem_type) = 'APRSIS' LIMIT 1")
@@ -1190,7 +1348,17 @@ def modems_create(
         success, error = safe_update_section_row("modems", record_id, payload)
         # Keep the form in edit mode after save; user exits via Cancel.
         edit_row = get_section_row("modems", record_id)
-    context = _section_template_context(request, current_user, "modems", flash=None if success else error, edit_row=edit_row)
+    if success and normalized_aprsis_config is not None:
+        save_aprsis_config(normalized_aprsis_config)
+    context = _section_template_context(
+        request,
+        current_user,
+        "modems",
+        flash="Interface settings updated." if success and record_id is not None else (None if success else error),
+        edit_row=edit_row,
+        flash_success=success and record_id is not None,
+        form_data=None if success else {**payload, **aprsis_form_data},
+    )
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
 
 
@@ -1320,6 +1488,19 @@ def settings_job_status_api(
     job = fetch_system_job(job_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+    should_check_reporting = (
+        str(job.get("kind") or "") in {"update-application", "restart-services"}
+        and str(job.get("status") or "") == "running"
+        and int(job.get("progress_percent") or 0) <= 1
+        and not _system_job_process_is_running(job.get("pid"))
+    )
+    if should_check_reporting and mark_unreported_system_job_error(
+        job_id,
+        message=_translate(
+            "The maintenance process stopped reporting status. Verify the installed version before trying again."
+        ),
+    ):
+        job = fetch_system_job(job_id) or job
     return JSONResponse({"ok": True, "job": job})
 
 
@@ -1504,6 +1685,7 @@ def settings_update_global(
     aprs_symbol_set: str = Form(""),
     event_log_min_level: str = Form(""),
     event_log_debug_enabled: str | None = Form(None),
+    coverage_fill_opacity: str = Form(str(DEFAULT_COVERAGE_FILL_OPACITY_PERCENT)),
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     raw_language = str(language or "").strip().lower()
@@ -1518,6 +1700,8 @@ def settings_update_global(
     raw_event_log_min_level = str(event_log_min_level or "").strip().upper()
     selected_event_log_min_level = _normalize_event_log_min_level(raw_event_log_min_level)
     selected_event_log_debug_enabled = _map_source_checkbox(event_log_debug_enabled)
+    raw_coverage_fill_opacity = str(coverage_fill_opacity or "").strip()
+    selected_coverage_fill_opacity = normalize_coverage_fill_opacity_percent(raw_coverage_fill_opacity)
     station_settings = get_station_settings()
     current_default_units = station_settings.get("default_units", "metric")
     if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != raw_language:
@@ -1535,6 +1719,11 @@ def settings_update_global(
         return JSONResponse({"ok": False, "error": _translate("Unsupported icon set selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
     if raw_event_log_min_level not in EVENT_LOG_MIN_LEVEL_OPTIONS:
         return JSONResponse({"ok": False, "error": _translate("Unsupported log level selection.")}, status_code=status.HTTP_400_BAD_REQUEST)
+    if raw_coverage_fill_opacity != str(selected_coverage_fill_opacity):
+        return JSONResponse(
+            {"ok": False, "error": _translate("Unsupported coverage fill opacity selection.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
 
     station_payload = dict(station_settings)
     station_payload["default_units"] = selected_default_units
@@ -1551,6 +1740,7 @@ def settings_update_global(
     set_app_setting(APRS_SYMBOL_SET_SETTING_KEY, selected_aprs_symbol_set)
     set_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY, selected_event_log_min_level)
     set_app_setting(EVENT_LOG_DEBUG_ENABLED_SETTING_KEY, "1" if selected_event_log_debug_enabled else "0")
+    set_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY, str(selected_coverage_fill_opacity))
     return JSONResponse(
         {
             "ok": True,
@@ -1562,6 +1752,121 @@ def settings_update_global(
             "current_aprs_symbol_set": selected_aprs_symbol_set,
             "event_log_min_level": selected_event_log_min_level,
             "event_log_debug_enabled": selected_event_log_debug_enabled,
+            "coverage_fill_opacity": selected_coverage_fill_opacity,
+            "reload": True,
+        }
+    )
+
+
+@router.post("/settings/alarm-groups")
+def settings_update_alarm_groups(
+    _: Request,
+    alarm_enabled: bool = Form(False),
+    alarm_groups: str = Form(""),
+    threshold_category: list[str] | None = Form(None),
+    alert_level_threshold: list[str] | None = Form(None),
+    map_level_threshold: list[str] | None = Form(None),
+    popup_level_threshold: list[str] | None = Form(None),
+    map_alarm_level_threshold: str | None = Form(None),
+    global_alarm_level_threshold: str | None = Form(None),
+    __: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    try:
+        normalized_groups = normalize_aprs_alarm_groups(alarm_groups)
+        selected_category_thresholds = get_aprs_alarm_category_thresholds()
+        if (
+            threshold_category is not None
+            or alert_level_threshold is not None
+            or map_level_threshold is not None
+            or popup_level_threshold is not None
+        ):
+            categories = threshold_category or []
+            alert_thresholds = alert_level_threshold or []
+            map_thresholds = map_level_threshold
+            popup_thresholds = popup_level_threshold
+            expected_categories = {
+                str(category["key"])
+                for category in ALERT_EVENT_CATEGORIES
+            }
+            if (
+                len(categories) != len(alert_thresholds)
+                or (
+                    map_thresholds is not None
+                    and len(categories) != len(map_thresholds)
+                )
+                or (
+                    popup_thresholds is not None
+                    and len(categories) != len(popup_thresholds)
+                )
+                or len(categories) != len(expected_categories)
+                or set(categories) != expected_categories
+            ):
+                raise ValueError(_translate("Invalid APRS alarm category thresholds."))
+            selected_category_thresholds = normalize_aprs_alarm_category_thresholds(
+                {
+                    category: {
+                        "alerts": alerts,
+                        "map": (
+                            map_thresholds[index]
+                            if map_thresholds is not None
+                            else selected_category_thresholds[category]["map"]
+                        ),
+                        "popup": (
+                            popup_thresholds[index]
+                            if popup_thresholds is not None
+                            else selected_category_thresholds[category]["popup"]
+                        ),
+                    }
+                    for index, (category, alerts) in enumerate(
+                        zip(categories, alert_thresholds)
+                    )
+                }
+            )
+        elif (
+            map_alarm_level_threshold is not None
+            or global_alarm_level_threshold is not None
+        ):
+            selected_map_threshold = (
+                get_map_alarm_level_threshold()
+                if map_alarm_level_threshold is None
+                else normalize_aprs_alarm_level_threshold(
+                    map_alarm_level_threshold
+                )
+            )
+            selected_global_threshold = (
+                get_global_alarm_level_threshold()
+                if global_alarm_level_threshold is None
+                else normalize_aprs_alarm_level_threshold(
+                    global_alarm_level_threshold
+                )
+            )
+            for thresholds in selected_category_thresholds.values():
+                thresholds["map"] = selected_map_threshold
+                thresholds["alerts"] = selected_global_threshold
+        saved_alarm_enabled = save_aprs_alarm_enabled(alarm_enabled)
+        saved_groups = save_aprs_alarm_groups(normalized_groups)
+        saved_category_thresholds = save_aprs_alarm_category_thresholds(
+            selected_category_thresholds
+        )
+        if map_alarm_level_threshold is not None:
+            save_map_alarm_level_threshold(selected_map_threshold)
+        if global_alarm_level_threshold is not None:
+            save_global_alarm_level_threshold(selected_global_threshold)
+        reconcile_effective_message_group_conversations(alarm_groups=saved_groups)
+    except ValueError as exc:
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(exc))},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": _translate("APRS alarm settings updated."),
+            "alarm_enabled": saved_alarm_enabled,
+            "alarm_groups": saved_groups,
+            "alarm_category_thresholds": saved_category_thresholds,
+            "map_alarm_level_threshold": get_map_alarm_level_threshold(),
+            "global_alarm_level_threshold": get_global_alarm_level_threshold(),
             "reload": True,
         }
     )
@@ -1734,27 +2039,25 @@ def servers_create(
 @router.get("/igate")
 def igate_page(
     request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
     flash: str | None = None,
     success: int = 0,
-) -> object:
-    templates = request.app.state.templates
-    return templates.TemplateResponse(
-        "igate_settings.html",
-        _igate_settings_page_context(request, current_user, flash=flash, flash_success=bool(success)),
-    )
+) -> RedirectResponse:
+    target = _aprsis_interface_settings_path()
+    if flash:
+        target += f"&flash={quote(flash)}&success={1 if success else 0}"
+    return RedirectResponse(url=_path(request, target), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/igate")
 def igate_settings_update(
     request: Request,
-    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
     server: str = Form(""),
     port: str = Form(""),
     login: str = Form(""),
     passcode: str = Form(""),
-) -> object:
-    templates = request.app.state.templates
+) -> RedirectResponse:
     success, error = safe_save_aprsis_config(
         {
             "server": server,
@@ -1763,13 +2066,12 @@ def igate_settings_update(
             "passcode": passcode,
         }
     )
-    context = _igate_settings_page_context(
-        request,
-        current_user,
-        flash="APRS-IS settings updated." if success else error,
-        flash_success=success,
+    target = _aprsis_interface_settings_path()
+    message = "APRS-IS settings updated." if success else (error or "Failed to save APRS-IS settings.")
+    return RedirectResponse(
+        url=_path(request, f"{target}&flash={quote(message)}&success={1 if success else 0}"),
+        status_code=status.HTTP_303_SEE_OTHER,
     )
-    return templates.TemplateResponse("igate_settings.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
 @router.get("/api/igate/diagnostics")
@@ -1861,11 +2163,17 @@ def digi_flows_aprsis_config_update(
     )
     if not success:
         return RedirectResponse(
-            url=_path(request, f"/igate?flash={quote(error or 'Failed to save APRS-IS settings.')}&success=0"),
+            url=_path(
+                request,
+                f"{_aprsis_interface_settings_path()}&flash={quote(error or 'Failed to save APRS-IS settings.')}&success=0",
+            ),
             status_code=status.HTTP_303_SEE_OTHER,
         )
     return RedirectResponse(
-        url=_path(request, "/igate?flash=APRS-IS%20settings%20updated.&success=1"),
+        url=_path(
+            request,
+            f"{_aprsis_interface_settings_path()}&flash=APRS-IS%20settings%20updated.&success=1",
+        ),
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
@@ -2256,10 +2564,21 @@ def bulletins_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     edit: int | None = None,
+    flash: str | None = None,
+    success: str | None = None,
 ) -> object:
     templates = request.app.state.templates
     edit_row = get_section_row("bulletins", edit) if edit is not None else None
-    return templates.TemplateResponse("section.html", _section_template_context(request, current_user, "bulletins", edit_row=edit_row))
+    context = _section_template_context(
+        request,
+        current_user,
+        "bulletins",
+        flash=flash,
+        edit_row=edit_row,
+    )
+    if success is not None:
+        context["flash_success"] = str(success).strip() not in {"0", "false", "False"}
+    return templates.TemplateResponse("section.html", context)
 
 
 @router.post("/bulletins")
@@ -2307,6 +2626,27 @@ def bulletins_create(
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
 
 
+@router.post("/settings/bulletins/{record_id}/send")
+def bulletins_send_now(
+    record_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    row = get_section_row("bulletins", record_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bulletin not found.")
+
+    station_settings = get_station_settings()
+    success, flash = enqueue_message_job(row, station_settings, trigger="manual", force_send=True)
+    return RedirectResponse(
+        url=_path(
+            request,
+            f"/bulletins?edit={record_id}&flash={quote(str(flash or '') )}&success={'1' if success else '0'}",
+        ),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
 @router.post("/settings/bulletins/{record_id}/delete")
 def bulletins_delete(
     record_id: int,
@@ -2350,6 +2690,7 @@ def map_page(
         map_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
         map_station_source_key=map_station_source_key,
         map_stations_endpoint=_path(request, "/api/map/stations-lite"),
+        map_alert_areas_endpoint=_path(request, "/api/map/alert-areas"),
         map_station_details_endpoint=_path(request, "/api/map/stations-details"),
         map_mobile_tracks_endpoint=_path(request, "/api/map/mobile-tracks"),
         map_tile_events_endpoint=_path(request, "/api/map/tile-events"),
@@ -2363,6 +2704,23 @@ def map_stations_lite(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_map_station_markers_payload())
+
+
+@router.get("/api/map/alert-areas")
+def map_alert_areas(
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> Response:
+    payload = get_map_alert_areas_payload()
+    revision = str(payload.get("revision") or "empty")
+    etag = f'"map-alert-areas-{revision}"'
+    response_headers = {
+        "Cache-Control": "private, no-cache",
+        "ETag": etag,
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=response_headers)
+    return JSONResponse(payload, headers=response_headers)
 
 
 @router.get("/api/map/stations-details")
@@ -2969,6 +3327,18 @@ def station_send_beacon(
     return templates.TemplateResponse("station.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
 
+@router.post("/station/send-beacon-now")
+def station_send_beacon_now(
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    station_settings = get_station_settings()
+    success, message = enqueue_beacon_job(station_settings)
+    return JSONResponse(
+        {"ok": success, "message": message},
+        status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+    )
+
+
 @router.post("/station/send-status")
 def station_send_status(
     request: Request,
@@ -3061,6 +3431,343 @@ def changelog_page(
         changelog_markdown=_read_changelog_markdown(),
     )
     return templates.TemplateResponse("changelog.html", context)
+
+
+def _alerts_redirect(
+    request: Request,
+    path: str,
+    message: str,
+    *,
+    success: bool = True,
+) -> RedirectResponse:
+    separator = "&" if "?" in path else "?"
+    target = (
+        f"{_path(request, path)}{separator}"
+        f"flash={quote(message, safe='')}&flash_success={1 if success else 0}"
+    )
+    return RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)
+
+
+def _alert_action_return_path(alert_id: int, return_to: str | None) -> str:
+    target = str(return_to or "").strip()
+    if target == "/alerts" or target.startswith("/alerts?"):
+        return target
+    return f"/alerts/{alert_id}"
+
+
+def _own_alert_compose_page_context() -> dict[str, Any]:
+    own_alert_compose = get_own_alert_compose_context()
+    translator = get_translator(get_app_language())
+    for group in own_alert_compose["groups"]:
+        for option in group["event_options"]:
+            option["translated_label"] = translator(option["label"])
+        for option in group["hazard_options"]:
+            option["translated_label"] = translator(option["label"])
+        for option in group["level_options"]:
+            option["translated_label"] = translator(option["label"])
+    return own_alert_compose
+
+
+@router.get("/alerts")
+def alerts_page(
+    request: Request,
+    page: int = 1,
+    flash: str | None = None,
+    flash_success: bool = True,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    templates = request.app.state.templates
+    alerts_page_data = list_alerts(page=page)
+    station = get_station_settings()
+    station_callsign = str(station.get("callsign") or "").strip().upper()
+    station_ssid = str(station.get("ssid") or "").strip()
+    if station_ssid and station_ssid != "0":
+        station_callsign = f"{station_callsign}-{station_ssid}"
+    for alert in alerts_page_data["items"]:
+        source_matches_station = bool(station_callsign) and (
+            str(alert.get("source_callsign") or "").strip().upper()
+            == station_callsign
+        )
+        alert["can_cancel_protocol"] = bool(
+            source_matches_station
+            and alert.get("destination_group")
+            and alert.get("logical_alert_id")
+            and alert.get("area_codes")
+        )
+        alert["protocol_cancel_label"] = (
+            f"{str(alert.get('logical_alert_id') or '').strip().upper()} · "
+            f"{str(alert.get('destination_group') or '').strip().upper()}"
+        ).strip(" ·")
+    context = build_template_context(
+        request,
+        page_title="Alerts",
+        current_user=current_user,
+        active_nav="alerts",
+        alerts_page=alerts_page_data,
+        flash=flash,
+        flash_success=flash_success,
+        can_manage_alerts=current_user.role in {"admin", "operator"},
+    )
+    return templates.TemplateResponse("alerts.html", context)
+
+
+@router.get("/alerts/send")
+def own_alert_send_page(
+    request: Request,
+    current_user: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> object:
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="Send alarm",
+        current_user=current_user,
+        active_nav="alerts",
+        own_alert_compose=_own_alert_compose_page_context(),
+    )
+    return templates.TemplateResponse("alert_send.html", context)
+
+
+@router.get("/api/alerts/send/areas")
+def own_alert_area_options(
+    group: str,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    try:
+        payload = get_own_alert_area_options(group)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return JSONResponse(payload)
+
+
+@router.post("/api/alerts/send/preview")
+async def own_alert_preview(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid alarm payload.")
+        return JSONResponse(preview_own_alert(payload))
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/api/alerts/send")
+async def own_alert_send(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid alarm payload.")
+        return JSONResponse({"ok": True, **create_own_alert(payload)})
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/alerts/own/{own_alert_id}/send-now")
+def own_alert_send_now_action(
+    own_alert_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    success, message = send_own_alert_now(own_alert_id)
+    return _alerts_redirect(
+        request,
+        "/alerts",
+        "Own alarm queued for transmission." if success else message,
+        success=success,
+    )
+
+
+@router.post("/alerts/own/{own_alert_id}/cancel")
+def own_alert_cancel_action(
+    own_alert_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    success, message = cancel_own_alert(own_alert_id)
+    return _alerts_redirect(
+        request,
+        "/alerts",
+        "Own alarm cancelled." if success else message,
+        success=success,
+    )
+
+
+@router.post("/alerts/{alert_id}/cancel-protocol")
+def station_alert_cancel_action(
+    alert_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    success, message = cancel_station_aprs_alert(alert_id)
+    return _alerts_redirect(
+        request,
+        "/alerts",
+        "Own alarm cancelled." if success else message,
+        success=success,
+    )
+
+
+@router.get("/alerts/{alert_id}")
+def alert_detail_page(
+    alert_id: int,
+    request: Request,
+    flash: str | None = None,
+    flash_success: bool = True,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    alert = get_alert(alert_id)
+    if alert is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    templates = request.app.state.templates
+    root_path = request.scope.get("root_path", "")
+    alert_map_config = get_alert_detail_map_config(alert, root_path=root_path)
+    if alert_map_config.get("map_mode") == "station":
+        station_settings = get_station_settings()
+        related_entity = alert.get("related_entity")
+        related_label = (
+            str(related_entity.get("label") or "")
+            if isinstance(related_entity, dict)
+            else ""
+        )
+        station_context = _station_detail_context(
+            related_label or str(alert.get("source_callsign") or ""),
+            station_settings.get("default_units", "metric"),
+            root_path=root_path,
+        )
+        if station_context is not None:
+            station_map_config = dict(station_context["station_map_config"])
+            if station_map_config.get("latitude") is None:
+                station_map_config["latitude"] = alert_map_config.get("latitude")
+            if station_map_config.get("longitude") is None:
+                station_map_config["longitude"] = alert_map_config.get("longitude")
+            station_map_config.update(
+                {
+                    "map_mode": "station",
+                    "has_position": (
+                        station_map_config.get("latitude") is not None
+                        and station_map_config.get("longitude") is not None
+                    ),
+                }
+            )
+            alert_map_config = station_map_config
+    context = build_template_context(
+        request,
+        page_title="Alert details",
+        current_user=current_user,
+        active_nav="alerts",
+        alert=alert,
+        alert_map_config=alert_map_config,
+        flash=flash,
+        flash_success=flash_success,
+        can_manage_alerts=current_user.role in {"admin", "operator"},
+    )
+    return templates.TemplateResponse("alert_detail.html", context)
+
+
+@router.post("/alerts/{alert_id}/mute")
+def alert_mute(
+    alert_id: int,
+    request: Request,
+    duration: str = Form(...),
+    return_to: str | None = Form(None),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    return_path = _alert_action_return_path(alert_id, return_to)
+    try:
+        changed = mute_alert(alert_id, duration)
+    except ValueError:
+        return _alerts_redirect(
+            request,
+            return_path,
+            "Unsupported mute duration.",
+            success=False,
+        )
+    if not changed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    return _alerts_redirect(request, return_path, "Alert muted.")
+
+
+@router.post("/alerts/{alert_id}/unmute")
+def alert_unmute(
+    alert_id: int,
+    request: Request,
+    return_to: str | None = Form(None),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    if not unmute_alert(alert_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    return _alerts_redirect(
+        request,
+        _alert_action_return_path(alert_id, return_to),
+        "Alert unmuted.",
+    )
+
+
+@router.post("/alerts/{alert_id}/delete")
+def alert_delete(
+    alert_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    if not delete_alert(alert_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    return _alerts_redirect(request, "/alerts", "Alert deleted. Original frames remain in Traffic Monitor.")
+
+
+@router.post("/alerts/delete-selected")
+async def alerts_delete_selected(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> RedirectResponse:
+    form_data = await request.form()
+    alert_ids: list[int] = []
+    for raw_id in form_data.getlist("alert_ids"):
+        try:
+            alert_ids.append(int(str(raw_id)))
+        except (TypeError, ValueError):
+            continue
+    deleted = delete_alerts(alert_ids)
+    if deleted <= 0:
+        return _alerts_redirect(request, "/alerts", "No alerts selected.", success=False)
+    return _alerts_redirect(
+        request,
+        "/alerts",
+        "Selected alerts deleted. Original frames remain in Traffic Monitor.",
+    )
+
+
+@router.get("/traffic/frames/{frame_id}")
+def traffic_frame_detail_page(
+    frame_id: int,
+    request: Request,
+    current_user: UserIdentity = Depends(get_current_user),
+) -> object:
+    frame = get_traffic_frame(frame_id)
+    if frame is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frame not found")
+    templates = request.app.state.templates
+    context = build_template_context(
+        request,
+        page_title="Frame details",
+        current_user=current_user,
+        active_nav="traffic",
+        frame=frame,
+    )
+    return templates.TemplateResponse("traffic_frame_detail.html", context)
 
 
 @router.get("/traffic")

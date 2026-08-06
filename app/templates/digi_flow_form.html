@@ -2,7 +2,7 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
-<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/map.css?v={{ app_version }}-map-alert-panel-8">
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
 {% endblock %}
 
@@ -12,7 +12,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Edit Packet Routing Flow") if flow_id else t("New Packet Routing Flow") }}</h2>
-                <p class="section-lead">{{ t("Define one source, optional filters and one target. Mandatory rules are inserted automatically for RF to RF, APRS-IS source and APRS-IS target flows.") }}</p>
             </div>
             <button
                 class="help-icon-button page-help-button"
@@ -24,7 +23,6 @@
                 <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
             </button>
         </div>
-        <div class="notice">{{ t("Source must be first and target last. RF to RF requires the RF Digipeating Path Rule; APRS-IS to RF uses four mandatory APRS-IS rules; an APRS-IS target uses the mandatory Uplink Safety Rule.") }}</div>
         {% if flash %}
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
         {% endif %}
@@ -63,17 +61,14 @@
                 <div class="digi-flow-endpoint-card">
                     <h3>{{ t("Source") }}</h3>
                     <label>
-                        <span>{{ t("Source Interface") }}</span>
-                        <select name="source_selector" id="flow-source-selector" required></select>
+                        <select name="source_selector" id="flow-source-selector" aria-label="{{ t('Source Interface') }}" required></select>
                     </label>
-                    <p class="muted small" id="flow-source-help" hidden></p>
                 </div>
 
                 <div class="digi-flow-endpoint-card">
                     <h3>{{ t("Target") }}</h3>
                     <label>
-                        <span>{{ t("Target Interface") }}</span>
-                        <select name="target_selector" id="flow-target-selector" required></select>
+                        <select name="target_selector" id="flow-target-selector" aria-label="{{ t('Target Interface') }}" required></select>
                     </label>
                 </div>
             </section>
@@ -83,7 +78,6 @@
                     <div class="panel-header">
                         <div class="panel-header-copy">
                             <h2>{{ t("Available filters and rules") }}</h2>
-                            <p class="section-lead">{{ t("Rules are mandatory and managed automatically. Click an available filter to add it before the target.") }}</p>
                         </div>
                     </div>
                     <div class="digi-step-palette" id="digi-step-palette">
@@ -112,7 +106,6 @@
                     <div class="panel-header">
                         <div class="panel-header-copy">
                             <h2>{{ t("Current flow steps") }}</h2>
-                            <p class="section-lead">{{ t("Vertical pipeline from top to bottom. Source and target cards are synchronized with the selectors above.") }}</p>
                         </div>
                     </div>
                     <input type="hidden" name="steps_json" id="digi-steps-json">
@@ -136,7 +129,6 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Routing Queue Log") }}</h2>
-                <p class="section-lead">{{ t("Each block below shows one packet running through this flow from source to final outcome. The list is limited to the latest 10 frames.") }}</p>
             </div>
             <div class="form-actions">
                 <button type="button" class="button button-secondary" id="digi-flow-executions-toggle">{{ t("Freeze") }}</button>
@@ -267,7 +259,6 @@
         const stepsChain = document.getElementById("digi-steps-chain");
         const sourceSelectorInput = document.getElementById("flow-source-selector");
         const targetSelectorInput = document.getElementById("flow-target-selector");
-        const sourceHelpNode = document.getElementById("flow-source-help");
         const sourceKindInput = document.getElementById("flow-source-kind");
         const sourceRefInput = document.getElementById("flow-source-ref-hidden");
         const targetKindInput = document.getElementById("flow-target-kind");
@@ -345,7 +336,6 @@
             release: {{ t("Release")|tojson }},
             strictGuardSummary: {{ t("Rejects TCPIP/TCPXX, NOGATE/RFONLY and invalid third-party packets")|tojson }},
             localTxFrames: {{ t("Locally generated APRSBox TX frames")|tojson }},
-            localTxSourceHelp: {{ t("Local TX includes only frames generated locally by APRSBox, such as beacons, status packets, weather, objects, items, bulletins and messages. It does not include RF-received or digipeated frames.")|tojson }},
             directPacketsOnly: {{ t("Passes only direct packets")|tojson }},
             help: {{ t("Help")|tojson }},
             LOGGED: {{ t("LOGGED")|tojson }},
@@ -1048,26 +1038,12 @@
             return Array.isArray(mapped) && mapped.length ? mapped : (endpointOptions.target || []);
         };
 
-        const updateSourceHelp = (selectedSource) => {
-            if (!sourceHelpNode) {
-                return;
-            }
-            if (selectedSource && String(selectedSource.kind || "").trim() === "receiver_local_tx") {
-                sourceHelpNode.textContent = i18n.localTxSourceHelp;
-                sourceHelpNode.hidden = false;
-                return;
-            }
-            sourceHelpNode.textContent = "";
-            sourceHelpNode.hidden = true;
-        };
-
         const syncBoundarySteps = () => {
             syncEndpointSelect(sourceSelectorInput, endpointOptions.source || [], sourceSelectorInput.value || {{ form_data.source_selector|tojson }});
             const selectedSource = selectedEndpoint(sourceSelectorInput, "source");
             const targetOptions = targetOptionsForSourceKind(selectedSource ? selectedSource.kind : "");
             syncEndpointSelect(targetSelectorInput, targetOptions, targetSelectorInput.value || {{ form_data.target_selector|tojson }});
             const selectedTarget = targetOptions.find((option) => option.value === targetSelectorInput.value) || null;
-            updateSourceHelp(selectedSource);
             if (!selectedSource || !selectedTarget) {
                 return;
             }
@@ -1109,46 +1085,12 @@
             }
         };
 
-        const appendHelpLine = (container, line) => {
-            const lineNode = document.createElement("div");
-            const text = String(line ?? "");
-            const parts = text.split(/(\*\*[^*]+\*\*)/g);
-            for (const part of parts) {
-                if (!part) continue;
-                if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
-                    const strong = document.createElement("strong");
-                    strong.textContent = part.slice(2, -2);
-                    lineNode.appendChild(strong);
-                    continue;
-                }
-                lineNode.appendChild(document.createTextNode(part));
-            }
-            container.appendChild(lineNode);
-        };
-
         const renderConfigField = (step, field) => {
             const wrapper = document.createElement("label");
             wrapper.className = field.type === "textarea" ? "full" : "";
             const title = document.createElement("span");
                 title.textContent = field.label;
             wrapper.appendChild(title);
-
-            const appendFieldHelp = () => {
-                if (Array.isArray(field.help_lines) && field.help_lines.length) {
-                    const hintBlock = document.createElement("div");
-                    hintBlock.className = "muted small";
-                    for (const line of field.help_lines) {
-                        appendHelpLine(hintBlock, line);
-                    }
-                    wrapper.appendChild(hintBlock);
-                }
-                if (field.help_text) {
-                    const hint = document.createElement("span");
-                    hint.className = "muted small";
-                    hint.textContent = field.help_text;
-                    wrapper.appendChild(hint);
-                }
-            };
 
             if (step.step_type === "filter_distance" && field.name === "zones" && field.type === "distance_zones") {
                 wrapper.className = "full";
@@ -1265,7 +1207,6 @@
                 }
 
                 wrapper.appendChild(zonesContainer);
-                appendFieldHelp();
                 return wrapper;
             }
 
@@ -1456,7 +1397,6 @@
                 wrapper.appendChild(controls);
                 renderSelectedIcons();
                 wrapper.appendChild(selectedIcons);
-                appendFieldHelp();
                 return wrapper;
             }
 
@@ -1479,7 +1419,6 @@
                     render();
                 });
                 wrapper.appendChild(select);
-                appendFieldHelp();
                 return wrapper;
             }
 
@@ -1494,7 +1433,6 @@
                     step.config[field.name] = field.name === "rate_limit_rules_text" ? textarea.value : textToLines(textarea.value);
                 });
                 wrapper.appendChild(textarea);
-                appendFieldHelp();
                 return wrapper;
             }
 
@@ -1512,7 +1450,6 @@
                 step.config[field.name] = field.type === "number" ? input.value : input.value;
             });
             wrapper.appendChild(input);
-            appendFieldHelp();
             return wrapper;
         };
 
@@ -1693,29 +1630,21 @@
                     editor.className = "form-grid digi-step-editor-grid";
 
                     const stepMeta = typeMeta[step.step_type] || {};
-                    if (stepMeta.description || stepMeta.help_page) {
+                    if (stepMeta.help_page) {
                         const helpBlock = document.createElement("div");
                         helpBlock.className = "full";
-                        if (stepMeta.description) {
-                            const lead = document.createElement("div");
-                            lead.className = "muted small";
-                            lead.textContent = stepMeta.description;
-                            helpBlock.appendChild(lead);
-                        }
-                        if (stepMeta.help_page) {
-                            const helpButton = document.createElement("button");
-                            helpButton.type = "button";
-                            helpButton.className = "help-icon-button";
-                            helpButton.setAttribute("data-help-page", stepMeta.help_page);
-                            const helpLabel = stepMeta.label ? `${i18n.help}: ${stepMeta.label}` : i18n.help;
-                            helpButton.title = helpLabel;
-                            helpButton.setAttribute("aria-label", helpLabel);
-                            const helpIcon = document.createElement("img");
-                            helpIcon.src = iconPath("help-circle-outline.svg");
-                            helpIcon.alt = "";
-                            helpButton.appendChild(helpIcon);
-                            helpBlock.appendChild(helpButton);
-                        }
+                        const helpButton = document.createElement("button");
+                        helpButton.type = "button";
+                        helpButton.className = "help-icon-button";
+                        helpButton.setAttribute("data-help-page", stepMeta.help_page);
+                        const helpLabel = stepMeta.label ? `${i18n.help}: ${stepMeta.label}` : i18n.help;
+                        helpButton.title = helpLabel;
+                        helpButton.setAttribute("aria-label", helpLabel);
+                        const helpIcon = document.createElement("img");
+                        helpIcon.src = iconPath("help-circle-outline.svg");
+                        helpIcon.alt = "";
+                        helpButton.appendChild(helpIcon);
+                        helpBlock.appendChild(helpButton);
                         editor.appendChild(helpBlock);
                     }
                     if (aprsisSystemStrictStep || aprsisSourceSystemStep) {

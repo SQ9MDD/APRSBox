@@ -14,6 +14,7 @@ from app.db import (
     set_app_setting,
 )
 from app.services.igate_messaging import prune_igate_runtime_state
+from app.services.alerts import expire_aprs_alerts
 
 
 LAST_EVENT_LOG_PRUNE_DATE_KEY = "scheduler.maintenance.event_logs.last_pruned_date"
@@ -53,6 +54,21 @@ class MaintenanceSchedulerService:
     def _tick(self, now: datetime | None = None) -> None:
         current = now if now is not None else datetime.now(timezone.utc)
         current_date = current.date().isoformat()
+        try:
+            expired_alerts = expire_aprs_alerts(now=current)
+            if expired_alerts:
+                log_event(
+                    "INFO",
+                    "alerts",
+                    f"Automatically expired {expired_alerts} APRS alert(s).",
+                )
+        except Exception as exc:
+            message = str(exc).strip() or exc.__class__.__name__
+            log_event(
+                "WARNING",
+                "maintenance",
+                f"Automatic APRS alert expiration failed: {message}",
+            )
         if str(get_app_setting(LAST_EVENT_LOG_PRUNE_DATE_KEY) or "").strip() != current_date:
             try:
                 prune_event_logs(keep_rows=self._event_log_keep_rows)

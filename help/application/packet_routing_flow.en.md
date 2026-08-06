@@ -25,6 +25,8 @@ Packets always move from top to bottom. If any block rejects a packet, the rest 
 3. Add only the blocks required for that path.
 4. Save the rule and inspect the execution log.
 
+The APRS-IS source and target appear only when an APRSIS interface is defined in `Interfaces`. Its `Enable APRS-IS connection` switch must be active before flows can actually receive or transmit data.
+
 ## Source blocks
 
 - [Receiver RF](packet_routing_flow_receiver_rf.en.md)

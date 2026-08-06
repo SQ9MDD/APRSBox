@@ -1,0 +1,26 @@
+<div
+    class="sidebar-beacon-modal"
+    id="sidebar-beacon-modal"
+    data-endpoint="{{ request.scope.root_path }}/station/send-beacon-now"
+    data-success-message="{{ t('Beacon queued for transmission.') }}"
+    data-error-message="{{ t('Beacon could not be queued.') }}"
+    hidden
+>
+    <div class="sidebar-beacon-backdrop" data-close-sidebar-beacon></div>
+    <div
+        class="sidebar-beacon-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sidebar-beacon-title"
+        aria-describedby="sidebar-beacon-question"
+        tabindex="-1"
+    >
+        <h2 id="sidebar-beacon-title">{{ t("Send beacon") }}</h2>
+        <p id="sidebar-beacon-question">{{ t("Are you sure you want to send the beacon now?") }}</p>
+        <p class="sidebar-beacon-status small" id="sidebar-beacon-status" role="status" aria-live="polite" hidden></p>
+        <div class="sidebar-beacon-actions">
+            <button type="button" class="button button-secondary" data-close-sidebar-beacon>{{ t("Cancel") }}</button>
+            <button type="button" class="button" id="sidebar-beacon-confirm">{{ t("Send beacon") }}</button>
+        </div>
+    </div>
+</div>

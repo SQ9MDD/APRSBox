@@ -292,6 +292,17 @@ def validate_aprsis_source(source_name: Any) -> dict[str, Any] | None:
     return dict(row) if row is not None else None
 
 
+def has_aprsis_interface() -> bool:
+    return fetch_one(
+        """
+        SELECT 1
+        FROM modems
+        WHERE UPPER(modem_type) = 'APRSIS'
+        LIMIT 1
+        """
+    ) is not None
+
+
 def normalize_outbound_rf_path(raw_path: Any) -> str:
     tokens = [token.strip().upper() for token in str(raw_path or "").split(",") if token.strip()]
     if len(tokens) > 8:

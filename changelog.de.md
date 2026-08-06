@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.10 - 2026-08-06
+- `Stabile Version`: Die Änderungen aus `1.9.1.dev–1.9.8.dev` wurden zusammengeführt, darunter APRS- und Wetteralarme, ein neues Dashboard, erweiterte Bandbedingungen, eine übersichtlichere APRS-IS- und GUI-Konfiguration, ausgebaute Hilfe, Stationsfilter sowie sicherere Anwendungsaktualisierungen und Systemaufträge.
+
+## 1.9.8.dev - 2026-08-05
+- `Einstellungen / Systemaufträge`: Anwendungsaktualisierung, Dienstneustart, Host-Neustart und Host-Abschaltung übergeben die Auftrags-ID und den Datenbankpfad nun explizit über die Berechtigungsgrenze an ihre Skripte, sodass Status und Fortschritt auch bei Verwendung von `sudo` im selben Datensatz bleiben.
+- `Einstellungen / Auftragswiederherstellung`: Die Statusüberwachung erkennt verwaiste Aktualisierungs- oder Neustartaufträge, die nach dem Ende ihres Prozesses beim Start hängen bleiben; sie markiert diese als fehlgeschlagen und empfiehlt, vor einem erneuten Versuch die installierte Version zu prüfen.
+
+## 1.9.7.dev - 2026-08-04
+- `Stationen / Filter`: Eine kompakte einzeilige Kartenleiste mit Symbolen und Tooltips wurde ergänzt, einschließlich des Filters `Direkt gehört` für über RF ohne verbrauchten Digipeater-Hop empfangene Stationen.
+- `Einstellungen / Anwendungsaktualisierung`: Das Modal zeigt nun die tatsächliche Phase und den Fortschritt in Prozent, behält die Überwachung während des Webdienst-Neustarts bei und endet erst bei einem terminalen Prozessstatus statt bereits bei erneut erreichbarem Health-Endpunkt.
+
+## 1.9.6.dev - 2026-08-01
+- `Einstellungen / Hilfe`: Eigene Markdown-Hilfe für 8 Panels in EN/DE/PL/ES/TLH hinzugefügt und die Oberfläche durch Entfernen wiederholter Beschreibungen vereinfacht.
+- `Hilfe / Renderer`: Externe Links aus Hilfedokumenten werden nun sicher geöffnet.
+- `Alarme / Hilfe`: Verlinkte und quellenbasierte CAWF- und NWS-WARN-Anleitungen in EN/DE/PL/ES/TLH ergänzt; sie erklären Frameformat, Fragmentierung, UGC, Karte, Lebenszyklus, Schwellen und Vertrauensgrenzen.
+
+## 1.9.5.dev - 2026-07-31
+- `Bandbedingungen / GUI und Runtime`: Die Registerkarte wird ausgeblendet und die Datenerfassung und -verarbeitung deaktiviert, wenn keine aktive RF-Schnittstelle die Bandbewertung aktiviert hat; alle anderen Funkstatistiken funktionieren unverändert weiter.
+- `Alarme / Formate`: Empfang und Verarbeitung von Wetteralarmen in den Formaten `CAWF` und `NWS-WARN` wurden hinzugefügt.
+- `Alarme / Polen / Verwaltungsgebiete`: Polnische Landkreisgrenzen (`Powiat`) und die Zuordnung von Warngebietskennungen wurden ergänzt, damit Alarme die zugehörigen Gebiete auf der Karte anzeigen können.
+- `Karte / Leistung / Erstladen`: Alarmgebiete werden getrennt nach den primären Kartendaten geladen, während Stationssymbole und Rufzeichen schrittweise in priorisierten Paketen erscheinen; dadurch bleiben die Kartenkacheln nicht lange ohne Marker und die Karte bleibt reaktionsfähig.
+
+## 1.9.4.dev - 2026-07-29
+- `GUI / Texte`: Alle Hauptansichten wurden geprüft und überflüssige Abschnittsbeschreibungen, wiederholte Anweisungen und offensichtliche Hinweise entfernt; Statusangaben, Formatvorgaben, Validierung sowie RF- und administrative Sicherheitswarnungen bleiben erhalten.
+- `Dashboard / Station`: Die Empfangsbeschreibung und der Zeitstempel der letzten RF-Aktivität wurden aus der Hauptkarte der Station entfernt; außerdem wurden Höhe und Abstände reduziert.
+
+## 1.9.3.dev - 2026-07-29
+- `Schnittstellen / APRS-IS`: Der separate Navigationseintrag `iGATE-Einstellungen` wurde entfernt; Server, Port, Login, Passcode, Filter und Verbindungsdiagnose befinden sich jetzt direkt im Formular der Schnittstelle `APRS-IS (RX/TX)`, während die alte URL dorthin weiterleitet.
+- `Schnittstellen / Formular`: Der Editor verwendet nun einen stabilen gemeinsamen Bereich und eigene Panels für SERIALL, TCP, OpenWebRX MQTT und APRS-IS, sodass Felder beim Wechsel des Verbindungstyps nicht unerwartet Spalte oder Reihenfolge ändern.
+- `Schnittstellen / APRS-IS / GUI`: die APRS-IS-Verbindung wird jetzt korrekt als RX/TX beschrieben; der Schalter `APRS-IS-Verbindung aktivieren` steuert den gesamten gemeinsamen Transport, während die TX-Spalte den aktiven Flow `TX APRS-IS` statt einer irreführenden TNC-Sperre anzeigt.
+- `Schnittstellen / APRS-IS / Runtime`: das Deaktivieren der Verbindung stoppt jetzt sowohl APRS-IS-Empfang als auch -Senden; außerdem werden nur für physische TNCs relevante Felder korrekt ausgeblendet.
+- `Packet Routing / APRS-IS`: Quelle und Ziel APRS-IS sind erst nach Definition einer APRSIS-Schnittstelle verfügbar; die Backend-Validierung blockiert das Speichern oder erneute Aktivieren solcher Flows nach dem Entfernen der Schnittstelle.
+- `Packet Routing / Schnittstellen / GUI`: die Formulare wurden durch Entfernen von Beschreibungen und wiederholten Bezeichnungen vereinfacht, die bereits in der ausführlichen Hilfe stehen; Sicherheitsmeldungen, Validierung und dynamische Konfigurationswerte bleiben sichtbar.
+- `Hilfe / I18N`: die TNC-Hilfe und die Übersetzungen PL/EN/ES/DE dokumentieren jetzt das Senden über `Receiver RF → TX APRS-IS` und `Local TX → TX APRS-IS` durch dieselbe Verbindung.
+
+## 1.9.2.dev - 2026-07-29
+- `GUI / Menü`: Reihenfolge und Bereiche der Seitenleiste wurden neu geordnet und die Benutzerleiste auf kompakte, ausgerichtete Symbole reduziert.
+- `GUI / Beacon`: eine Schnellaktion zum Senden eines Beacons mit zentrierter Bestätigung und einer durch ein abgeblendetes Symbol dargestellten 10-sekündigen Sendesperre wurde hinzugefügt.
+
+## 1.9.1.dev - 2026-07-29
+- `APRS-Notfallalarme`: eine eigene Registerkarte fasst Frames nach vollständigem Quellrufzeichen zusammen, führt Verlauf und Zähler, unterstützt zeitlich begrenztes oder unbegrenztes Stummschalten und löscht Alarme sicher, ohne Frames aus dem Traffic Monitor zu entfernen.
+- `Alarme / GUI`: ein globales Alarm-Modal, Markierungen und Links im Traffic Monitor, Alarm-Liste und -Details, ein Navigationszähler sowie erneutes Anzeigen bei weiteren nicht stummgeschalteten Frames wurden hinzugefügt; die Hilfe erklärt die nötige Browser-Berechtigung für automatische Tonwiedergabe.
+- `Dashboard`: die Startseite wurde mit übersichtlicheren bereichsbezogenen KPI, einem RF-Aktivitätsdiagramm und kompakten Übersichten zu Konfiguration, Diensten und Runtime überarbeitet.
+- `Band Condition / Karte`: der Ausbreitungsverlauf bietet jetzt `24h / 7d / 30d / 365d` und einen Punkt für die aktuelle Stunde; außerdem wurden der letzte Kartenstand und die globale Deckkraft der Reichweitenfüllung korrigiert.
+
 ## 1.9.0 - 2026-07-26
 - `Stable release`: ein grosses Paket von Aenderungen aus `1.8.45.dev–1.8.57.dev` wurde nach `main` uebernommen, darunter APRS-IS/iGate, Nachrichten, Bandbedingungen, Traffic Monitor, Karte, GUI, Leistung und der Alpine-Installer.
 

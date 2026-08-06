@@ -35,13 +35,11 @@ class ObjectAndItemFormTests(unittest.TestCase):
             "Active from",
             "Active until",
             "Active for (hours)",
-            "Manual: Leave empty to keep sending until manually disabled. Scheduled: required end. Recurring: optional repeat end.",
             "Active now",
             "Inactive now",
             "Activation",
             "Recurring",
             "Activation summary",
-            "Activation schedule controls when sending is allowed. Send interval remains separate.",
             "Manual activation.",
             "Manual activation. Valid until: {validUntil} UTC.",
             "Active from {fromDate} UTC to {toDate} UTC.",
@@ -512,12 +510,9 @@ class ObjectAndItemFormTests(unittest.TestCase):
         self.assertIn("Objects TX Log", template_source)
         self.assertIn("No object outbound jobs yet.", template_source)
         self.assertIn("data-clear-date-target", template_source)
-        self.assertIn("Leave empty to keep sending until manually disabled.", template_source)
         self.assertIn("National characters are blocked.", template_source)
-        self.assertIn(
-            "Required. Use up to 43 printable ASCII characters if you want a plain object report without extra data extensions.",
-            template_source,
-        )
+        self.assertNotIn("Leave empty to keep sending until manually disabled.", template_source)
+        self.assertNotIn("Required. Use up to 43 printable ASCII characters", template_source)
 
     def test_item_name_must_be_between_three_and_nine_characters(self) -> None:
         with temporary_database():
@@ -977,6 +972,9 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
         self.assertIn('id="bulletins-message-count"', template_source)
         self.assertIn('id="bulletins-message-error"', template_source)
+        self.assertNotIn("row.type_icon", template_source)
+        self.assertIn("send-outline.svg", template_source)
+        self.assertIn("/settings/{{ section.slug }}/{{ edit_row.id }}/send", template_source)
         self.assertIn("'application/tnc' if section.slug == 'modems'", template_source)
         self.assertIn("application/bulletins", template_source)
         self.assertIn('class="help-icon-button page-help-button"', template_source)
@@ -990,28 +988,40 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         helpers_source = Path("app/template_helpers.py").read_text(encoding="utf-8")
         self.assertIn('"label": "Bulletins"', helpers_source)
         self.assertIn("Packet Routing", helpers_source)
-        self.assertIn("iGATE settings", helpers_source)
+        self.assertNotIn('"key": "igate"', helpers_source)
+        self.assertNotIn('"label": "iGATE settings"', helpers_source)
         self.assertNotIn("Digi Settings", helpers_source)
 
-    def test_igate_template_includes_realtime_diagnostics_bindings(self) -> None:
-        template_source = Path("app/templates/igate_settings.html").read_text(encoding="utf-8")
-        self.assertIn("static/css/help-viewer.css", template_source)
-        self.assertIn('data-help-page="application/igate_settings"', template_source)
-        self.assertIn('class="help-icon-button page-help-button"', template_source)
-        self.assertIn('include "partials/help_modal.html"', template_source)
-        self.assertIn("static/js/help-viewer.js", template_source)
-        self.assertIn("api/igate/diagnostics", template_source)
-        self.assertNotIn('id="igate-diag-last-sent-line"', template_source)
-        self.assertNotIn('id="igate-diag-last-strict-line"', template_source)
-        self.assertNotIn('id="igate-diag-strict-tcp"', template_source)
-        self.assertNotIn('id="igate-diag-strict-rfonly"', template_source)
-        self.assertNotIn('id="igate-diag-session-uptime"', template_source)
-        self.assertNotIn('id="igate-diag-reconnects"', template_source)
-        self.assertIn('id="igate-diag-tx-sent"', template_source)
-        self.assertIn('id="igate-runtime-label"', template_source)
-        self.assertLess(template_source.index('name="server"'), template_source.index("iGATE diagnostics"))
+    def test_aprsis_interface_form_includes_connection_settings_and_realtime_diagnostics(self) -> None:
+        form_source = Path("app/templates/partials/modem_form_fields.html").read_text(encoding="utf-8")
+        status_source = Path("app/templates/partials/aprsis_interface_status.html").read_text(encoding="utf-8")
+        script_source = Path("app/static/js/aprsis-interface-status.js").read_text(encoding="utf-8")
+        section_source = Path("app/templates/section.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertFalse(Path("app/templates/igate_settings.html").exists())
+        for language in ("pl", "en", "de", "es"):
+            self.assertFalse(Path(f"help/application/igate_settings.{language}.md").exists())
+            tnc_help = Path(f"help/application/tnc.{language}.md").read_text(encoding="utf-8")
+            self.assertIn("TX APRS-IS", tnc_help)
+            self.assertIn("qAO", tnc_help)
+            self.assertIn("qAR", tnc_help)
+        for field_name in ("aprsis_server", "aprsis_port", "aprsis_login", "aprsis_passcode"):
+            self.assertIn(f'name="{field_name}"', form_source)
+        self.assertIn('name="device_path"', form_source)
+        self.assertIn('data-modem-type-panel="APRSIS"', form_source)
+        self.assertIn('data-modem-type-panel="SERIALL"', form_source)
+        self.assertIn('data-modem-type-panel="TCP"', form_source)
+        self.assertIn('data-modem-type-panel="OPENWEBRX_MQTT"', form_source)
+        self.assertIn('include "partials/modem_form_fields.html"', section_source)
+        self.assertIn('include "partials/aprsis_interface_status.html"', section_source)
+        self.assertIn("api/igate/diagnostics", status_source)
+        self.assertIn('id="igate-diag-tx-sent"', status_source)
+        self.assertIn('id="igate-runtime-label"', status_source)
+        self.assertIn("setInterval", script_source)
+        self.assertIn(".modem-expose-details[hidden]", stylesheet_source)
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
         self.assertIn('@router.get("/api/igate/diagnostics")', router_source)
+        self.assertIn("_aprsis_interface_settings_path", router_source)
 
 
 if __name__ == "__main__":

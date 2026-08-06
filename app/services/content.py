@@ -26,6 +26,11 @@ from app.db import (
     utc_now,
 )
 from app.i18n import get_app_language, get_translator
+from app.services.alarm_groups import (
+    alarm_event_meets_category_threshold,
+    get_aprs_alarm_enabled,
+    get_aprs_alarm_category_thresholds,
+)
 from app.services.beacon_pathing import (
     BEACON_INTERVAL_MODE_FIXED,
     BEACON_INTERVAL_MODE_PROPORTIONAL,
@@ -79,6 +84,7 @@ MODEM_TX_MIN_GAP_SECONDS_MIN = 0.2
 MODEM_TX_MIN_GAP_SECONDS_MAX = 1.2
 DASHBOARD_ACTIVITY_WINDOW_MINUTES = 60
 DASHBOARD_ACTIVITY_BUCKET_MINUTES = 5
+DASHBOARD_KPI_WINDOW_HOURS = 24
 STATION_TX_INTERNAL_MODE_SETTING_KEY = "station.tx.internal_mode"
 _STATION_DETAIL_URL_PATTERN = re.compile(r"https?://[^\s<>'\"`]+")
 APRS_SYMBOL_SET_SETTING_KEY = "aprs_symbol_set"
@@ -179,6 +185,15 @@ def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
 def _decorate_modem_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not rows:
         return []
+    aprsis_tx_enabled = fetch_one(
+        """
+        SELECT 1
+        FROM digi_flows
+        WHERE enabled = 1
+          AND target_kind = 'tx_aprsis'
+        LIMIT 1
+        """
+    ) is not None
     runtime_rows = fetch_all(
         """
         SELECT modem_id, status, status_detail, last_error
@@ -189,9 +204,11 @@ def _decorate_modem_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     aprsis_runtime_row = fetch_one(
         "SELECT status, status_detail, last_error FROM aprsis_runtime_state WHERE id = 1"
     )
-    if aprsis_runtime_row is not None:
-        for modem_row in rows:
-            if str(modem_row.get("modem_type") or "").strip().upper() == APRSIS_MODEM_TYPE:
+    for modem_row in rows:
+        if str(modem_row.get("modem_type") or "").strip().upper() == APRSIS_MODEM_TYPE:
+            modem_row["aprsis_rx_enabled"] = bool(modem_row.get("enabled"))
+            modem_row["aprsis_tx_enabled"] = aprsis_tx_enabled
+            if aprsis_runtime_row is not None:
                 runtime_by_modem_id[int(modem_row["id"])] = dict(aprsis_runtime_row)
     return [_decorate_modem_row(row, runtime_by_modem_id.get(int(row["id"]))) for row in rows]
 
@@ -199,9 +216,27 @@ def _decorate_modem_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _decorate_modem_row(row: dict[str, Any], runtime_row: dict[str, Any] | None) -> dict[str, Any]:
     result = dict(row)
     modem_type = str(result.get("modem_type") or "").strip().upper()
+    aprsis_tx_enabled = False
     if modem_type == OPENWEBRX_MQTT_MODEM_TYPE:
         result["device_path"] = mask_mqtt_url(result.get("device_path"))
-    if not bool(result.get("enabled")):
+    if modem_type == APRSIS_MODEM_TYPE:
+        aprsis_connection_enabled = bool(result.get("aprsis_rx_enabled", result.get("enabled")))
+        aprsis_tx_configured = bool(result.get("aprsis_tx_enabled"))
+        aprsis_tx_enabled = aprsis_connection_enabled and aprsis_tx_configured
+        result["aprsis_connection_enabled"] = aprsis_connection_enabled
+        result["aprsis_tx_configured"] = aprsis_tx_configured
+        result["aprsis_tx_enabled"] = aprsis_tx_enabled
+        if aprsis_connection_enabled and aprsis_tx_configured:
+            result["aprsis_direction_title"] = "APRS-IS RX and Packet Routing TX are active."
+        elif aprsis_connection_enabled:
+            result["aprsis_direction_title"] = "APRS-IS RX is active; no TX APRS-IS flow is enabled."
+        elif aprsis_tx_configured:
+            result["aprsis_direction_title"] = "APRS-IS connection is disabled; the TX flow is configured but cannot transmit."
+        else:
+            result["aprsis_direction_title"] = "APRS-IS connection is disabled; no TX APRS-IS flow is enabled."
+
+    connection_required = bool(result.get("enabled"))
+    if not connection_required:
         result["modem_runtime_status"] = "disabled"
         result["modem_runtime_label"] = "Disabled"
         result["modem_runtime_icon"] = "close-circle-outline.svg"
@@ -222,6 +257,18 @@ def _decorate_modem_row(row: dict[str, Any], runtime_row: dict[str, Any] | None)
         result["modem_runtime_label"] = "Connecting"
         result["modem_runtime_icon"] = "progress-clock.svg"
         result["modem_runtime_title"] = runtime_detail or "Connecting interface."
+        return result
+    if modem_type == APRSIS_MODEM_TYPE and runtime_status == "connected":
+        result["modem_runtime_status"] = "enabled"
+        result["modem_runtime_label"] = "Connected"
+        result["modem_runtime_icon"] = "check-circle-outline.svg"
+        result["modem_runtime_title"] = "APRS-IS connection is active."
+        return result
+    if modem_type == APRSIS_MODEM_TYPE:
+        result["modem_runtime_status"] = "disabled"
+        result["modem_runtime_label"] = "Inactive"
+        result["modem_runtime_icon"] = "close-circle-outline.svg"
+        result["modem_runtime_title"] = "APRS-IS connection is inactive."
         return result
 
     result["modem_runtime_status"] = "enabled"
@@ -787,9 +834,38 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     )
     frame_rows = fetch_all(
         """
-        SELECT source, source_kind, interface_id, direction, band, format, line, port, command, length, hex, created_at
-        FROM traffic_frames
-        ORDER BY created_at DESC, id DESC
+        SELECT
+            frames.id,
+            frames.source,
+            frames.source_kind,
+            frames.interface_id,
+            frames.direction,
+            frames.band,
+            frames.format,
+            frames.line,
+            frames.port,
+            frames.command,
+            frames.length,
+            frames.hex,
+            frames.created_at,
+            relations.alert_id,
+            alerts.source_callsign AS alert_source_callsign,
+            alerts.alarm_group AS alert_alarm_group,
+            alerts.event_code AS alert_event_code,
+            alerts.logical_alert_id AS alert_logical_alert_id,
+            alerts.severity_level AS alert_severity_level,
+            alerts.is_active AS alert_is_active,
+            alerts.expires_at AS alert_expires_at,
+            alerts.valid_until_utc AS alert_valid_until_utc,
+            alerts.superseded_by_alert_id AS alert_superseded_by_alert_id,
+            alerts.initial_frame_id AS alert_initial_frame_id,
+            alerts.last_frame_id AS alert_last_frame_id,
+            alerts.muted_until AS alert_muted_until,
+            alerts.muted_indefinitely AS alert_muted_indefinitely
+        FROM traffic_frames AS frames
+        LEFT JOIN aprs_alert_frames AS relations ON relations.frame_id = frames.id
+        LEFT JOIN aprs_alerts AS alerts ON alerts.id = relations.alert_id
+        ORDER BY frames.created_at DESC, frames.id DESC
         LIMIT ?
         """,
         (limit,),
@@ -922,6 +998,9 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     if last_error is None and state_row:
         last_error = state_row["last_error"]
     frames: list[dict[str, Any]] = []
+    snapshot_now = datetime.now(timezone.utc)
+    aprs_alarm_enabled = get_aprs_alarm_enabled()
+    alarm_popup_thresholds = get_aprs_alarm_category_thresholds()
     for row in frame_rows:
         direction = str(row["direction"] or "").upper() or ("TX" if str(row["format"] or "").endswith("-TX") else "RX")
         line = str(row["line"] or "")
@@ -938,7 +1017,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 or ""
             ).strip()
         display_icon_path = get_aprs_symbol_icon_path(symbol) if packet_group in {"object", "item"} else ""
-        emergency_data = _build_emergency_frame_data(parsed=parsed, row=row, line=line) if parsed else None
+        emergency_data = build_emergency_frame_data(parsed=parsed, row=row, line=line) if parsed else None
         source_kind = normalize_source_kind(row["source_kind"])
         row_class = _traffic_frame_row_class(
             direction=direction,
@@ -948,8 +1027,78 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             wx_source_key=wx_source_key,
             source_kind=source_kind,
         )
+        alert_id = int(row["alert_id"]) if row["alert_id"] is not None else None
+        alert_muted_until = _parse_iso_timestamp_utc(str(row["alert_muted_until"] or ""))
+        alert_muted = bool(int(row["alert_muted_indefinitely"] or 0)) or (
+            alert_muted_until is not None and alert_muted_until > snapshot_now
+        )
+        alarm_group = str(row["alert_alarm_group"] or "").strip().upper()
+        alert_expires_at = _parse_iso_timestamp_utc(str(row["alert_expires_at"] or ""))
+        alert_valid_until = _parse_iso_timestamp_utc(
+            str(row["alert_valid_until_utc"] or "")
+        )
+        alert_active = bool(int(row["alert_is_active"] or 0)) and (
+            row["alert_superseded_by_alert_id"] is None
+        ) and (
+            alert_expires_at is None or alert_expires_at > snapshot_now
+        ) and (
+            alert_valid_until is None or alert_valid_until > snapshot_now
+        )
+        alarm_group_popup = bool(
+            aprs_alarm_enabled
+            and alert_id is not None
+            and alarm_group
+            and alert_active
+            and alarm_event_meets_category_threshold(
+                row["alert_event_code"],
+                row["alert_severity_level"],
+                target="popup",
+                thresholds=alarm_popup_thresholds,
+            )
+        )
+        alarm_group_popup_data = None
+        if alarm_group_popup:
+            popup_summary = " · ".join(
+                value
+                for value in (
+                    str(row["alert_event_code"] or "").strip().upper(),
+                    alarm_group,
+                    str(row["alert_logical_alert_id"] or "").strip().upper(),
+                )
+                if value
+            )
+            alarm_group_popup_data = {
+                "callsign": str(row["alert_source_callsign"] or "").strip(),
+                "summary": popup_summary,
+                "timestamp_utc": row["created_at"],
+                "raw_frame": line,
+                "source_interface": row["source"],
+                "source_port": row["port"],
+                "path": str(
+                    (parsed or {}).get("logical_path")
+                    or (parsed or {}).get("path")
+                    or ""
+                ).strip(),
+                "latitude": (aprs_data or {}).get("latitude"),
+                "longitude": (aprs_data or {}).get("longitude"),
+                "destination_group": alarm_group,
+                "event_code": str(row["alert_event_code"] or "").strip().upper(),
+                "logical_alert_id": str(
+                    row["alert_logical_alert_id"] or ""
+                ).strip().upper(),
+                "severity_level": row["alert_severity_level"],
+            }
+        alert_popup_data = emergency_data or alarm_group_popup_data
+        alert_popup_kind = (
+            "emergency"
+            if emergency_data is not None
+            else ("alarm_group" if alarm_group_popup else "")
+        )
+        if emergency_data:
+            row_class = f"{row_class} traffic-log-row-emergency".strip()
         frames.append(
             {
+                "id": int(row["id"]),
                 "timestamp": _format_monitor_timestamp(row["created_at"]),
                 "source": row["source"],
                 "source_kind": source_kind,
@@ -969,6 +1118,31 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                 "display_icon_path": display_icon_path,
                 "emergency": bool(emergency_data),
                 "emergency_data": emergency_data,
+                "alert_popup": bool(alert_popup_data),
+                "alert_popup_kind": alert_popup_kind,
+                "alert_popup_data": alert_popup_data,
+                "detail_href": f"/traffic/frames/{int(row['id'])}",
+                "alert_id": alert_id,
+                "alert_callsign": str(row["alert_source_callsign"] or "").strip(),
+                "alert_href": f"/alerts/{alert_id}" if alert_id is not None else "",
+                "alert_muted": alert_muted,
+                "alert_should_notify": bool(
+                    alert_id is not None
+                    and not alert_muted
+                    and (
+                        (
+                            emergency_data is not None
+                            and row["alert_last_frame_id"] is not None
+                            and int(row["alert_last_frame_id"]) == int(row["id"])
+                        )
+                        or (
+                            alarm_group_popup
+                            and row["alert_initial_frame_id"] is not None
+                            and int(row["alert_initial_frame_id"]) == int(row["id"])
+                        )
+                    )
+                ),
+                "alert_record_deleted": bool(emergency_data and alert_id is None),
             }
         )
     result = {
@@ -1028,12 +1202,16 @@ def _extract_emergency_comment_token(text: str) -> str | None:
     return token.upper() if token else None
 
 
-def _build_emergency_frame_data(*, parsed: dict[str, Any], row: Any, line: str) -> dict[str, Any] | None:
+def build_emergency_frame_data(*, parsed: dict[str, Any], row: Any, line: str) -> dict[str, Any] | None:
     aprs_data = dict(parsed.get("aprs_data") or {})
     if not bool(aprs_data.get("emergency")):
         return None
 
-    comment = str(aprs_data.get("comment") or "").strip()
+    comment = str(
+        aprs_data.get("emergency_comment")
+        or aprs_data.get("comment")
+        or ""
+    ).strip()
     summary = _strip_emergency_comment_prefix(comment)
     if not summary and aprs_data.get("data"):
         decoded_items = _format_decoded_data_for_display(dict(aprs_data["data"]), "metric")
@@ -1375,11 +1553,26 @@ def _format_monitor_timestamp(timestamp: str | None) -> str:
 
 
 def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    cutoff_utc = datetime.now(timezone.utc) - timedelta(hours=DASHBOARD_KPI_WINDOW_HOURS)
+    cutoff_iso = cutoff_utc.isoformat()
     total_frames_row = fetch_one(
-        f"SELECT COUNT(*) AS total FROM traffic_frames WHERE {STATISTICS_TRAFFIC_SQL_PREDICATE}"
+        f"""
+        SELECT COUNT(*) AS total
+        FROM traffic_frames
+        WHERE {STATISTICS_TRAFFIC_SQL_PREDICATE}
+          AND julianday(created_at) >= julianday(?)
+        """,
+        (cutoff_iso,),
     )
     decoded_frames_row = fetch_one(
-        f"SELECT COUNT(*) AS total FROM traffic_frames WHERE format = 'TNC2' AND {STATISTICS_TRAFFIC_SQL_PREDICATE}"
+        f"""
+        SELECT COUNT(*) AS total
+        FROM traffic_frames
+        WHERE format = 'TNC2'
+          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
+          AND julianday(created_at) >= julianday(?)
+        """,
+        (cutoff_iso,),
     )
     unique_sources_row = fetch_one(
         f"""
@@ -1387,18 +1580,25 @@ def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = 
         FROM traffic_frames
         WHERE COALESCE(source, '') <> ''
           AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
-        """
+          AND julianday(created_at) >= julianday(?)
+        """,
+        (cutoff_iso,),
     )
+    snapshots = heard_snapshots if heard_snapshots is not None else get_rf_heard_station_snapshots()
+    heard_stations = 0
+    for snapshot in snapshots:
+        last_heard_at = _parse_iso_timestamp_utc(
+            str(snapshot.get("last_heard_rf_at") or snapshot.get("last_heard_at") or "")
+        )
+        if last_heard_at is not None and last_heard_at >= cutoff_utc:
+            heard_stations += 1
 
     return {
         "received_frames": total_frames_row["total"] if total_frames_row else 0,
         "decoded_aprs": decoded_frames_row["total"] if decoded_frames_row else 0,
         "unique_sources": unique_sources_row["total"] if unique_sources_row else 0,
-        "heard_stations": (
-            len(heard_snapshots)
-            if heard_snapshots is not None
-            else len(get_rf_heard_station_snapshots())
-        ),
+        "heard_stations": heard_stations,
+        "window_hours": DASHBOARD_KPI_WINDOW_HOURS,
     }
 
 
@@ -1636,7 +1836,10 @@ def _dashboard_recent_important_events(limit: int = 6) -> list[dict[str, str]]:
     return events
 
 
-def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[str, Any]:
+def dashboard_home_data(
+    dashboard_band: dict[str, Any] | None = None,
+    dashboard_activity: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     from app.services.aprsis import get_aprsis_runtime_status, has_enabled_aprsis_target_flow
     from app.services.wx import get_wx_config
 
@@ -1816,15 +2019,23 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     processing_total = int(queue_row["processing_total"] or 0) if queue_row is not None else 0
     if processing_total > 0:
         queue_status_label = f"Processing ({processing_total})"
+        queue_status_key = "Processing ({count})"
+        queue_status_params: dict[str, object] = {"count": processing_total}
         queue_status_tone = "ok"
     elif queued_total == 0:
         queue_status_label = "Idle"
+        queue_status_key = "Idle"
+        queue_status_params = {}
         queue_status_tone = "ok"
     elif queued_total <= 3:
         queue_status_label = f"Queued ({queued_total})"
+        queue_status_key = "Queued ({count})"
+        queue_status_params = {"count": queued_total}
         queue_status_tone = "ok"
     else:
         queue_status_label = f"Backlog ({queued_total})"
+        queue_status_key = "Backlog ({count})"
+        queue_status_params = {"count": queued_total}
         queue_status_tone = "warn"
 
     scheduler_row = fetch_one(
@@ -1839,18 +2050,26 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     )
     if scheduler_row is None:
         scheduler_status_label = "No scheduler events yet"
+        scheduler_status_key = "No scheduler events yet"
+        scheduler_status_params: dict[str, object] = {}
         scheduler_status_tone = "neutral"
     else:
         scheduler_level = str(scheduler_row["level"] or "").strip().upper()
         scheduler_time = _format_monitor_timestamp(str(scheduler_row["created_at"] or ""))
         if scheduler_level == "ERROR":
             scheduler_status_label = f"Error at {scheduler_time}"
+            scheduler_status_key = "Error at {time}"
+            scheduler_status_params = {"time": scheduler_time}
             scheduler_status_tone = "error"
         elif scheduler_level == "WARNING":
             scheduler_status_label = f"Warning at {scheduler_time}"
+            scheduler_status_key = "Warning at {time}"
+            scheduler_status_params = {"time": scheduler_time}
             scheduler_status_tone = "warn"
         else:
             scheduler_status_label = f"Active at {scheduler_time}"
+            scheduler_status_key = "Active at {time}"
+            scheduler_status_params = {"time": scheduler_time}
             scheduler_status_tone = "ok"
 
     database_ready = fetch_one("SELECT 1 AS ok") is not None
@@ -1861,8 +2080,20 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         {"name": "RF RX freshness", "status": rx_runtime_status, "tone": rx_runtime_tone},
         {"name": "RF TX freshness", "status": tx_runtime_status, "tone": tx_runtime_tone},
         {"name": "APRS-IS/iGate uplink", "status": aprsis_runtime_label, "tone": aprsis_runtime_tone},
-        {"name": "TX queue", "status": queue_status_label, "tone": queue_status_tone},
-        {"name": "Schedulers", "status": scheduler_status_label, "tone": scheduler_status_tone},
+        {
+            "name": "TX queue",
+            "status": queue_status_label,
+            "status_key": queue_status_key,
+            "status_params": queue_status_params,
+            "tone": queue_status_tone,
+        },
+        {
+            "name": "Schedulers",
+            "status": scheduler_status_label,
+            "status_key": scheduler_status_key,
+            "status_params": scheduler_status_params,
+            "tone": scheduler_status_tone,
+        },
         {"name": "Database", "status": database_status_label, "tone": database_status_tone},
     ]
     runtime_check_state = "ok"
@@ -2035,9 +2266,20 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
     if igate_enabled:
         hero_summary.append({"label": "APRS-IS", "value": aprsis_runtime_label, "tone": aprsis_runtime_tone})
 
+    activity_kpis = dict((dashboard_activity or {}).get("kpis") or {})
+    dashboard_heard_stations = int(activity_kpis.get("heard_stations", traffic["heard_stations"]) or 0)
+    dashboard_aprs_frames = int(activity_kpis.get("aprs_frames", traffic["decoded_aprs"]) or 0)
     stats = [
-        {"label": "Heard stations", "value": str(traffic["heard_stations"]), "suffix": ""},
-        {"label": "APRS frames", "value": str(traffic["decoded_aprs"]), "suffix": ""},
+        {
+            "label": "Heard stations",
+            "value": str(dashboard_heard_stations),
+            "suffix": "",
+        },
+        {
+            "label": "APRS frames",
+            "value": str(dashboard_aprs_frames),
+            "suffix": "",
+        },
         {"label": "Interfaces", "value": f"{len(enabled_interfaces)} / {len(interfaces)}", "suffix": ""},
         {"label": "Last RF RX", "value": last_rf_rx_display, "suffix": ""},
         {"label": "Last RF TX", "value": last_rf_tx_display, "suffix": ""},
@@ -2058,7 +2300,6 @@ def dashboard_home_data(dashboard_band: dict[str, Any] | None = None) -> dict[st
         "interface_entries": interface_entries,
         "last_rf_activity": last_rf_activity,
         "recent_events": _dashboard_recent_important_events(limit=6),
-        "band_updated_at": _format_monitor_timestamp(utc_now()),
         "band_summary": band_summary,
     }
 
@@ -2074,6 +2315,7 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
                 "origin": snapshot.get("origin", "heard"),
                 "source_kind": snapshot.get("source_kind", RF_SOURCE_KIND),
                 "is_rf": bool(snapshot.get("is_rf")),
+                "direct_heard": bool(snapshot.get("direct_heard")),
                 "statistics_eligible": bool(snapshot.get("statistics_eligible")),
                 "last_seen_any_at": snapshot.get("last_seen_any_at"),
                 "last_heard_rf_at": snapshot.get("last_heard_rf_at"),
@@ -2499,6 +2741,11 @@ def _normalize_interface_id(value: Any) -> int | None:
         return None
 
 
+def _station_path_is_direct(path: Any) -> bool:
+    tokens = [token.strip() for token in str(path or "").split(",") if token.strip()]
+    return not any(token.endswith("*") for token in tokens)
+
+
 def _build_station_snapshots_from_rows(
     rows: list[dict[str, Any]],
     *,
@@ -2507,6 +2754,7 @@ def _build_station_snapshots_from_rows(
 ) -> list[dict[str, Any]]:
     stations: dict[str, dict[str, Any]] = {}
     station_key_index: dict[str, str] = {}
+    direct_heard_station_keys: set[str] = set()
     killed_station_keys: set[str] = set()
     pending_status_by_station_key: dict[str, str] = {}
     device_database = get_aprs_device_identification_database()
@@ -2520,6 +2768,15 @@ def _build_station_snapshots_from_rows(
         aprs_data = dict(parsed.get("aprs_data") or {})
         station_key = (aprs_data.get("entity_name") or callsign).strip()
         station_key_folded = station_key.casefold()
+        row_source_kind = normalize_source_kind(row.get("source_kind"))
+        logical_path = str(parsed.get("logical_path") or parsed.get("path") or "")
+        if (
+            station_key_folded
+            and origin == "heard"
+            and row_source_kind == RF_SOURCE_KIND
+            and _station_path_is_direct(logical_path)
+        ):
+            direct_heard_station_keys.add(station_key_folded)
         packet_group = str(aprs_data.get("packet_group") or "").strip().lower()
         if packet_group == "object" and str(aprs_data.get("state") or "").strip().lower() == "killed":
             existing_key = station_key_index.get(station_key_folded)
@@ -2540,8 +2797,6 @@ def _build_station_snapshots_from_rows(
 
         if not station_key:
             continue
-
-        row_source_kind = normalize_source_kind(row.get("source_kind"))
 
         if station_key not in stations:
             stations[station_key] = _new_station_snapshot(
@@ -2611,6 +2866,11 @@ def _build_station_snapshots_from_rows(
         if not station.get("position_ambiguous") and aprs_data.get("position_ambiguous"):
             station["position_ambiguous"] = True
 
+    for direct_station_key in direct_heard_station_keys:
+        stored_key = station_key_index.get(direct_station_key)
+        if stored_key is not None:
+            stations[stored_key]["direct_heard"] = True
+
     return list(stations.values())[:limit]
 
 
@@ -2643,6 +2903,7 @@ def _merge_station_snapshots(
             merged[field] = secondary[field]
     if not merged.get("position_ambiguous") and secondary.get("position_ambiguous"):
         merged["position_ambiguous"] = True
+    merged["direct_heard"] = bool(primary.get("direct_heard") or secondary.get("direct_heard"))
     if (not merged.get("data_raw")) and secondary.get("data_raw"):
         merged["data_raw"] = dict(secondary["data_raw"])
     for field in (
@@ -2710,6 +2971,7 @@ def _new_station_snapshot(
         "origin": resolved_origin,
         "source_kind": normalized_kind,
         "is_rf": is_rf_heard,
+        "direct_heard": False,
         "statistics_eligible": is_rf_heard,
         "activity_label": activity_label,
         "activity_age_label": activity_age_label,
@@ -3137,9 +3399,11 @@ def _station_detail_mic_e_fields(mic_e: dict[str, Any] | None) -> list[dict[str,
 
 
 def station_summary(stations: list[dict[str, Any]]) -> dict[str, int]:
-    summary = {"total": 0, "stationary": 0, "mobile": 0, "objects": 0}
+    summary = {"total": 0, "direct": 0, "stationary": 0, "mobile": 0, "objects": 0}
     for station in stations:
         summary["total"] += 1
+        if station.get("direct_heard"):
+            summary["direct"] += 1
         entity_class = station.get("entity_class")
         if entity_class == "object":
             summary["objects"] += 1
@@ -3482,7 +3746,7 @@ def _decode_mic_e_comment(raw_payload: str) -> tuple[str, int | None]:
             altitude_ft = max(0, min(32700, altitude_value))
             payload = payload[4:].lstrip()
 
-    return _clean_decoded_tokens(payload), altitude_ft
+    return payload.strip(" /|,;:-"), altitude_ft
 
 
 def _mic_e_base91_value(char: str) -> int:
@@ -3888,6 +4152,8 @@ def _attach_comment_extensions(result: dict[str, Any]) -> None:
         result["emergency"] = True
     if emergency_token is not None:
         result["emergency_code"] = emergency_token
+    if bool(result.get("emergency")) and comment:
+        result["emergency_comment"] = str(comment).strip()
     if result.get("symbol", "").endswith("_"):
         weather = _parse_weather_fields(comment)
         if weather:

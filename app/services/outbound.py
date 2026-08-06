@@ -547,6 +547,7 @@ def enqueue_message_job(
     *,
     trigger: str = "scheduled",
     scheduled_for: datetime | None = None,
+    force_send: bool = False,
 ) -> tuple[bool, str]:
     callsign = str(station_settings.get("callsign") or "").strip().upper()
     ssid = str(station_settings.get("ssid") or "").strip()
@@ -566,6 +567,7 @@ def enqueue_message_job(
         "path": str(bulletin.get("path") or "").strip(),
         "message_text": str(bulletin.get("message_text") or "").strip(),
         "trigger": str(trigger or "scheduled").strip() or "scheduled",
+        "force_send": bool(force_send),
     }
     scheduled_at = (scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat() if scheduled_for else utc_now())
     job_ids = _enqueue_jobs_for_modems(
@@ -580,6 +582,77 @@ def enqueue_message_job(
     else:
         log_event("INFO", "outbound", f"Queued {payload['trigger']} message jobs {job_ids} for interfaces: {modem_names}")
     return True, _format_queue_result("Message", job_ids)
+
+
+def enqueue_alarm_group_frames(
+    frames: list[dict[str, Any]],
+    station_settings: dict[str, Any],
+    *,
+    sender_callsign: str,
+    target_group: str,
+    path: str,
+    own_alert_id: int | None,
+    dispatch_token: str,
+    trigger: str,
+    scheduled_for: datetime | None = None,
+) -> tuple[bool, str, list[int]]:
+    """Queue already generated CAWF payloads through the normal APRS message TX."""
+
+    normalized_sender = str(sender_callsign or "").strip().upper()
+    callsign, separator, ssid = normalized_sender.partition("-")
+    if not callsign:
+        return False, "Callsign is required.", []
+    if separator and (not ssid.isdigit() or not 0 <= int(ssid) <= 15):
+        return False, "Configured station callsign is invalid.", []
+    normalized_group = str(target_group or "").strip().upper()
+    if not normalized_group or len(normalized_group) > 9:
+        return False, "Alarm group is invalid.", []
+    if not frames:
+        return False, "No alarm frames were generated.", []
+    target_modems, target_error = _resolve_station_target_modems(station_settings)
+    if not target_modems:
+        return False, str(target_error or "Interface is required."), []
+
+    scheduled_at = (
+        scheduled_for.astimezone(timezone.utc).replace(microsecond=0).isoformat()
+        if scheduled_for
+        else utc_now()
+    )
+    job_ids: list[int] = []
+    for frame in frames:
+        payload = {
+            "callsign": callsign,
+            "ssid": ssid,
+            "message_kind": "alarm_group",
+            "addressee": normalized_group,
+            "path": str(path or "").strip().upper(),
+            "message_text": str(frame.get("payload") or ""),
+            "trigger": str(trigger or "manual-alert").strip() or "manual-alert",
+            "force_send": True,
+            "manual_alert_dispatch_token": str(dispatch_token),
+            "manual_alert_part_number": int(frame.get("part_number") or 1),
+            "manual_alert_parts_total": int(frame.get("parts_total") or len(frames)),
+        }
+        if own_alert_id is not None:
+            payload["own_alert_id"] = int(own_alert_id)
+        job_ids.extend(
+            _enqueue_jobs_for_modems(
+                kind=OUTBOUND_KIND_MESSAGE,
+                payload=payload,
+                modems=target_modems,
+                scheduled_at=scheduled_at,
+            )
+        )
+    modem_names = ", ".join(str(modem["name"]) for modem in target_modems)
+    log_event(
+        "INFO",
+        "outbound",
+        (
+            f"Queued {len(frames)}-part alarm {trigger} as jobs {job_ids} "
+            f"for interfaces: {modem_names}"
+        ),
+    )
+    return True, _format_queue_result("Alarm", job_ids), job_ids
 
 
 def enqueue_wx_job(payload: dict[str, Any]) -> tuple[bool, str]:
@@ -940,6 +1013,7 @@ def mark_outbound_job_sent(job_id: int) -> None:
             """,
             (OUTBOUND_STATUS_SENT, timestamp, timestamp, job_id),
         )
+    _reconcile_own_alert_job(job_id, successful=True)
 
 
 def mark_outbound_job_skipped(job_id: int, reason: str) -> None:
@@ -953,6 +1027,7 @@ def mark_outbound_job_skipped(job_id: int, reason: str) -> None:
             """,
             (OUTBOUND_STATUS_SENT, timestamp, str(reason or "").strip()[:500], timestamp, job_id),
         )
+    _reconcile_own_alert_job(job_id, successful=False, error=reason)
 
 
 def mark_outbound_job_failed(job_id: int, error: str) -> None:
@@ -965,6 +1040,32 @@ def mark_outbound_job_failed(job_id: int, error: str) -> None:
             WHERE id = ?
             """,
             (OUTBOUND_STATUS_FAILED, error.strip()[:500], timestamp, job_id),
+        )
+    _reconcile_own_alert_job(job_id, successful=False, error=error)
+
+
+def _reconcile_own_alert_job(
+    job_id: int,
+    *,
+    successful: bool,
+    error: str = "",
+) -> None:
+    try:
+        from app.services.own_alerts import reconcile_own_alert_job
+
+        reconcile_own_alert_job(
+            job_id,
+            successful=successful,
+            error=error,
+        )
+    except Exception as exc:
+        log_event(
+            "WARNING",
+            "alerts",
+            (
+                f"Could not reconcile own alarm transmission job #{job_id}: "
+                f"{str(exc).strip() or exc.__class__.__name__}"
+            ),
         )
 
 
@@ -992,8 +1093,12 @@ def persist_outbound_frame(
     payload_hex: str = "",
     source_kind: str = "rf",
 ) -> None:
+    occurred_at = utc_now()
+    normalized_source_kind = str(source_kind or "rf").strip().lower() or "rf"
+    normalized_band = str(band or "").strip()
+    normalized_command = str(command or "TX")
     with get_connection() as connection:
-        connection.execute(
+        cursor = connection.execute(
             """
             INSERT INTO traffic_frames(
                 source, source_kind, interface_id, direction, band, format, line, port, command, length, hex, created_at
@@ -1002,16 +1107,57 @@ def persist_outbound_frame(
             """,
             (
                 source,
-                str(source_kind or "rf").strip().lower() or "rf",
+                normalized_source_kind,
                 interface_id,
-                str(band or "").strip(),
+                normalized_band,
                 "TNC2-TX",
                 line,
                 port,
-                command,
+                normalized_command,
                 len(line.encode("utf-8")),
                 payload_hex,
-                utc_now(),
+                occurred_at,
+            ),
+        )
+        frame_id = int(cursor.lastrowid)
+
+    if normalized_command.upper().startswith("TX-SKIP"):
+        return
+    try:
+        from app.services.alerts import process_alert_frame
+        from app.services.content import parse_tnc2_frame
+
+        parsed = parse_tnc2_frame(line)
+        if parsed is None:
+            return
+        with get_connection() as connection:
+            process_alert_frame(
+                connection,
+                frame_id=frame_id,
+                parsed=parsed,
+                frame_row={
+                    "source": source,
+                    "source_kind": normalized_source_kind,
+                    "interface_id": interface_id,
+                    "direction": "tx",
+                    "band": normalized_band,
+                    "format": "TNC2-TX",
+                    "line": line,
+                    "port": port,
+                    "command": normalized_command,
+                    "length": len(line.encode("utf-8")),
+                    "hex": payload_hex,
+                    "created_at": occurred_at,
+                },
+                enforce_alarm_threshold=False,
+            )
+    except Exception as exc:
+        log_event(
+            "WARNING",
+            "alerts",
+            (
+                "Could not attach outbound frame to the APRS alert model: "
+                f"{str(exc).strip() or exc.__class__.__name__}"
             ),
         )
 
@@ -1226,7 +1372,9 @@ def _build_status_info(payload: dict[str, Any]) -> str:
 
 def _build_message_info(payload: dict[str, Any]) -> str:
     addressee = resolve_message_addressee(payload)
-    message_text = str(payload.get("message_text") or "").strip()
+    message_text = str(payload.get("message_text") or "")
+    if str(payload.get("message_kind") or "").strip() != "alarm_group":
+        message_text = message_text.strip()
     message_number = str(payload.get("message_number") or "").strip().upper()
     if str(payload.get("message_kind") or "").strip() == "direct_message" and message_number:
         message_text = f"{message_text}{{{message_number}"
@@ -1271,7 +1419,7 @@ def _build_wx_info(payload: dict[str, Any]) -> str:
 
 def resolve_message_addressee(payload: dict[str, Any]) -> str:
     message_kind = str(payload.get("message_kind") or "bulletin").strip()
-    if message_kind in {"direct_message", "query", "ack"}:
+    if message_kind in {"direct_message", "query", "ack", "alarm_group"}:
         return str(payload.get("addressee") or "").strip().upper()[:9].ljust(9)
     bulletin_code = str(payload.get("bulletin_code") or "").strip().upper()[:1]
     if message_kind == "announcement":

@@ -16,6 +16,7 @@ from app.services.aprsis import (
     get_aprsis_config,
     get_enabled_aprsis_interface,
 )
+from app.services.alarm_groups import save_aprs_alarm_enabled, save_aprs_alarm_groups
 from app.services.content import (
     dashboard_activity_series,
     dashboard_traffic_summary,
@@ -108,7 +109,7 @@ POSITION_LINE = "SP5ABC-9>APRS,TCPIP*:!5223.45N/02101.23E>APRS-IS test"
 
 
 class AprsisInterfaceConfigurationTests(unittest.TestCase):
-    def test_new_aprsis_interface_uses_default_filter_and_existing_igate_settings(self) -> None:
+    def test_new_aprsis_interface_uses_default_filter_and_existing_connection_settings(self) -> None:
         with temporary_database():
             set_app_setting("aprsis_server", "example.aprs2.net")
             set_app_setting("aprsis_port", "10152")
@@ -147,7 +148,7 @@ class AprsisInterfaceConfigurationTests(unittest.TestCase):
             count = fetch_one("SELECT COUNT(*) AS total FROM modems WHERE modem_type = 'APRSIS'")
             self.assertEqual(int((count or {"total": -1})["total"]), 1)
 
-    def test_login_line_contains_interface_filter_without_changing_auth_config(self) -> None:
+    def test_login_line_has_no_automatic_alarm_filter_by_default(self) -> None:
         line = build_aprsis_login_line(
             login="SQ9XYZ-10",
             passcode="12345",
@@ -155,6 +156,58 @@ class AprsisInterfaceConfigurationTests(unittest.TestCase):
         )
         self.assertIn("user SQ9XYZ-10 pass 12345", line)
         self.assertTrue(line.endswith("filter r/52.23/21.01/50"))
+
+    def test_interfaces_form_saves_aprsis_connection_settings_and_legacy_route_redirects(self) -> None:
+        with temporary_database():
+            from fastapi.testclient import TestClient
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+                create_page = client.get("/settings/modems?new_type=APRSIS")
+                self.assertEqual(create_page.status_code, 200)
+                self.assertIn('name="aprsis_server"', create_page.text)
+                self.assertIn('value="APRSIS" selected', create_page.text)
+
+                response = client.post(
+                    "/settings/modems",
+                    data={
+                        "name": "Internet",
+                        "modem_type": "APRSIS",
+                        "enabled": "1",
+                        "device_path": "m/50",
+                        "aprsis_server": "example.aprs2.net",
+                        "aprsis_port": "10152",
+                        "aprsis_login": "SQ9XYZ-10",
+                        "aprsis_passcode": "12345",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                config = get_aprsis_config()
+                self.assertEqual(config["server"], "example.aprs2.net")
+                self.assertEqual(config["port"], 10152)
+                self.assertEqual(config["login"], "SQ9XYZ-10")
+                self.assertEqual(config["passcode"], "12345")
+
+                legacy_response = client.get("/igate", follow_redirects=False)
+                self.assertEqual(legacy_response.status_code, 303)
+                interface_row = fetch_one("SELECT id FROM modems WHERE name = 'Internet'")
+                assert interface_row is not None
+                self.assertEqual(
+                    legacy_response.headers["location"],
+                    f"/settings/modems?edit={int(interface_row['id'])}",
+                )
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
 
 
 class AprsisReceivePipelineTests(unittest.TestCase):
@@ -470,6 +523,8 @@ class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
                 return None
 
         with temporary_database():
+            save_aprs_alarm_enabled(True)
+            save_aprs_alarm_groups("PL-WARN")
             interface_id = create_aprsis_interface(server_filter="m/20")
             received: list[str] = []
 
@@ -490,7 +545,7 @@ class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(opener.await_count, 1)
             self.assertIs(service._writer, writer)
-            self.assertIn(b" filter m/20\r\n", writer.writes[0])
+            self.assertIn(b" filter m/20 g/PL-WARN\r\n", writer.writes[0])
             self.assertTrue(service._process_server_line(POSITION_LINE))
             sent, _detail = await service.send_tnc2_line("SQ9XYZ-10>APRS:>TX test")
             self.assertTrue(sent)
@@ -498,7 +553,7 @@ class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(writer.writes), 2)
             await service._disconnect(reason="test complete", status="inactive")
 
-    async def test_disabling_rx_keeps_connection_when_tx_flow_still_requires_it(self) -> None:
+    async def test_disabling_connection_stops_shared_rx_and_tx_transport(self) -> None:
         class ExistingWriter:
             pass
 
@@ -519,8 +574,8 @@ class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
             )
 
             execute("UPDATE modems SET enabled = 0 WHERE id = ?", (interface_id,))
-            self.assertTrue(aprsis_connection_required())
-            self.assertFalse(
+            self.assertFalse(aprsis_connection_required())
+            self.assertTrue(
                 service._connection_needs_reconnect(
                     config_key=config_key,
                     desired_rx_signature=None,

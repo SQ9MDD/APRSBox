@@ -251,6 +251,14 @@ def _start_background_script(
     command = _script_command(script_path)
     if extra_args:
         command = [*command, *[str(arg) for arg in extra_args]]
+    if job_id is not None:
+        command = [
+            *command,
+            "--job-id",
+            str(int(job_id)),
+            "--db-path",
+            str(settings.database_path),
+        ]
     try:
         process = subprocess.Popen(
             command,

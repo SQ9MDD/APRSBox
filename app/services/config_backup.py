@@ -38,11 +38,17 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "traffic_retention_minutes",
     "event_log_min_level",
     "event_log_debug_enabled",
+    "map_coverage_fill_opacity",
     "gui_update_branch",
     "aprsis_server",
     "aprsis_port",
     "aprsis_login",
     "aprsis_passcode",
+    "aprs.alarm_groups",
+    "aprs.alarm_enabled",
+    "aprs.map_alarm_level_threshold",
+    "aprs.global_alarm_level_threshold",
+    "aprs.alarm_category_thresholds",
 )
 
 

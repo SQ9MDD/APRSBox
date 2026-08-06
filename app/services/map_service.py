@@ -4,11 +4,17 @@ import re
 from typing import Any
 from urllib.parse import quote, unquote
 
-from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, utc_now
+from app.services.alert_areas import (
+    build_alert_area_feature_collection,
+    get_active_alert_area_feature_collection,
+    get_active_alert_area_snapshot,
+)
 from app.services.content import (
     build_station_detail_href,
     format_decoded_data_for_display,
     get_aprs_symbol_icon_fallback_path,
+    get_aprs_symbol_icon_path,
     get_configured_modem_interfaces,
     get_station_settings,
     get_visible_station_snapshot_revision,
@@ -30,6 +36,22 @@ MAP_SOURCE_ZOOM_MIN = 0
 MAP_SOURCE_ZOOM_MAX = 30
 MAP_SOURCE_REQUIRED_TILE_TOKENS = ("{z}", "{x}", "{y}")
 MAP_TILE_PROXY_ENDPOINT = "/api/map/tiles"
+COVERAGE_FILL_OPACITY_SETTING_KEY = "map_coverage_fill_opacity"
+DEFAULT_COVERAGE_FILL_OPACITY_PERCENT = 5
+
+
+def normalize_coverage_fill_opacity_percent(value: Any) -> int:
+    try:
+        normalized = int(str(value).strip())
+    except (TypeError, ValueError):
+        return DEFAULT_COVERAGE_FILL_OPACITY_PERCENT
+    if normalized < 0 or normalized > 20:
+        return DEFAULT_COVERAGE_FILL_OPACITY_PERCENT
+    return normalized
+
+
+def get_coverage_fill_opacity_percent() -> int:
+    return normalize_coverage_fill_opacity_percent(get_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY))
 
 
 def list_map_sources() -> list[dict[str, Any]]:
@@ -668,6 +690,7 @@ def get_map_page_config(*, root_path: str = "") -> dict[str, Any]:
         "tile_min_zoom": tile_layer["tile_min_zoom"],
         "tile_max_zoom": tile_layer["tile_max_zoom"],
         "tile_subdomains": tile_layer["tile_subdomains"],
+        "coverage_fill_opacity": get_coverage_fill_opacity_percent(),
     }
 
 
@@ -782,6 +805,14 @@ def get_map_station_markers_payload() -> dict[str, Any]:
     }
 
 
+def get_map_alert_areas_payload() -> dict[str, Any]:
+    revision, alert_areas = get_active_alert_area_snapshot()
+    return {
+        "revision": revision,
+        "alert_areas": alert_areas,
+    }
+
+
 def get_map_station_details_payload() -> dict[str, Any]:
     station_settings = get_station_settings()
     unit_system = str(station_settings.get("default_units") or "metric")
@@ -823,6 +854,7 @@ def get_map_station_payload() -> dict[str, Any]:
         "track_count": len(mobile_tracks),
         "mobile_tracks": mobile_tracks,
         "interfaces": _build_map_interfaces(stations, mobile_tracks),
+        "alert_areas": get_active_alert_area_feature_collection(),
     }
 
 
@@ -843,6 +875,64 @@ def get_station_detail_map_config(station: dict[str, Any], *, root_path: str = "
         "symbol_table": station.get("symbol_table", ""),
         "symbol_code": station.get("symbol_code", ""),
         "detail_href": station.get("detail_href", ""),
+    }
+
+
+def get_alert_detail_map_config(alert: dict[str, Any], *, root_path: str = "") -> dict[str, Any]:
+    tile_layer = resolve_active_tile_layer(root_path=root_path)
+    if not str(alert.get("alarm_group") or "").strip():
+        parsed = parse_tnc2_frame(str(alert.get("last_frame_line") or ""))
+        aprs_data = dict((parsed or {}).get("aprs_data") or {})
+        latitude = _parse_coordinate(alert.get("latitude"))
+        longitude = _parse_coordinate(alert.get("longitude"))
+        if latitude is None:
+            latitude = _parse_coordinate(aprs_data.get("latitude"))
+        if longitude is None:
+            longitude = _parse_coordinate(aprs_data.get("longitude"))
+
+        symbol = str(aprs_data.get("symbol") or "")
+        symbol_table = symbol[:1] if len(symbol) >= 2 else ""
+        symbol_code = symbol[1:2] if len(symbol) >= 2 else ""
+        related_entity = alert.get("related_entity")
+        related_label = (
+            str(related_entity.get("label") or "").strip()
+            if isinstance(related_entity, dict)
+            else ""
+        )
+        return {
+            "map_mode": "station",
+            "latitude": latitude,
+            "longitude": longitude,
+            "zoom": DETAIL_STATION_ZOOM,
+            "tile_url": tile_layer["tile_url"],
+            "tile_attribution": tile_layer["tile_attribution"],
+            "tile_source_name": tile_layer["tile_source_name"],
+            "tile_min_zoom": tile_layer["tile_min_zoom"],
+            "tile_max_zoom": tile_layer["tile_max_zoom"],
+            "tile_subdomains": tile_layer["tile_subdomains"],
+            "display_callsign": related_label or str(alert.get("source_callsign") or "").strip(),
+            "symbol_icon": (
+                get_aprs_symbol_icon_path(symbol)
+                if len(symbol) >= 2
+                else get_aprs_symbol_icon_fallback_path()
+            ),
+            "symbol_table": symbol_table,
+            "symbol_code": symbol_code,
+            "track_points": [],
+            "has_position": latitude is not None and longitude is not None,
+        }
+
+    feature_collection = build_alert_area_feature_collection([alert])
+    return {
+        "map_mode": "areas",
+        "tile_url": tile_layer["tile_url"],
+        "tile_attribution": tile_layer["tile_attribution"],
+        "tile_source_name": tile_layer["tile_source_name"],
+        "tile_min_zoom": tile_layer["tile_min_zoom"],
+        "tile_max_zoom": tile_layer["tile_max_zoom"],
+        "tile_subdomains": tile_layer["tile_subdomains"],
+        "feature_collection": feature_collection,
+        "has_area_definitions": bool(feature_collection["features"]),
     }
 
 

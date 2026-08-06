@@ -18,7 +18,7 @@ def _path(request: Request, suffix: str) -> str:
 def login_page(request: Request) -> object:
     templates = request.app.state.templates
     if request.session.get("user_id"):
-        return RedirectResponse(url=_path(request, "/dashboard"), status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=_path(request, "/map"), status_code=status.HTTP_303_SEE_OTHER)
     context = build_template_context(
         request,
         page_title="Login",
@@ -61,7 +61,7 @@ def login_submit(
     request.session["role"] = user.role
     mark_user_login(user.id)
     log_event("INFO", "auth", f"User {user.username} logged in from {client_ip}")
-    return RedirectResponse(url=_path(request, "/dashboard"), status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_path(request, "/map"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/logout")

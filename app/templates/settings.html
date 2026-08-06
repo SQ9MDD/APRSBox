@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 {% if flash %}
 <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
@@ -10,8 +14,16 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Global Settings") }}</h2>
-                <p class="section-lead">{{ t("Configure the interface language and default measurement units for the installed GUI.") }}</p>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_global"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Global Settings') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if can_manage_global_settings %}
         <form
@@ -44,7 +56,6 @@
                     <option value="{{ option.value }}" {% if traffic_retention_minutes == option.value %}selected{% endif %}>{{ option.label }}</option>
                     {% endfor %}
                 </select>
-                <span class="muted small">{{ t("Controls how long runtime traffic frames are kept in the database. Map and station visibility follow this window.") }}</span>
             </label>
             <label>
                 <span>{{ t("Icon set") }}</span>
@@ -53,7 +64,6 @@
                     <option value="{{ option.value }}" {% if current_aprs_symbol_set == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
-                <span class="muted small">{{ t("Applies globally across the GUI.") }}</span>
             </label>
             <label>
                 <span>{{ t("Color palette") }}</span>
@@ -62,7 +72,6 @@
                     <option value="{{ option.value }}" {% if current_ui_palette == option.value %}selected{% endif %}>{{ t(option.label) }}</option>
                     {% endfor %}
                 </select>
-                <span class="muted small">{{ t("Applies globally across the GUI. Green Core is the default palette.") }}</span>
             </label>
             <label>
                 <span>{{ t("Minimum stored log level") }}</span>
@@ -71,12 +80,10 @@
                     <option value="{{ option.value }}" {% if event_log_min_level == option.value %}selected{% endif %}>{{ option.label }}</option>
                     {% endfor %}
                 </select>
-                <span class="muted small">{{ t("Only events at or above this level are written to event logs.") }}</span>
             </label>
             <label class="full checkbox-row">
                 <input type="checkbox" name="event_log_debug_enabled" value="1" {% if event_log_debug_enabled %}checked{% endif %}>
                 <span>{{ t("Enable DEBUG logs") }}</span>
-                <span class="muted small">{{ t("DEBUG entries are disabled by default and should be enabled only for troubleshooting.") }}</span>
             </label>
         </form>
         {% else %}
@@ -101,9 +108,14 @@
         <div class="form-grid">
             <label>
                 <span>{{ t("Coverage fill opacity") }}</span>
-                <select id="map-coverage-fill-opacity" aria-label="{{ t('Coverage fill opacity') }}">
+                <select
+                    id="map-coverage-fill-opacity"
+                    name="coverage_fill_opacity"
+                    aria-label="{{ t('Coverage fill opacity') }}"
+                    {% if can_manage_global_settings %}form="global-settings-form"{% else %}disabled{% endif %}
+                >
                     {% for value in range(0, 21) %}
-                    <option value="{{ value }}">{{ value }}%</option>
+                    <option value="{{ value }}" {% if coverage_fill_opacity == value %}selected{% endif %}>{{ value }}%</option>
                     {% endfor %}
                 </select>
             </label>
@@ -129,12 +141,16 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Application update") }}</h2>
-                {% if is_container_mode %}
-                <p class="section-lead">{{ t("Docker installation detected. In-app system actions are disabled. Update APRSBox by pulling a newer Docker image and recreating the container with the same volumes. Restart or stop APRSBox using Docker commands.") }}</p>
-                {% else %}
-                <p class="section-lead">{{ t("Configure the update channel and run application update from the configured repository.") }}</p>
-                {% endif %}
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_update"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Application update') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if is_container_mode %}
         <div class="alert">{{ t("Docker installation detected. System actions are disabled inside Docker. Use Docker commands to update, restart or stop APRSBox.") }}</div>
@@ -169,9 +185,6 @@
         {% if not is_container_mode and update_channel_is_unstable %}
         <div class="alert">{{ t("Warning: selected update channel may contain unstable changes.") }}</div>
         {% endif %}
-        {% if not is_container_mode %}
-        <p class="muted">{{ t("Update fetches code from the selected channel, runs init-db, and restarts <code>aprsbox-core</code> and <code>aprsbox-web</code> at the end. GUI may temporarily lose connection.")|safe }}</p>
-        {% endif %}
         <div class="settings-update-actions">
             <form
                 method="post"
@@ -190,30 +203,136 @@
                 class="form-stack"
                 data-settings-action-id="update-application"
                 data-settings-action-group="update-controls"
-                onsubmit="return confirm({{ t('Start application update now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 45000, reloadOnSuccess: true});"
+                onsubmit="return confirm({{ t('Start application update now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
             {% endif %}
         </div>
-        <div id="settings-version-result">
-            {% if is_container_mode %}
-            <p class="muted">{{ t("Check version can be used for informational comparison only. Docker mode updates must be done through Docker image pull and container recreate.") }}</p>
-            {% else %}
-            <p class="muted">{{ t("Use Check version to compare local VERSION with selected update channel.") }}</p>
-            {% endif %}
-        </div>
+        <div id="settings-version-result"></div>
     </div>
 </section>
 </div>
+
+<section class="panel">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("APRS alarm settings") }}</h2>
+            </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_alarms"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('APRS alarm settings') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
+        </div>
+        {% if can_manage_global_settings %}
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/alarm-groups"
+            class="form-grid"
+            data-settings-action-id="save-aprs-alarm-groups"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-aprs-alarm-groups', message: {{ t('Saving APRS alarm settings...')|tojson|forceescape }}, busyLabel: {{ t('Saving...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
+        >
+            <label class="full checkbox-row">
+                <input type="checkbox" name="alarm_enabled" value="1" {% if aprs_alarm_enabled %}checked{% endif %}>
+                <span>{{ t("Enable APRS alarms") }}</span>
+            </label>
+            <label class="full">
+                <span>{{ t("Alarm groups") }}</span>
+                <input
+                    type="text"
+                    name="alarm_groups"
+                    value="{{ aprs_alarm_groups|join(', ') }}"
+                    autocapitalize="characters"
+                    spellcheck="false"
+                >
+            </label>
+            <div class="full">
+                <span class="alarm-thresholds-title">{{ t("Alarm thresholds by event type") }}</span>
+                <div class="table-wrap">
+                    <table class="data-table compact-table alarm-thresholds-table">
+                        <thead>
+                            <tr>
+                                <th>{{ t("Type") }}</th>
+                                <th>{{ t("Alerts") }}</th>
+                                <th>{{ t("Alert popup") }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for category in alarm_category_threshold_rows %}
+                            <tr>
+                                <td>
+                                    <input type="hidden" name="threshold_category" value="{{ category.key }}">
+                                    <span class="alarm-threshold-event-type">
+                                        <img
+                                            class="alert-category-event-icon"
+                                            src="{{ request.scope.root_path }}/static/icons/{{ category.icon }}"
+                                            alt=""
+                                            aria-hidden="true"
+                                        >
+                                        {{ t(category.label) }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <select name="alert_level_threshold" aria-label="{{ t('Alerts') }} — {{ t(category.label) }}">
+                                        <option value="off" {% if category.alerts == 0 %}selected{% endif %}>{{ t("Off") }}</option>
+                                        {% for level in alarm_level_threshold_options %}
+                                        <option value="{{ level }}" {% if category.alerts == level %}selected{% endif %}>≥ {{ level }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td>
+                                    <select name="popup_level_threshold" aria-label="{{ t('Alert popup') }} — {{ t(category.label) }}">
+                                        <option value="off" {% if category.popup == 0 %}selected{% endif %}>{{ t("Off") }}</option>
+                                        {% for level in alarm_level_threshold_options %}
+                                        <option value="{{ level }}" {% if category.popup == level %}selected{% endif %}>≥ {{ level }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="button">{{ t("Save alarm settings") }}</button>
+            </div>
+        </form>
+        {% endif %}
+        <dl class="details-grid">
+            <dt>{{ t("APRS alarms") }}</dt>
+            <dd><code>{{ t("Enabled") if aprs_alarm_enabled else t("Disabled") }}</code></dd>
+            <dt>{{ t("Alarm groups") }}</dt>
+            <dd><code>{{ aprs_alarm_groups|join(', ') if aprs_alarm_groups else t("none") }}</code></dd>
+            <dt>{{ t("RF receive groups") }}</dt>
+            <dd><code>{{ effective_rf_message_groups|join(', ') }}</code></dd>
+            <dt>{{ t("Automatic APRS-IS filter") }}</dt>
+            <dd><code>{{ automatic_aprsis_alarm_filter if automatic_aprsis_alarm_filter else t("none") }}</code></dd>
+        </dl>
+    </div>
+</section>
 
 <section class="panel map-sources-panel">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Map sources") }}</h2>
-                <p class="section-lead">{{ t("Configure Leaflet-compatible tile providers. URL template must include {z}, {x}, and {y}.") }}</p>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_map_sources"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Map sources') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         <div class="settings-map-sources-grid">
             <div class="table-wrap">
@@ -338,18 +457,6 @@
                     <input type="checkbox" name="is_default" value="1" {% if map_source_form.is_default %}checked{% endif %}>
                     <span>{{ t("Set as default") }}</span>
                 </label>
-                <p class="muted full map-source-help-text">
-                    <span>{{ t("Only standard Leaflet tile providers are supported in this panel. Example: https://server/{z}/{x}/{y}.png") }}</span>
-                    <a
-                        href="https://switch2osm.org/providers/#Allows-free-usage"
-                        class="map-source-help-link"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
-                        <span>{{ t("List of free providers you can see here") }}</span>
-                        <img src="{{ request.scope.root_path }}/static/icons/open-in-new.svg" alt="">
-                    </a>
-                </p>
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save map source") }}</button>
                     {% if map_source_form.record_id %}
@@ -369,8 +476,16 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("APRS device identification") }}</h2>
-                <p class="section-lead">{{ t("Use a local cached APRS device identification database for TOCALL decoding during normal offline operation.") }}</p>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_device_identification"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('APRS device identification') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         <dl class="details-grid">
             <dt>{{ t("Status") }}</dt>
@@ -413,15 +528,17 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Configuration backup") }}</h2>
-                <p class="section-lead">{{ t("Export and import a full GUI configuration snapshot (station, TNC, APRS-IS, WX, DIGI flows and related settings).") }}</p>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_configuration_backup"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Configuration backup') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
-        <dl class="details-grid">
-            <dt>{{ t("Format") }}</dt>
-            <dd><code>JSON</code></dd>
-            <dt>{{ t("Scope") }}</dt>
-            <dd>{{ t("Configuration tables only. Runtime traffic/events are not part of this backup.") }}</dd>
-        </dl>
         {% if can_manage_config_backup %}
         <div class="settings-update-actions">
             <a href="{{ request.scope.root_path }}/settings/config/export" class="button button-secondary">{{ t("Export configuration backup") }}</a>
@@ -458,8 +575,16 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Database maintenance") }}</h2>
-                <p class="section-lead">{{ t("Event logs are pruned automatically after midnight. Database vacuum and runtime history reset remain manual actions.") }}</p>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_database"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Database maintenance') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if not database_quick_check_ok %}
         <div class="alert">{{ t("Database integrity check returned a non-OK result. Review storage before running maintenance actions.") }}</div>
@@ -550,12 +675,16 @@
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Danger zone") }}</h2>
-                {% if is_container_mode %}
-                <p class="section-lead">{{ t("Docker installation detected. System actions are disabled inside Docker. Use Docker commands to update, restart or stop APRSBox.") }}</p>
-                {% else %}
-                <p class="section-lead">{{ t("Administrative operations that can interrupt service or shut down the host.") }}</p>
-                {% endif %}
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_danger_zone"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Danger zone') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         {% if is_container_mode %}
         <div class="alert">{{ t("Docker installation detected. System actions are disabled inside Docker. Use Docker commands to update, restart or stop APRSBox.") }}</div>
@@ -563,14 +692,13 @@
         <div class="danger-zone-actions">
             <div class="danger-zone-item">
                 <h3>{{ t("Restart services") }}</h3>
-                <p class="muted">{{ t("Restarts <code>aprsbox-core</code> and <code>aprsbox-web</code>.")|safe }}</p>
                 <form
                     method="post"
                     action="{{ request.scope.root_path }}/settings/restart-services"
                     class="form-stack"
                     data-settings-action-id="restart-services"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 45000, reloadOnSuccess: true, reloadDelayMs: 7000});"
+                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, reloadOnSuccess: true, reloadDelayMs: 3000});"
                 >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
@@ -578,7 +706,6 @@
             <div class="danger-zone-item">
                 <h3>{{ t("Reboot host") }}</h3>
                 <div class="alert">{{ t("Warning: host reboot will interrupt remote access.") }}</div>
-                <p class="muted">{{ t("Type REBOOT in the confirmation dialog to continue.") }}</p>
                 <form
                     method="post"
                     action="{{ request.scope.root_path }}/settings/reboot-host"
@@ -593,7 +720,6 @@
             <div class="danger-zone-item">
                 <h3>{{ t("Power off host") }}</h3>
                 <div class="alert">{{ t("Warning: host power off will interrupt remote access and require physical power-on to recover.") }}</div>
-                <p class="muted">{{ t("Type POWER OFF in the confirmation dialog to continue.") }}</p>
                 <form
                     method="post"
                     action="{{ request.scope.root_path }}/settings/poweroff-host"
@@ -612,9 +738,11 @@
     </div>
 </section>
 
+{% include "partials/help_modal.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script>
     (() => {
         const rootPath = {{ request.scope.root_path|tojson }};
@@ -625,15 +753,7 @@
         const fallbackFailedLabel = {{ t("Operation failed.")|tojson }};
         const fallbackDoneLabel = {{ t("Done.")|tojson }};
         let fallbackDismissed = false;
-        const mapCoverageFillOpacityStorageKey = "aprsbox-map-coverage-fill-opacity";
         const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
-
-        const normalizeCoverageOpacityPercent = (value, fallback = 10) => {
-            if (Number.isInteger(value) && value >= 0 && value <= 20) {
-                return value;
-            }
-            return fallback;
-        };
 
         const normalizeOpacityPercent = (value, fallback = 100) => {
             if (Number.isInteger(value) && value >= 0 && value <= 100) {
@@ -641,19 +761,6 @@
             }
             return Number.isInteger(fallback) ? fallback - (fallback % 10) : 100;
         };
-
-        const coverageFillOpacitySelect = document.getElementById("map-coverage-fill-opacity");
-        if (coverageFillOpacitySelect) {
-            const storedOpacity = Number.parseInt(window.localStorage.getItem(mapCoverageFillOpacityStorageKey) || "", 10);
-            const normalizedOpacity = normalizeCoverageOpacityPercent(storedOpacity, 10);
-            coverageFillOpacitySelect.value = String(normalizedOpacity);
-            coverageFillOpacitySelect.addEventListener("change", () => {
-                const nextValue = Number.parseInt(coverageFillOpacitySelect.value || "", 10);
-                const normalizedNextValue = normalizeCoverageOpacityPercent(nextValue, 10);
-                coverageFillOpacitySelect.value = String(normalizedNextValue);
-                window.localStorage.setItem(mapCoverageFillOpacityStorageKey, String(normalizedNextValue));
-            });
-        }
 
         const coverageOutlineOpacitySelect = document.getElementById("map-coverage-outline-opacity");
         if (coverageOutlineOpacitySelect) {
@@ -681,6 +788,15 @@
                     <div class="settings-progress-header">
                         <span class="settings-progress-spinner" aria-hidden="true"></span>
                         <h3 class="settings-progress-title"></h3>
+                    </div>
+                    <div class="settings-progress-details" hidden>
+                        <div class="settings-progress-summary">
+                            <span class="settings-progress-stage"></span>
+                            <strong class="settings-progress-percent">0%</strong>
+                        </div>
+                        <div class="settings-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                            <span class="settings-progress-bar"></span>
+                        </div>
                     </div>
                     <p class="settings-progress-message"></p>
                     <div class="settings-progress-actions">
@@ -847,6 +963,26 @@
             versionUpdateAvailable: {{ (t("Newer repository version detected. Use Docker image update flow.") if is_container_mode else t("Update available"))|tojson }},
             closeButton: {{ t("OK")|tojson }},
             unsupportedActionMode: {{ t("Unsupported action mode.")|tojson }},
+            updateTitle: {{ t("Application update")|tojson }},
+            restartTitle: {{ t("Service restart")|tojson }},
+            takingLonger: {{ t("This operation is taking longer than usual. Status monitoring is still active.")|tojson }},
+            jobStages: {
+                queued: {{ t("Waiting for the update process to start...")|tojson }},
+                starting: {{ t("Starting the update process...")|tojson }},
+                downloading: {{ t("Downloading application files...")|tojson }},
+                "preparing-files": {{ t("Preparing downloaded files...")|tojson }},
+                "preparing-dependencies": {{ t("Preparing application dependencies...")|tojson }},
+                "stopping-services": {{ t("Stopping application services...")|tojson }},
+                "backing-up-database": {{ t("Backing up the database...")|tojson }},
+                "replacing-files": {{ t("Replacing application files...")|tojson }},
+                "updating-database": {{ t("Updating the application database...")|tojson }},
+                "restarting-core": {{ t("Restarting the core service...")|tojson }},
+                "restarting-web": {{ t("Restarting the web service. The browser may briefly lose connection...")|tojson }},
+                "restarting-services": {{ t("Restarting application services. The browser may briefly lose connection...")|tojson }},
+                finalizing: {{ t("Finalizing the update and cleaning up...")|tojson }},
+                completed: {{ t("Application update completed successfully.")|tojson }},
+                failed: {{ t("Application update failed.")|tojson }},
+            },
         };
 
         const activeJobStorageKey = "aprsbox-settings-active-job-v1";
@@ -861,6 +997,15 @@
                     <span class="settings-progress-spinner" aria-hidden="true"></span>
                     <h3 class="settings-progress-title"></h3>
                 </div>
+                <div class="settings-progress-details" hidden>
+                    <div class="settings-progress-summary">
+                        <span class="settings-progress-stage"></span>
+                        <strong class="settings-progress-percent">0%</strong>
+                    </div>
+                    <div class="settings-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <span class="settings-progress-bar"></span>
+                    </div>
+                </div>
                 <p class="settings-progress-message"></p>
                 <div class="settings-progress-actions">
                     <button type="button" class="button button-secondary settings-progress-close">${labels.closeButton}</button>
@@ -871,6 +1016,11 @@
 
         const titleNode = backdrop.querySelector(".settings-progress-title");
         const messageNode = backdrop.querySelector(".settings-progress-message");
+        const progressDetailsNode = backdrop.querySelector(".settings-progress-details");
+        const progressStageNode = backdrop.querySelector(".settings-progress-stage");
+        const progressPercentNode = backdrop.querySelector(".settings-progress-percent");
+        const progressTrackNode = backdrop.querySelector(".settings-progress-track");
+        const progressBarNode = backdrop.querySelector(".settings-progress-bar");
         const closeButton = backdrop.querySelector(".settings-progress-close");
 
         let hideTimer = null;
@@ -915,14 +1065,63 @@
             }
         };
 
+        const titleForAction = (actionId) => {
+            const normalized = String(actionId || "");
+            if (normalized === "update-application") return labels.updateTitle;
+            if (normalized === "restart-services") return labels.restartTitle;
+            return labels.defaultTitle;
+        };
+
+        const messageForJobStage = (stage, fallback = "") => {
+            const normalized = String(stage || "").trim();
+            if (normalized && Object.prototype.hasOwnProperty.call(labels.jobStages, normalized)) {
+                return String(labels.jobStages[normalized]);
+            }
+            return String(fallback || labels.defaultMessage);
+        };
+
+        const renderProgress = (message, options = {}) => {
+            const parsedProgress = Number(options.progressPercent);
+            const hasProgress = Number.isFinite(parsedProgress);
+            if (progressDetailsNode instanceof HTMLElement) {
+                progressDetailsNode.hidden = !hasProgress;
+            }
+            if (!hasProgress) {
+                if (messageNode instanceof HTMLElement) {
+                    messageNode.hidden = false;
+                    messageNode.textContent = String(message || labels.defaultMessage);
+                }
+                return;
+            }
+
+            const progressPercent = Math.max(0, Math.min(100, Math.round(parsedProgress)));
+            const stageLabel = String(options.stageLabel || message || labels.defaultMessage);
+            if (progressStageNode instanceof HTMLElement) {
+                progressStageNode.textContent = stageLabel;
+            }
+            if (progressPercentNode instanceof HTMLElement) {
+                progressPercentNode.textContent = `${progressPercent}%`;
+            }
+            if (progressTrackNode instanceof HTMLElement) {
+                progressTrackNode.setAttribute("aria-valuenow", String(progressPercent));
+                progressTrackNode.setAttribute("aria-valuetext", `${progressPercent}% — ${stageLabel}`);
+            }
+            if (progressBarNode instanceof HTMLElement) {
+                progressBarNode.style.width = `${progressPercent}%`;
+            }
+            if (messageNode instanceof HTMLElement) {
+                const detail = String(options.detail || "").trim();
+                messageNode.textContent = detail;
+                messageNode.hidden = !detail;
+            }
+        };
+
         const showSettingsProgress = (message, options = {}) => {
             clearTimers();
             if (titleNode instanceof HTMLElement) {
                 titleNode.textContent = String(options.title || labels.defaultTitle);
             }
-            if (messageNode instanceof HTMLElement) {
-                messageNode.textContent = String(message || labels.defaultMessage);
-            }
+            renderProgress(message, options);
             progressLocked = Boolean(options.locked);
             if (progressLocked && progressDismissed) {
                 return true;
@@ -1055,7 +1254,14 @@
             stopPolling();
             progressLocked = false;
             restoreControls();
-            showSettingsProgress(message, { locked: false, autoHideMs: options.autoHideMs });
+            showSettingsProgress(message, {
+                locked: false,
+                autoHideMs: options.autoHideMs,
+                title: options.title,
+                progressPercent: options.progressPercent,
+                stageLabel: options.stageLabel,
+                detail: options.detail,
+            });
             if (options.reload) {
                 const parsedDelay = Number(options.reloadDelayMs);
                 const reloadDelayMs = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : 1200;
@@ -1136,43 +1342,19 @@
         };
 
         const jobStatusUrl = (jobId) => `${rootPath}/api/settings/jobs/${encodeURIComponent(String(jobId || ""))}`;
-        const healthUrl = `${rootPath}/health`;
-
-        const canReloadOnHealthRecovery = (actionId, reloadOnSuccess) => {
-            if (!reloadOnSuccess) {
-                return false;
-            }
-            const normalized = String(actionId || "");
-            return normalized === "update-application" ||
-                normalized === "restart-services" ||
-                normalized === "reboot-host" ||
-                normalized === "poweroff-host";
-        };
-
-        const canFinalizeRunningJobFromHealth = (actionId, reloadOnSuccess) => {
-            if (!reloadOnSuccess) {
-                return false;
-            }
-            return String(actionId || "") === "restart-services";
-        };
 
         const pollJobStatus = async (jobId, startedAt, options) => {
             const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
             const reloadAfterFinish = Boolean(options.reloadOnSuccess);
             const actionId = String(options.actionId || "");
             const reloadDelayMs = Number(options.reloadDelayMs || 0);
+            const title = titleForAction(actionId);
+            let lastProgressPercent = 0;
+            let lastStageLabel = String(options.message || labels.defaultMessage);
 
             const pollOnce = async () => {
                 const elapsed = Date.now() - Number(startedAt || Date.now());
-                if (elapsed > lockTimeoutMs) {
-                    try {
-                        window.sessionStorage.removeItem(activeJobStorageKey);
-                    } catch (_error) {
-                        // Ignore storage errors.
-                    }
-                    finishAction(labels.timeout, { reload: false });
-                    return;
-                }
+                const overdueDetail = elapsed > lockTimeoutMs ? labels.takingLonger : "";
 
                 try {
                     const response = await window.fetch(jobStatusUrl(jobId), {
@@ -1187,6 +1369,15 @@
                     const job = payload && payload.job ? payload.job : null;
                     const status = job && job.status ? String(job.status) : "";
                     const message = job && job.message ? String(job.message) : "";
+                    const stage = job && job.stage ? String(job.stage) : "";
+                    const parsedProgress = Number(job && job.progress_percent);
+                    if (Number.isFinite(parsedProgress)) {
+                        lastProgressPercent = Math.max(0, Math.min(100, parsedProgress));
+                    }
+                    lastStageLabel = messageForJobStage(
+                        stage,
+                        message || String(options.message || labels.defaultMessage)
+                    );
 
                     if (status === "success") {
                         try {
@@ -1194,7 +1385,16 @@
                         } catch (_error) {
                             // Ignore storage errors.
                         }
-                        finishAction(message || labels.completed, { reload: reloadAfterFinish, reloadDelayMs });
+                        const successLabel = actionId === "update-application"
+                            ? messageForJobStage("completed", labels.completed)
+                            : (message || labels.completed);
+                        finishAction(successLabel, {
+                            reload: reloadAfterFinish,
+                            reloadDelayMs,
+                            title,
+                            progressPercent: 100,
+                            stageLabel: successLabel,
+                        });
                         return;
                     }
 
@@ -1204,64 +1404,40 @@
                         } catch (_error) {
                             // Ignore storage errors.
                         }
-                        finishAction(message || labels.failed, { reload: false });
+                        const failedLabel = actionId === "update-application"
+                            ? messageForJobStage("failed", labels.failed)
+                            : labels.failed;
+                        finishAction(failedLabel, {
+                            reload: false,
+                            title,
+                            progressPercent: lastProgressPercent,
+                            stageLabel: failedLabel,
+                            detail: message && message !== failedLabel ? message : "",
+                        });
                         return;
                     }
 
-                    if (canFinalizeRunningJobFromHealth(actionId, reloadAfterFinish)) {
-                        try {
-                            const healthResponse = await window.fetch(healthUrl, {
-                                cache: "no-store",
-                                credentials: "same-origin",
-                                headers: { "Accept": "application/json" },
-                            });
-                            if (healthResponse.ok) {
-                                try {
-                                    window.sessionStorage.removeItem(activeJobStorageKey);
-                                } catch (_storageError) {
-                                    // Ignore storage errors.
-                                }
-                                finishAction(message || labels.completed, { reload: true, reloadDelayMs });
-                                return;
-                            }
-                        } catch (_healthError) {
-                            // Ignore health check errors and continue polling.
-                        }
-                    }
-
-                    showSettingsProgress(message || String(options.message || labels.defaultMessage), {
+                    showSettingsProgress(lastStageLabel, {
                         locked: true,
-                        lockTimeoutMs,
+                        title,
+                        progressPercent: lastProgressPercent,
+                        stageLabel: lastStageLabel,
+                        detail: overdueDetail,
                     });
                 } catch (_error) {
-                    if (canReloadOnHealthRecovery(actionId, reloadAfterFinish)) {
-                        try {
-                            const healthResponse = await window.fetch(healthUrl, {
-                                cache: "no-store",
-                                credentials: "same-origin",
-                                headers: { "Accept": "application/json" },
-                            });
-                            if (healthResponse.ok) {
-                                try {
-                                    window.sessionStorage.removeItem(activeJobStorageKey);
-                                } catch (_storageError) {
-                                    // Ignore storage errors.
-                                }
-                                finishAction(labels.completed, { reload: true, reloadDelayMs });
-                                return;
-                            }
-                        } catch (_healthError) {
-                            // Ignore health check errors and keep polling.
-                        }
-                    }
-                    const base = String(options.message || labels.defaultMessage);
-                    showSettingsProgress(`${base}\n${labels.reconnecting}`, {
+                    const reconnectDetail = overdueDetail
+                        ? `${labels.reconnecting}\n${overdueDetail}`
+                        : labels.reconnecting;
+                    showSettingsProgress(lastStageLabel, {
                         locked: true,
-                        lockTimeoutMs,
+                        title,
+                        progressPercent: lastProgressPercent,
+                        stageLabel: lastStageLabel,
+                        detail: reconnectDetail,
                     });
                 }
 
-                activePollTimer = window.setTimeout(pollOnce, 3000);
+                activePollTimer = window.setTimeout(pollOnce, 2000);
             };
 
             pollOnce();
@@ -1329,7 +1505,16 @@
             form.dataset.settingsSubmitQueued = "1";
             disableFormControls(form, busyLabel);
             disableGroupControls(group, form);
-            showSettingsProgress(message, { locked: true, lockTimeoutMs });
+            if (mode === "job") {
+                showSettingsProgress(message, {
+                    locked: true,
+                    title: titleForAction(actionId),
+                    progressPercent: 0,
+                    stageLabel: message,
+                });
+            } else {
+                showSettingsProgress(message, { locked: true, lockTimeoutMs });
+            }
 
             if (mode === "job") {
                 startJob(form, options);
@@ -1382,7 +1567,12 @@
             const reloadDelayMs = Number(stored.reloadDelayMs || 0);
 
             progressDismissed = false;
-            showSettingsProgress(message, { locked: true, lockTimeoutMs });
+            showSettingsProgress(message, {
+                locked: true,
+                title: titleForAction(actionId),
+                progressPercent: 0,
+                stageLabel: message,
+            });
             pollJobStatus(jobId, startedAt, { actionId, lockTimeoutMs, message, reloadOnSuccess, reloadDelayMs });
         };
 
