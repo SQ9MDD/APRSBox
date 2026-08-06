@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10 - 2026-08-06
+- `Versión estable`: se integraron los cambios de las versiones `1.9.1.dev–1.9.8.dev`, que incluyen alertas APRS y meteorológicas, un nuevo Dashboard, mejoras en las condiciones de banda, APRS-IS y GUI reorganizados, ayuda ampliada, filtros de estaciones y una gestión más segura de las actualizaciones y tareas del sistema.
+
 ## 1.9.8.dev - 2026-08-05
 - `Ajustes / tareas del sistema`: la actualización de la aplicación, el reinicio de servicios, el reinicio del host y el apagado del host pasan explícitamente a sus scripts el identificador de la tarea y la ruta de la base de datos a través del límite de privilegios, manteniendo el estado y el progreso en el mismo registro incluso cuando se usa `sudo`.
 - `Ajustes / recuperación de tareas`: la supervisión del estado detecta tareas huérfanas de actualización o reinicio que permanecen bloqueadas durante el arranque después de que su proceso se haya detenido; las marca como fallidas y recomienda comprobar la versión instalada antes de volver a intentarlo.

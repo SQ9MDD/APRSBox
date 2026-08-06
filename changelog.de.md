@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10 - 2026-08-06
+- `Stabile Version`: Die Änderungen aus `1.9.1.dev–1.9.8.dev` wurden zusammengeführt, darunter APRS- und Wetteralarme, ein neues Dashboard, erweiterte Bandbedingungen, eine übersichtlichere APRS-IS- und GUI-Konfiguration, ausgebaute Hilfe, Stationsfilter sowie sicherere Anwendungsaktualisierungen und Systemaufträge.
+
 ## 1.9.8.dev - 2026-08-05
 - `Einstellungen / Systemaufträge`: Anwendungsaktualisierung, Dienstneustart, Host-Neustart und Host-Abschaltung übergeben die Auftrags-ID und den Datenbankpfad nun explizit über die Berechtigungsgrenze an ihre Skripte, sodass Status und Fortschritt auch bei Verwendung von `sudo` im selben Datensatz bleiben.
 - `Einstellungen / Auftragswiederherstellung`: Die Statusüberwachung erkennt verwaiste Aktualisierungs- oder Neustartaufträge, die nach dem Ende ihres Prozesses beim Start hängen bleiben; sie markiert diese als fehlgeschlagen und empfiehlt, vor einem erneuten Versuch die installierte Version zu prüfen.

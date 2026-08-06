@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10 - 06.08.2026
+- `Wydanie stabilne`: scalono zmiany z wersji `1.9.1.dev–1.9.8.dev`, obejmujące alarmy APRS i pogodowe, nowy Dashboard, rozwój warunków pasma, uporządkowanie APRS-IS i GUI, rozbudowaną pomoc, filtry stacji oraz bezpieczniejszą aktualizację aplikacji i obsługę zadań systemowych.
+
 ## 1.9.8.dev - 05.08.2026
 - `Ustawienia / zadania systemowe`: aktualizacja aplikacji, restart usług, restart hosta i wyłączenie hosta przekazują identyfikator zadania oraz ścieżkę bazy jawnie do skryptów przez granicę uprawnień, dzięki czemu status i postęp są zapisywane w tym samym rekordzie także po użyciu `sudo`.
 - `Ustawienia / odzyskiwanie zadań`: monitor statusu wykrywa osierocone zadania aktualizacji lub restartu, które utknęły na etapie uruchamiania i których proces już nie działa; oznacza je jako błąd i wyświetla komunikat zalecający sprawdzenie zainstalowanej wersji przed ponowną próbą.

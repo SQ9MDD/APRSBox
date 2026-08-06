@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10 - 2026-08-06
+- `Stable release`: merged changes from versions `1.9.1.dev–1.9.8.dev`, covering APRS and weather alerts, a new Dashboard, expanded band conditions, streamlined APRS-IS and GUI, extended help, station filters, and safer application updates and system job handling.
+
 ## 1.9.8.dev - 2026-08-05
 - `Settings / system jobs`: application update, service restart, host reboot, and host power-off now pass the job ID and database path explicitly to their scripts across the privilege boundary, keeping status and progress attached to the same record even when `sudo` is used.
 - `Settings / job recovery`: status monitoring detects orphaned update or restart jobs that remain stuck at startup after their process has stopped; it marks them as failed and advises verifying the installed version before trying again.
