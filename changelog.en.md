@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.1dev - 2026-08-08
+- `Settings / configuration backup v2`: exports now include message, internal TX, and notification settings plus notification transports and radar rules; the consistent snapshot omits runtime fields, while synchronization-based import preserves unchanged IDs and their job and log references. Legacy v1 files are not supported.
+
 ## 1.10 - 2026-08-06
 - `Stable release`: merged changes from versions `1.9.1.dev–1.9.8.dev`, covering APRS and weather alerts, a new Dashboard, expanded band conditions, streamlined APRS-IS and GUI, extended help, station filters, and safer application updates and system job handling.
 

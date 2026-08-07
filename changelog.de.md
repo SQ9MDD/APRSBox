@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.1dev - 2026-08-08
+- `Einstellungen / Konfigurationssicherung v2`: Exporte enthalten jetzt Nachrichten-, interne TX- und Benachrichtigungseinstellungen sowie Benachrichtigungstransporte und Radarregeln; der konsistente Snapshot lässt Laufzeitfelder aus, während der synchronisierende Import unveränderte IDs und ihre Verknüpfungen mit Aufgaben und Protokollen erhält. Alte v1-Dateien werden nicht unterstützt.
+
 ## 1.10 - 2026-08-06
 - `Stabile Version`: Die Änderungen aus `1.9.1.dev–1.9.8.dev` wurden zusammengeführt, darunter APRS- und Wetteralarme, ein neues Dashboard, erweiterte Bandbedingungen, eine übersichtlichere APRS-IS- und GUI-Konfiguration, ausgebaute Hilfe, Stationsfilter sowie sicherere Anwendungsaktualisierungen und Systemaufträge.
 

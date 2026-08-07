@@ -10,7 +10,7 @@ from app import get_version
 from app.db import connect, log_event, utc_now
 
 CONFIG_BACKUP_FORMAT = "aprsbox-config-backup"
-CONFIG_BACKUP_VERSION = 1
+CONFIG_BACKUP_VERSION = 2
 _FILENAME_TOKEN_RE = re.compile(r"[^A-Z0-9_-]+")
 
 CONFIG_BACKUP_TABLES: tuple[str, ...] = (
@@ -21,6 +21,8 @@ CONFIG_BACKUP_TABLES: tuple[str, ...] = (
     "wx_config",
     "wx_sources",
     "wx_mappings",
+    "notification_transports",
+    "notification_radar_rules",
     "igate_rules",
     "digi_rules",
     "digi_flows",
@@ -49,7 +51,23 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "aprs.map_alarm_level_threshold",
     "aprs.global_alarm_level_threshold",
     "aprs.alarm_category_thresholds",
+    "messages.default_path",
+    "messages.receive_any_ssid",
+    "messages.target_groups",
+    "station.tx.internal_mode",
+    "messages_enabled",
+    "messages_include_content",
+    "radar_enabled",
+    "radar_ignored_patterns",
 )
+
+# These columns describe transient counters or the result of a connectivity
+# test. They are deliberately not restored as configuration.
+CONFIG_BACKUP_EXCLUDED_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "map_sources": ("cache_tile_count", "cache_size_bytes"),
+    "wx_sources": ("last_test_status", "last_test_error", "last_test_at"),
+    "notification_transports": ("last_test_status", "last_test_error", "last_test_at"),
+}
 
 
 def build_configuration_backup_filename() -> str:
@@ -60,8 +78,9 @@ def build_configuration_backup_filename() -> str:
 
 def export_configuration_backup() -> dict[str, Any]:
     with connect() as connection:
+        connection.execute("BEGIN")
         tables_payload = {
-            table: [dict(row) for row in connection.execute(f"SELECT * FROM {table} ORDER BY rowid ASC").fetchall()]
+            table: _export_table_rows(connection, table)
             for table in CONFIG_BACKUP_TABLES
         }
         placeholders = ", ".join("?" for _ in CONFIG_BACKUP_APP_SETTING_KEYS)
@@ -75,10 +94,11 @@ def export_configuration_backup() -> dict[str, Any]:
             CONFIG_BACKUP_APP_SETTING_KEYS,
         ).fetchall()
 
-    app_settings_payload = {
-        str(row["key"]): str(row["value"])
-        for row in app_settings_rows
+    app_settings_payload: dict[str, str | None] = {
+        key: None
+        for key in CONFIG_BACKUP_APP_SETTING_KEYS
     }
+    app_settings_payload.update({str(row["key"]): str(row["value"]) for row in app_settings_rows})
     payload = {
         "format": CONFIG_BACKUP_FORMAT,
         "backup_version": CONFIG_BACKUP_VERSION,
@@ -126,7 +146,8 @@ def _parse_backup_payload(raw_payload: bytes) -> dict[str, Any]:
         raise ValueError("Backup payload must be a JSON object.")
     if str(payload.get("format") or "") != CONFIG_BACKUP_FORMAT:
         raise ValueError("Unsupported backup format.")
-    if int(payload.get("backup_version") or 0) != CONFIG_BACKUP_VERSION:
+    backup_version = payload.get("backup_version")
+    if isinstance(backup_version, bool) or not isinstance(backup_version, int) or backup_version != CONFIG_BACKUP_VERSION:
         raise ValueError("Unsupported backup version.")
 
     tables_payload = payload.get("tables")
@@ -136,6 +157,10 @@ def _parse_backup_payload(raw_payload: bytes) -> dict[str, Any]:
     if missing_tables:
         missing = ", ".join(missing_tables)
         raise ValueError(f"Backup payload is missing table data: {missing}.")
+    unexpected_tables = [table for table in tables_payload if table not in CONFIG_BACKUP_TABLES]
+    if unexpected_tables:
+        unexpected = ", ".join(sorted(str(table) for table in unexpected_tables))
+        raise ValueError(f"Backup payload contains unsupported table data: {unexpected}.")
 
     for table in CONFIG_BACKUP_TABLES:
         rows = tables_payload.get(table)
@@ -145,12 +170,23 @@ def _parse_backup_payload(raw_payload: bytes) -> dict[str, Any]:
             if not isinstance(row, dict):
                 raise ValueError(f"Backup payload contains invalid row shape for table '{table}'.")
 
-    app_settings_payload = payload.get("app_settings", {})
+    app_settings_payload = payload.get("app_settings")
     if not isinstance(app_settings_payload, dict):
         raise ValueError("Backup payload contains invalid app settings.")
+    missing_settings = [key for key in CONFIG_BACKUP_APP_SETTING_KEYS if key not in app_settings_payload]
+    if missing_settings:
+        missing = ", ".join(missing_settings)
+        raise ValueError(f"Backup payload is missing app settings: {missing}.")
+    unexpected_settings = [key for key in app_settings_payload if key not in CONFIG_BACKUP_APP_SETTING_KEYS]
+    if unexpected_settings:
+        unexpected = ", ".join(sorted(str(key) for key in unexpected_settings))
+        raise ValueError(f"Backup payload contains unsupported app settings: {unexpected}.")
+    for key, value in app_settings_payload.items():
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"Backup payload contains invalid value for app setting '{key}'.")
 
     return {
-        "app_settings": {str(key): str(value) for key, value in app_settings_payload.items()},
+        "app_settings": dict(app_settings_payload),
         "tables": tables_payload,
     }
 
@@ -162,13 +198,18 @@ def _apply_backup_payload(payload: dict[str, Any]) -> None:
     connection = connect()
     transaction_started = False
     try:
+        _validate_table_payload(connection, table_payload)
         connection.execute("BEGIN IMMEDIATE")
         transaction_started = True
         connection.execute("PRAGMA defer_foreign_keys = ON")
 
         _replace_app_settings(connection, app_settings_payload)
+        for table in reversed(CONFIG_BACKUP_TABLES):
+            _delete_missing_table_rows(connection, table, list(table_payload[table]))
         for table in CONFIG_BACKUP_TABLES:
-            _replace_table_rows(connection, table, list(table_payload.get(table) or []))
+            rows = list(table_payload[table])
+            _neutralize_unique_columns(connection, table, rows)
+            _sync_table_rows(connection, table, rows)
 
         violations = list(connection.execute("PRAGMA foreign_key_check").fetchall())
         if violations:
@@ -184,7 +225,7 @@ def _apply_backup_payload(payload: dict[str, Any]) -> None:
         connection.close()
 
 
-def _replace_app_settings(connection: sqlite3.Connection, app_settings_payload: dict[str, str]) -> None:
+def _replace_app_settings(connection: sqlite3.Connection, app_settings_payload: dict[str, str | None]) -> None:
     placeholders = ", ".join("?" for _ in CONFIG_BACKUP_APP_SETTING_KEYS)
     connection.execute(
         f"DELETE FROM app_settings WHERE key IN ({placeholders})",
@@ -192,7 +233,7 @@ def _replace_app_settings(connection: sqlite3.Connection, app_settings_payload: 
     )
     now = utc_now()
     for key in CONFIG_BACKUP_APP_SETTING_KEYS:
-        if key not in app_settings_payload:
+        if app_settings_payload[key] is None:
             continue
         connection.execute(
             """
@@ -203,23 +244,112 @@ def _replace_app_settings(connection: sqlite3.Connection, app_settings_payload: 
         )
 
 
-def _replace_table_rows(connection: sqlite3.Connection, table_name: str, rows: list[dict[str, Any]]) -> None:
-    table_columns = _table_columns(connection, table_name)
-    connection.execute(f"DELETE FROM {table_name}")
+def _sync_table_rows(connection: sqlite3.Connection, table_name: str, rows: list[dict[str, Any]]) -> None:
+    table_columns = _backup_table_columns(connection, table_name)
+    for row in rows:
+        row_id = int(row["id"])
+        exists = connection.execute(f'SELECT 1 FROM "{table_name}" WHERE id = ?', (row_id,)).fetchone()
+        if exists:
+            update_columns = [column for column in table_columns if column != "id"]
+            assignments = ", ".join(f'"{column}" = ?' for column in update_columns)
+            values = tuple(row[column] for column in update_columns)
+            connection.execute(
+                f'UPDATE "{table_name}" SET {assignments} WHERE id = ?',
+                (*values, row_id),
+            )
+            continue
+        quoted_columns = ", ".join(f'"{column}"' for column in table_columns)
+        placeholders = ", ".join("?" for _ in table_columns)
+        values = tuple(row[column] for column in table_columns)
+        connection.execute(f'INSERT INTO "{table_name}" ({quoted_columns}) VALUES ({placeholders})', values)
+
+
+def _delete_missing_table_rows(connection: sqlite3.Connection, table_name: str, rows: list[dict[str, Any]]) -> None:
+    row_ids = [int(row["id"]) for row in rows]
+    if not row_ids:
+        connection.execute(f'DELETE FROM "{table_name}"')
+        return
+    placeholders = ", ".join("?" for _ in row_ids)
+    connection.execute(f'DELETE FROM "{table_name}" WHERE id NOT IN ({placeholders})', row_ids)
+
+
+def _neutralize_unique_columns(connection: sqlite3.Connection, table_name: str, rows: list[dict[str, Any]]) -> None:
+    """Avoid transient UNIQUE conflicts while retained rows exchange values."""
     if not rows:
         return
-
-    for row in rows:
-        selected_columns = [column for column in table_columns if column in row]
-        if not selected_columns:
+    incoming_ids = [int(row["id"]) for row in rows]
+    id_placeholders = ", ".join("?" for _ in incoming_ids)
+    column_types = {
+        str(row["name"]): str(row["type"] or "").upper()
+        for row in connection.execute(f'PRAGMA table_info("{table_name}")').fetchall()
+    }
+    unique_columns: set[str] = set()
+    for index_row in connection.execute(f'PRAGMA index_list("{table_name}")').fetchall():
+        if not bool(index_row["unique"]):
             continue
-        quoted_columns = ", ".join(f'"{column}"' for column in selected_columns)
-        placeholders = ", ".join("?" for _ in selected_columns)
-        values = tuple(row[column] for column in selected_columns)
-        connection.execute(
-            f'INSERT INTO "{table_name}" ({quoted_columns}) VALUES ({placeholders})',
-            values,
-        )
+        index_name = str(index_row["name"])
+        index_columns = [
+            str(row["name"])
+            for row in connection.execute(f'PRAGMA index_info("{index_name}")').fetchall()
+            if row["name"] is not None
+        ]
+        candidates = [column for column in reversed(index_columns) if column != "id"]
+        if candidates:
+            unique_columns.add(candidates[0])
+    if not unique_columns:
+        return
+
+    connection.execute("PRAGMA ignore_check_constraints = ON")
+    try:
+        for column in sorted(unique_columns):
+            column_type = column_types.get(column, "")
+            if any(token in column_type for token in ("INT", "REAL", "NUM", "DEC", "FLOAT", "DOUBLE")):
+                temporary_value = "(-9000000000000000000 + id)"
+            else:
+                temporary_value = f"'__APRSBOX_BACKUP_V2_{table_name}_' || id"
+            connection.execute(
+                f'UPDATE "{table_name}" SET "{column}" = {temporary_value} WHERE id IN ({id_placeholders})',
+                incoming_ids,
+            )
+    finally:
+        connection.execute("PRAGMA ignore_check_constraints = OFF")
+
+
+def _validate_table_payload(connection: sqlite3.Connection, table_payload: dict[str, Any]) -> None:
+    for table_name in CONFIG_BACKUP_TABLES:
+        expected_columns = set(_backup_table_columns(connection, table_name))
+        seen_ids: set[int] = set()
+        for row in table_payload[table_name]:
+            actual_columns = set(row)
+            if actual_columns != expected_columns:
+                missing = sorted(expected_columns - actual_columns)
+                unexpected = sorted(actual_columns - expected_columns)
+                details: list[str] = []
+                if missing:
+                    details.append(f"missing columns: {', '.join(missing)}")
+                if unexpected:
+                    details.append(f"unsupported columns: {', '.join(unexpected)}")
+                raise ValueError(f"Backup row for table '{table_name}' has an invalid schema ({'; '.join(details)}).")
+            row_id = row.get("id")
+            if isinstance(row_id, bool) or not isinstance(row_id, int) or row_id < 1:
+                raise ValueError(f"Backup row for table '{table_name}' contains an invalid id.")
+            if row_id in seen_ids:
+                raise ValueError(f"Backup table '{table_name}' contains duplicate id {row_id}.")
+            seen_ids.add(row_id)
+
+
+def _export_table_rows(connection: sqlite3.Connection, table_name: str) -> list[dict[str, Any]]:
+    columns = _backup_table_columns(connection, table_name)
+    quoted_columns = ", ".join(f'"{column}"' for column in columns)
+    return [
+        dict(row)
+        for row in connection.execute(f'SELECT {quoted_columns} FROM "{table_name}" ORDER BY id ASC').fetchall()
+    ]
+
+
+def _backup_table_columns(connection: sqlite3.Connection, table_name: str) -> list[str]:
+    excluded = set(CONFIG_BACKUP_EXCLUDED_TABLE_COLUMNS.get(table_name, ()))
+    return [column for column in _table_columns(connection, table_name) if column not in excluded]
 
 
 def _table_columns(connection: sqlite3.Connection, table_name: str) -> list[str]:

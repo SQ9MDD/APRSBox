@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.1dev - 08.08.2026
+- `Ustawienia / kopia konfiguracji v2`: eksport obejmuje teraz ustawienia wiadomości, wewnętrznego TX i powiadomień oraz transporty i reguły radaru; spójny snapshot pomija pola runtime, a synchronizacyjny import zachowuje niezmienione identyfikatory i powiązania z zadaniami oraz logami. Stare pliki v1 nie są obsługiwane.
+
 ## 1.10 - 06.08.2026
 - `Wydanie stabilne`: scalono zmiany z wersji `1.9.1.dev–1.9.8.dev`, obejmujące alarmy APRS i pogodowe, nowy Dashboard, rozwój warunków pasma, uporządkowanie APRS-IS i GUI, rozbudowaną pomoc, filtry stacji oraz bezpieczniejszą aktualizację aplikacji i obsługę zadań systemowych.
 

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.1dev - 2026-08-08
+- `Ajustes / copia de configuración v2`: la exportación incluye ahora ajustes de mensajes, TX interno y notificaciones, además de transportes y reglas de radar; la instantánea coherente omite campos de ejecución y la importación por sincronización conserva los ID sin cambios y sus referencias a tareas y registros. Los archivos v1 antiguos no son compatibles.
+
 ## 1.10 - 2026-08-06
 - `Versión estable`: se integraron los cambios de las versiones `1.9.1.dev–1.9.8.dev`, que incluyen alertas APRS y meteorológicas, un nuevo Dashboard, mejoras en las condiciones de banda, APRS-IS y GUI reorganizados, ayuda ampliada, filtros de estaciones y una gestión más segura de las actualizaciones y tareas del sistema.
 
