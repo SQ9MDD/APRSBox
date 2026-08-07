@@ -4,7 +4,7 @@ Este panel exporta y restaura una instantánea de la configuración de la interf
 
 ## Datos incluidos
 
-La copia v2 contiene ajustes globales, de mensajes y de notificaciones, además de la configuración de fuentes de mapa, interfaces TNC y APRS-IS, estación y WX, transportes y reglas de radar de notificaciones, flujos y reglas de enrutamiento, objetos y elementos APRS, boletines y estaciones de referencia de condiciones de banda.
+La copia v2 contiene ajustes globales, de mensajes y de notificaciones, además de la configuración de fuentes de mapa, interfaces TNC y APRS-IS, estación y WX, transportes y reglas de radar de notificaciones, flujos y reglas de enrutamiento, objetos y elementos APRS y boletines.
 
 El tráfico de ejecución, los resultados de pruebas de transportes, el estado del radar de notificaciones, los registros de eventos, el historial de mensajes, las alertas APRS propias, las cuentas de usuario y otras tablas fuera del formato compatible no se incluyen.
 

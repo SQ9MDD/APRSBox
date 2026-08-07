@@ -4,7 +4,7 @@ Dieses Panel exportiert und importiert einen APRSBox-GUI-Konfigurationsstand als
 
 ## Enthaltene Daten
 
-Die v2-Sicherung enthält globale, Nachrichten- und Benachrichtigungseinstellungen sowie Konfigurationen für Kartenquellen, TNC- und APRS-IS-Schnittstellen, Station und WX, Benachrichtigungstransporte und Radarregeln, Routing-Flows und -Regeln, APRS-Objekte und -Elemente, Bulletins und Referenzstationen für Bandbedingungen.
+Die v2-Sicherung enthält globale, Nachrichten- und Benachrichtigungseinstellungen sowie Konfigurationen für Kartenquellen, TNC- und APRS-IS-Schnittstellen, Station und WX, Benachrichtigungstransporte und Radarregeln, Routing-Flows und -Regeln, APRS-Objekte und -Elemente sowie Bulletins.
 
 Laufzeitverkehr, Transporttestergebnisse, Benachrichtigungsradarstatus, Ereignisprotokolle, Nachrichtenverlauf, eigene APRS-Alarme, Benutzerkonten und andere Tabellen außerhalb des unterstützten Sicherungsformats sind nicht enthalten.
 

@@ -30,7 +30,6 @@ CONFIG_BACKUP_TABLES: tuple[str, ...] = (
     "aprs_objects",
     "aprs_items",
     "bulletins",
-    "band_condition_reference_stations",
 )
 
 CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (

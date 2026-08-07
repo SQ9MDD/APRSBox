@@ -90,6 +90,7 @@ class ConfigBackupTests(unittest.TestCase):
                 payload["app_settings"]["aprs.alarm_category_thresholds"],
             )
             self.assertNotIn("scheduler.wx.last_refresh_at", payload["app_settings"])
+            self.assertNotIn("band_condition_reference_stations", payload["tables"])
             self.assertIn("messages.default_path", payload["app_settings"])
             self.assertIsNone(payload["app_settings"]["messages.default_path"])
 

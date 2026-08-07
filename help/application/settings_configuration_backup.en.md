@@ -4,7 +4,7 @@ This panel exports and restores an APRSBox GUI configuration snapshot in UTF-8 `
 
 ## Included data
 
-The v2 snapshot contains global, message, and notification settings and configuration for map sources, TNC and APRS-IS interfaces, station and WX, notification transports and radar rules, routing flows and rules, APRS objects and items, bulletins, and band-condition reference stations.
+The v2 snapshot contains global, message, and notification settings and configuration for map sources, TNC and APRS-IS interfaces, station and WX, notification transports and radar rules, routing flows and rules, APRS objects and items, and bulletins.
 
 Runtime traffic, transport test results, notification radar state, event logs, message history, own APRS alerts, user accounts, and other tables outside the supported backup format are not included.
 

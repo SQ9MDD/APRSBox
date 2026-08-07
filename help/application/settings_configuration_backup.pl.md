@@ -4,7 +4,7 @@ Ten panel eksportuje i odtwarza migawkę konfiguracji GUI APRSBox w formacie `JS
 
 ## Zakres kopii
 
-Migawka v2 zawiera ustawienia globalne, wiadomości i powiadomień oraz konfigurację źródeł map, interfejsów TNC i APRS-IS, stacji i WX, transportów i reguł radaru powiadomień, przepływów i reguł routingu, obiektów i elementów APRS, biuletynów oraz stacji referencyjnych warunków pasmowych.
+Migawka v2 zawiera ustawienia globalne, wiadomości i powiadomień oraz konfigurację źródeł map, interfejsów TNC i APRS-IS, stacji i WX, transportów i reguł radaru powiadomień, przepływów i reguł routingu, obiektów i elementów APRS oraz biuletynów.
 
 Ruch runtime, wyniki testów transportów, stan radaru powiadomień, logi zdarzeń, historia wiadomości, własne alarmy APRS, konta użytkowników i pozostałe tabele spoza obsługiwanego formatu kopii nie są uwzględniane.
 

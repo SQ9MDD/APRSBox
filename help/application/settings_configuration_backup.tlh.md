@@ -4,7 +4,7 @@ panelvam APRSBox GUI configuration snapshot UTF-8 `JSON` formatDaq export restor
 
 ## De' ngaSbogh
 
-Snapshot v2 global settings, message notification settings je, map sources, TNC APRS-IS interfaces, station WX, notification transports radar rules je, routing flows rules je, APRS objects items je, bulletins, band-condition reference stations je ngaS.
+Snapshot v2 global settings, message notification settings je, map sources, TNC APRS-IS interfaces, station WX, notification transports radar rules je, routing flows rules je, APRS objects items je, bulletins je ngaS.
 
 Runtime traffic, transport test results, notification radar state, event logs, message history, own APRS alerts, user accounts, tables latlh unsupported je ngaSbe'.
 
