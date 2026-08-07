@@ -1,8 +1,10 @@
 # APRS-Notfallalarme
 
-Die Registerkarte `Alarme` zeigt logische Alarme, die aus empfangenen APRS-Notfallframes erstellt wurden. Weitere Frames desselben vollständigen Quellrufzeichens aktualisieren einen Alarm und dessen Verlauf.
+Die Registerkarte `Alarme` zeigt logische Alarme aus nativen APRS-Notfallframes sowie aus CAWF- und `NWS-WARN`-Gruppennachrichten. Alle erscheinen in derselben Liste und bieten Details, Frame-Verlauf, Stummschaltung und Löschen.
 
-- Ein Klick auf eine Zeile öffnet das Modal mit dem neuesten Notfallframe.
+`NWS-WARN` dient zum Empfang kompakter US-Wetterwarnungen auf County-Ebene. Die Alarmdetails enthalten unter anderem Ereignis, Stufe, Ablaufzeit und UGC-Gebietscodes; erkannte Countys werden auf der Karte hervorgehoben. Dieses Profil ist nur für den Empfang bestimmt: APRSBox kann einen `NWS-WARN`-Alarm weder senden noch aufheben. Gruppenkonfiguration, Frame-Format, Stufen, Gebietszuordnung und Einschränkungen beschreibt die [ausführliche NWS-WARN-Hilfe](settings_alarms_nws_warn.de.md).
+
+- Ein Klick auf eine Zeile öffnet das Modal mit dem neuesten Alarmframe.
 - Die Schaltfläche mit den Alarmdetails öffnet den vollständigen Datensatz und den Verlauf der zugehörigen Frames.
 - Das Stummschalten stoppt weder die Aktualisierung des Alarms noch den Frame-Zähler.
 - Beim Löschen eines Alarms bleiben die ursprünglichen Frames im Verkehrsmonitor erhalten.
@@ -22,12 +24,12 @@ Diese Berechtigung muss im Browser des Anzeigegeräts gesetzt werden. Der APRSBo
 
 Prüfe außerdem, ob Tab, Browser und Betriebssystem nicht stummgeschaltet sind und ob der richtige Audioausgang ausgewählt ist.
 
-Nachdem die automatische Wiedergabe erlaubt wurde, öffnet ein nicht stummgeschalteter Notfallframe das Modal und startet den Ton ohne zusätzlichen Klick. Ein stummgeschalteter Alarm wird weiterhin aktualisiert, bleibt aber absichtlich lautlos.
+Nachdem die automatische Wiedergabe erlaubt wurde, öffnet ein nicht stummgeschalteter Frame, der den Popup-Schwellwert erfüllt, das Modal und startet den Ton ohne zusätzlichen Klick. Das gilt auch für `NWS-WARN`, wenn Kategorie und Stufe den konfigurierten Popup-Schwellwert erreichen. Ein stummgeschalteter Alarm wird weiterhin aktualisiert, bleibt aber absichtlich lautlos.
 
 ## Stummschalten
 
-Alarme können für `1 Stunde`, `4 Stunden`, `24 Stunden` oder unbegrenzt stummgeschaltet werden. Nach Ablauf einer zeitlichen Stummschaltung kann erst ein weiterer Notfallframe das Modal und den Ton auslösen.
+Alarme können für `1 Stunde`, `4 Stunden`, `24 Stunden` oder unbegrenzt stummgeschaltet werden. Nach Ablauf einer zeitlichen Stummschaltung kann erst ein weiterer Frame dieses Alarms das Modal und den Ton auslösen.
 
 ## Löschen
 
-Beim Löschen werden der logische Alarmdatensatz und seine Beziehungen entfernt. Die ursprünglichen Frames bleiben im Verkehrsmonitor. Der nächste Notfallframe dieser Quelle erstellt einen neuen Alarm.
+Beim Löschen werden der logische Alarmdatensatz und seine Beziehungen entfernt. Die ursprünglichen Frames bleiben im Verkehrsmonitor. Ein späterer passender Frame kann den Alarm erneut erstellen.

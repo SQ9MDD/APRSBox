@@ -25,6 +25,11 @@ class HelpMarkdownTests(unittest.TestCase):
                 self.assertEqual(resolved[0], f"application/alerts.{language}.md")
                 self.assertTrue(resolved[1].startswith(heading))
                 self.assertIn("aut", resolved[1].lower())
+                self.assertIn("NWS-WARN", resolved[1])
+                self.assertIn(
+                    f"settings_alarms_nws_warn.{language}.md",
+                    resolved[1],
+                )
 
     def test_aprsis_message_delivery_rule_has_dedicated_localized_help(self) -> None:
         expected_headings = {

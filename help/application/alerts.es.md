@@ -1,8 +1,10 @@
 # Alarmas de emergencia APRS
 
-La pestaña `Alarmas` muestra alarmas lógicas creadas a partir de tramas APRS de emergencia recibidas. Las tramas posteriores del mismo indicativo de origen completo actualizan una sola alarma y su historial.
+La pestaña `Alarmas` muestra alarmas lógicas creadas a partir de tramas APRS de emergencia nativas y mensajes de grupo CAWF o `NWS-WARN`. Todas aparecen en la misma lista y ofrecen detalles, historial de tramas, silencio y eliminación.
 
-- Al hacer clic en una fila se abre el modal con la trama de emergencia más reciente.
+`NWS-WARN` sirve para recibir avisos meteorológicos compactos por condados de Estados Unidos. Los detalles incluyen, entre otros datos, el evento, el nivel, la caducidad y los códigos de área UGC; APRSBox resalta en el mapa los condados reconocidos. Es un perfil de solo recepción: APRSBox no puede enviar ni cancelar una alarma `NWS-WARN`. La configuración del grupo, el formato, los niveles, el mapeo de áreas y las limitaciones se explican en la [guía detallada de NWS-WARN](settings_alarms_nws_warn.es.md).
+
+- Al hacer clic en una fila se abre el modal con la trama de alarma más reciente.
 - El botón de detalles de la alarma abre el registro completo y el historial de tramas relacionadas.
 - Silenciar no detiene las actualizaciones de la alarma ni el contador de tramas.
 - Eliminar una alarma no borra las tramas originales del monitor de tráfico.
@@ -22,12 +24,12 @@ Este permiso debe configurarse en el navegador del ordenador de visualización. 
 
 Comprueba también que la pestaña, el navegador y el sistema operativo no estén silenciados y que esté seleccionada la salida de audio correcta.
 
-Después de permitir la reproducción automática, una trama de emergencia no silenciada abre el modal e inicia el sonido sin un clic adicional. Una alarma silenciada continúa actualizándose, pero permanece en silencio de forma intencionada.
+Después de permitir la reproducción automática, una trama no silenciada que cumpla el umbral de ventana de alerta abre el modal e inicia el sonido sin un clic adicional. Esto también se aplica a `NWS-WARN` cuando su categoría y nivel cumplen el umbral configurado. Una alarma silenciada continúa actualizándose, pero permanece en silencio de forma intencionada.
 
 ## Silenciar
 
-Las alarmas pueden silenciarse durante `1 hora`, `4 horas`, `24 horas` o indefinidamente. Cuando termina un silencio temporal, solo una trama de emergencia posterior puede abrir el modal e iniciar el sonido.
+Las alarmas pueden silenciarse durante `1 hora`, `4 horas`, `24 horas` o indefinidamente. Cuando termina un silencio temporal, solo una trama posterior de esa alarma puede abrir el modal e iniciar el sonido.
 
 ## Eliminar
 
-La eliminación borra el registro lógico de la alarma y sus relaciones. Las tramas originales permanecen en el monitor de tráfico. La siguiente trama de emergencia de ese origen crea una alarma nueva.
+La eliminación borra el registro lógico de la alarma y sus relaciones. Las tramas originales permanecen en el monitor de tráfico. Una trama posterior que coincida puede volver a crear la alarma.
