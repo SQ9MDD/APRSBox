@@ -3267,6 +3267,7 @@ def station_update(
     tx_enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     current_default_units = get_station_settings().get("default_units", "metric")
     payload = {
         "callsign": callsign.strip(),
@@ -3290,8 +3291,21 @@ def station_update(
     }
     success, error = safe_update_station_settings(payload)
     if not success:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save station settings.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _station_page_context(request, current_user, flash=error, flash_success=False, station=payload)
         return templates.TemplateResponse("station.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Station settings saved."),
+                "reload": True,
+            }
+        )
     context = _station_page_context(request, current_user, flash="Station settings saved.", flash_success=True)
     return templates.TemplateResponse("station.html", context)
 
@@ -3320,6 +3334,7 @@ def station_send_beacon(
     tx_enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     current_default_units = get_station_settings().get("default_units", "metric")
     payload = {
         "callsign": callsign.strip(),
@@ -3343,10 +3358,20 @@ def station_send_beacon(
     }
     success, error = safe_update_station_settings(payload)
     if not success:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save station settings.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _station_page_context(request, current_user, flash=error, flash_success=False, station=payload)
         return templates.TemplateResponse("station.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     station_settings = get_station_settings()
     success, flash = enqueue_beacon_job(station_settings)
+    if wants_json:
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(flash), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _station_page_context(request, current_user, flash=flash, flash_success=success, station=station_settings)
     return templates.TemplateResponse("station.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
@@ -3387,6 +3412,7 @@ def station_send_status(
     tx_enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     current_default_units = get_station_settings().get("default_units", "metric")
     payload = {
         "callsign": callsign.strip(),
@@ -3410,10 +3436,20 @@ def station_send_status(
     }
     success, error = safe_update_station_settings(payload)
     if not success:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save station settings.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _station_page_context(request, current_user, flash=error, flash_success=False, station=payload)
         return templates.TemplateResponse("station.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     station_settings = get_station_settings()
     success, flash = enqueue_status_job(station_settings)
+    if wants_json:
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(flash), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _station_page_context(request, current_user, flash=flash, flash_success=success, station=station_settings)
     return templates.TemplateResponse("station.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 

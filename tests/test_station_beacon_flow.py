@@ -460,6 +460,67 @@ class StationSettingsAndSchedulerTests(unittest.TestCase):
         for language in ("pl", "en", "es", "de"):
             self.assertTrue(Path(f"help/application/station.{language}.md").exists())
 
+    def test_station_save_uses_settings_style_progress_modal(self) -> None:
+        template_source = Path("app/templates/station.html").read_text(encoding="utf-8")
+        self.assertIn('id="station-save-progress"', template_source)
+        self.assertIn("settings-progress-spinner", template_source)
+        self.assertIn("initStationSaveProgress", template_source)
+        self.assertIn('"X-Requested-With": "XMLHttpRequest"', template_source)
+        self.assertIn('"Accept": "application/json"', template_source)
+        self.assertIn('id="station-manual-send-confirm-modal"', template_source)
+        self.assertIn("Are you sure you want to send the beacon now?", template_source)
+        self.assertIn("Are you sure you want to send the APRS status now?", template_source)
+        self.assertIn("isBeaconAction", template_source)
+        self.assertIn("isStatusAction", template_source)
+
+    def test_station_save_ajax_returns_modal_result_payload(self) -> None:
+        with temporary_database():
+            from fastapi.testclient import TestClient
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            interface_id = insert_modem()
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                response = TestClient(app).post(
+                    "/station",
+                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                    data=station_payload(interface_id, tx_enabled="1"),
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response.json(),
+                    {"ok": True, "message": "Station settings saved.", "reload": True},
+                )
+
+                for endpoint, queue_function, queue_message in (
+                    ("/station/send-beacon", "enqueue_beacon_job", "Beacon queued."),
+                    ("/station/send-status", "enqueue_status_job", "Status queued."),
+                ):
+                    with self.subTest(endpoint=endpoint), patch(
+                        f"app.routers.pages.{queue_function}",
+                        return_value=(True, queue_message),
+                    ):
+                        send_response = TestClient(app).post(
+                            endpoint,
+                            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                            data=station_payload(interface_id, tx_enabled="1"),
+                        )
+                        self.assertEqual(send_response.status_code, 200)
+                        self.assertEqual(
+                            send_response.json(),
+                            {"ok": True, "message": queue_message, "reload": True},
+                        )
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
+
     def test_station_template_uses_chromeless_outer_panel_without_touching_tx_log(self) -> None:
         template_source = Path("app/templates/station.html").read_text(encoding="utf-8")
         stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")

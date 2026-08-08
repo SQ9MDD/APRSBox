@@ -315,6 +315,7 @@
   "Select language": "Select language",
   "Select symbol": "Select symbol",
   "Are you sure you want to send the beacon now?": "Are you sure you want to send the beacon now?",
+  "Are you sure you want to send the APRS status now?": "Are you sure you want to send the APRS status now?",
   "Beacon queued for transmission.": "Beacon queued for transmission.",
   "Beacon could not be queued.": "Beacon could not be queued.",
   "Send beacon": "Send beacon",

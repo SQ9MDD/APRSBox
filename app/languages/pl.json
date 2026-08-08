@@ -319,6 +319,7 @@
   "Select language": "Wybierz język",
   "Select symbol": "Wybierz symbol",
   "Are you sure you want to send the beacon now?": "Czy na pewno chcesz teraz wysłać beacon?",
+  "Are you sure you want to send the APRS status now?": "Czy na pewno chcesz teraz wysłać status APRS?",
   "Beacon queued for transmission.": "Beacon został dodany do kolejki nadawczej.",
   "Beacon could not be queued.": "Nie udało się dodać beaconu do kolejki.",
   "Send beacon": "Wyślij beacon",
