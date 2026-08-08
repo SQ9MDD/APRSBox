@@ -265,7 +265,7 @@
             {% if section.slug in ['objects', 'items', 'modems', 'bulletins'] and flash %}
             <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
             {% endif %}
-            <form method="post" class="form-grid" id="{{ section.slug }}-form">
+            <form method="post" class="form-grid" id="{{ section.slug }}-form"{% if section.slug == 'modems' %} data-interface-save-action{% endif %}>
                 {% if section.supports_editing and edit_row %}
                 <input type="hidden" name="record_id" value="{{ edit_row.id }}">
                 {% endif %}
@@ -573,6 +573,18 @@
 {% endif %}
 {% if section.slug == 'modems' %}
 <script src="{{ request.scope.root_path }}/static/js/aprsis-interface-status.js?v={{ app_version }}"></script>
+<div class="settings-progress-backdrop" id="interface-save-progress" hidden>
+    <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
+        <div class="settings-progress-header">
+            <span class="settings-progress-spinner" aria-hidden="true"></span>
+            <h3 class="settings-progress-title">{{ t("Please wait") }}</h3>
+        </div>
+        <p class="settings-progress-message">{{ t("Saving...") }}</p>
+        <div class="settings-progress-actions" hidden>
+            <button type="button" class="button button-secondary settings-progress-close">{{ t("OK") }}</button>
+        </div>
+    </div>
+</div>
 {% endif %}
 <script>
     (() => {
@@ -786,6 +798,81 @@
                 }
                 syncModemFields();
             }
+
+            const saveProgress = document.getElementById("interface-save-progress");
+            const progressMessage = saveProgress?.querySelector(".settings-progress-message");
+            const progressActions = saveProgress?.querySelector(".settings-progress-actions");
+            const progressClose = saveProgress?.querySelector(".settings-progress-close");
+            const submitControls = Array.from(modemForm.querySelectorAll("button[type='submit'], input[type='submit']"));
+            const savingMessage = {{ t("Saving...")|tojson }};
+            const failedMessage = {{ t("Operation failed.")|tojson }};
+
+            const setSaving = (saving) => {
+                modemForm.toggleAttribute("aria-busy", saving);
+                for (const control of submitControls) {
+                    control.disabled = saving;
+                }
+            };
+
+            const showSaveProgress = (message, finished = false) => {
+                if (!saveProgress) return;
+                if (progressMessage) progressMessage.textContent = String(message || savingMessage);
+                if (progressActions) progressActions.hidden = !finished;
+                saveProgress.hidden = false;
+            };
+
+            const hideSaveProgress = () => {
+                if (saveProgress) saveProgress.hidden = true;
+            };
+
+            if (progressClose) progressClose.addEventListener("click", hideSaveProgress);
+            if (saveProgress) {
+                saveProgress.addEventListener("click", (event) => {
+                    if (event.target === saveProgress && progressActions && !progressActions.hidden) hideSaveProgress();
+                });
+            }
+
+            modemForm.addEventListener("submit", (event) => {
+                const submitter = event.submitter;
+                if (submitter && submitter.formAction && submitter.formAction !== modemForm.action) return;
+
+                event.preventDefault();
+                setSaving(true);
+                showSaveProgress(savingMessage);
+                const startedAt = Date.now();
+
+                void window.fetch(modemForm.action, {
+                    method: String(modemForm.method || "post").toUpperCase(),
+                    body: new FormData(modemForm),
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json",
+                    },
+                }).then(async (response) => {
+                    let payload = null;
+                    try {
+                        payload = await response.json();
+                    } catch (_error) {
+                        payload = null;
+                    }
+                    const remaining = Math.max(0, 500 - (Date.now() - startedAt));
+                    if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+
+                    if (!response.ok || !payload || payload.ok !== true) {
+                        const detail = payload && payload.error ? ` ${payload.error}` : ` HTTP ${response.status}`;
+                        throw new Error(detail.trim());
+                    }
+
+                    setSaving(false);
+                    showSaveProgress(payload.message, true);
+                    if (payload.reload) window.setTimeout(() => window.location.reload(), 1200);
+                }).catch((error) => {
+                    setSaving(false);
+                    const detail = error && error.message ? ` ${error.message}` : "";
+                    showSaveProgress(`${failedMessage}${detail}`, true);
+                });
+            });
         }
 
         for (const slug of ["objects", "items"]) {

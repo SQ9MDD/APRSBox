@@ -192,6 +192,33 @@ class AprsisInterfaceConfigurationTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(response.status_code, 200)
+                interface_row = fetch_one("SELECT id FROM modems WHERE name = 'Internet'")
+                assert interface_row is not None
+
+                ajax_response = client.post(
+                    "/settings/modems",
+                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                    data={
+                        "record_id": str(int(interface_row["id"])),
+                        "name": "Internet",
+                        "modem_type": "APRSIS",
+                        "enabled": "1",
+                        "device_path": "m/50",
+                        "aprsis_server": "example.aprs2.net",
+                        "aprsis_port": "10152",
+                        "aprsis_login": "SQ9XYZ-10",
+                        "aprsis_passcode": "12345",
+                    },
+                )
+                self.assertEqual(ajax_response.status_code, 200)
+                self.assertEqual(
+                    ajax_response.json(),
+                    {
+                        "ok": True,
+                        "message": "Interface settings updated.",
+                        "reload": True,
+                    },
+                )
                 config = get_aprsis_config()
                 self.assertEqual(config["server"], "example.aprs2.net")
                 self.assertEqual(config["port"], 10152)
@@ -200,8 +227,6 @@ class AprsisInterfaceConfigurationTests(unittest.TestCase):
 
                 legacy_response = client.get("/igate", follow_redirects=False)
                 self.assertEqual(legacy_response.status_code, 303)
-                interface_row = fetch_one("SELECT id FROM modems WHERE name = 'Internet'")
-                assert interface_row is not None
                 self.assertEqual(
                     legacy_response.headers["location"],
                     f"/settings/modems?edit={int(interface_row['id'])}",

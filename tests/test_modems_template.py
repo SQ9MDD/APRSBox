@@ -20,6 +20,14 @@ class ModemsTemplateTests(unittest.TestCase):
         for language in ("pl", "en", "es", "de"):
             self.assertTrue(Path(f"help/application/tnc.{language}.md").exists())
 
+    def test_modem_save_uses_settings_style_progress_modal(self) -> None:
+        template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
+        self.assertIn("data-interface-save-action", template_source)
+        self.assertIn('id="interface-save-progress"', template_source)
+        self.assertIn("settings-progress-spinner", template_source)
+        self.assertIn('"X-Requested-With": "XMLHttpRequest"', template_source)
+        self.assertIn('"Accept": "application/json"', template_source)
+
     def test_aprsis_gui_uses_concise_connection_controls(self) -> None:
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
         fields_source = Path("app/templates/partials/modem_form_fields.html").read_text(encoding="utf-8")

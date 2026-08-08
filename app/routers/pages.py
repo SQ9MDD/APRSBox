@@ -1272,12 +1272,22 @@ def modems_create(
     aprsis_passcode: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
+
+    def error_response(message: object, context: dict[str, Any]) -> object:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(message)},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
     normalized_modem_type = modem_type.strip().upper()
     if normalized_modem_type == "SERIAL":
         normalized_modem_type = "SERIALL"
     if normalized_modem_type not in {"SERIALL", "TCP", OPENWEBRX_MQTT_MODEM_TYPE, APRSIS_MODEM_TYPE}:
         context = _section_template_context(request, current_user, "modems", flash="Unsupported interface type.")
-        return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+        return error_response("Unsupported interface type.", context)
     normalized_device_path = device_path.strip()
     if record_id is not None and normalized_modem_type == OPENWEBRX_MQTT_MODEM_TYPE and "***" in normalized_device_path:
         existing_row = fetch_one("SELECT modem_type, device_path FROM modems WHERE id = ?", (record_id,))
@@ -1329,7 +1339,7 @@ def modems_create(
                 edit_row=edit_row,
                 form_data={**payload, **aprsis_form_data},
             )
-            return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+            return error_response(str(exc), context)
     if record_id is None:
         if normalized_modem_type == APRSIS_MODEM_TYPE:
             existing_aprsis = fetch_one("SELECT id FROM modems WHERE UPPER(modem_type) = 'APRSIS' LIMIT 1")
@@ -1342,7 +1352,7 @@ def modems_create(
                     flash="An APRSIS interface already exists. Edit the existing interface instead.",
                     edit_row=get_section_row("modems", existing_id),
                 )
-                return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+                return error_response("An APRSIS interface already exists. Edit the existing interface instead.", context)
         success, error = safe_create_section_row("modems", payload)
         edit_row = None
     else:
@@ -1351,6 +1361,19 @@ def modems_create(
         edit_row = get_section_row("modems", record_id)
     if success and normalized_aprsis_config is not None:
         save_aprsis_config(normalized_aprsis_config)
+    if wants_json:
+        if not success:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save interface settings.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Interface settings updated."),
+                "reload": True,
+            }
+        )
     context = _section_template_context(
         request,
         current_user,
