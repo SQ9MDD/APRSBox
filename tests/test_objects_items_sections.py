@@ -226,6 +226,12 @@ class ObjectAndItemFormTests(unittest.TestCase):
 
     def test_object_manual_send_queues_force_send_job(self) -> None:
         with temporary_database():
+            execute(
+                """
+                INSERT INTO modems(name, modem_type, band, device_path, enabled, notes, created_at, updated_at)
+                VALUES ('Test TNC', 'TCP', '2m', '127.0.0.1:9001', 1, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                """
+            )
             update_station_settings(
                 {
                     "callsign": "SQ9XYZ",
@@ -241,12 +247,6 @@ class ObjectAndItemFormTests(unittest.TestCase):
                     "default_units": "metric",
                     "tx_enabled": None,
                 }
-            )
-            execute(
-                """
-                INSERT INTO modems(name, modem_type, band, device_path, enabled, notes, created_at, updated_at)
-                VALUES ('Test TNC', 'TCP', '2m', '127.0.0.1:9001', 1, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
-                """
             )
             success, error = safe_create_section_row(
                 "objects",
@@ -991,6 +991,59 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         self.assertNotIn('"key": "igate"', helpers_source)
         self.assertNotIn('"label": "iGATE settings"', helpers_source)
         self.assertNotIn("Digi Settings", helpers_source)
+
+    def test_object_actions_use_shared_progress_and_confirmation_modals(self) -> None:
+        template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
+        self.assertIn('id="object-action-progress"', template_source)
+        self.assertIn('id="object-action-confirm"', template_source)
+        self.assertIn("settings-progress-backdrop", template_source)
+        self.assertIn("settings-progress-modal", template_source)
+        self.assertIn("data-object-modal-action", template_source)
+        self.assertIn("data-object-confirm", template_source)
+        self.assertIn("Send this object now?", template_source)
+        self.assertIn('"X-Requested-With": "XMLHttpRequest"', template_source)
+        self.assertIn('"Accept": "application/json"', template_source)
+
+    def test_object_ajax_save_returns_modal_result_payload(self) -> None:
+        with temporary_database():
+            from fastapi.testclient import TestClient
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                response = TestClient(app).post(
+                    "/objects",
+                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                    data={
+                        "name": "VOICE",
+                        "lifetime": "temporary",
+                        "state": "live",
+                        "latitude": "52.2297",
+                        "longitude": "21.0122",
+                        "symbol_table": "/",
+                        "symbol_code": "r",
+                        "interval_minutes": "30",
+                        "activation_mode": "manual",
+                        "path": "WIDE2-2",
+                        "comment": "Local voice repeater",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                payload = response.json()
+                self.assertTrue(payload["ok"])
+                self.assertEqual(payload["message"], "Object saved.")
+                self.assertTrue(payload["reload"])
+                self.assertRegex(payload["redirect"], r"^/objects\?edit=\d+$")
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
 
     def test_aprsis_interface_form_includes_connection_settings_and_realtime_diagnostics(self) -> None:
         form_source = Path("app/templates/partials/modem_form_fields.html").read_text(encoding="utf-8")

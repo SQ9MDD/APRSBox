@@ -2436,6 +2436,7 @@ def objects_create(
     comment: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "name": name.strip(),
         "lifetime": lifetime.strip(),
@@ -2461,14 +2462,47 @@ def objects_create(
         if success:
             created_row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", (payload["name"],))
             if created_row is not None:
+                if wants_json:
+                    created_id = int(created_row["id"])
+                    return JSONResponse(
+                        {
+                            "ok": True,
+                            "message": _translate("Object saved."),
+                            "reload": True,
+                            "redirect": _path(request, f"/objects?edit={created_id}"),
+                        }
+                    )
                 return _section_edit_redirect(request, "objects", int(created_row["id"]))
         edit_row = None
     else:
         success, error = safe_update_section_row("objects", record_id, payload)
         if success:
+            if wants_json:
+                return JSONResponse(
+                    {
+                        "ok": True,
+                        "message": _translate("Object saved."),
+                        "reload": True,
+                        "redirect": _path(request, f"/objects?edit={record_id}"),
+                    }
+                )
             return _section_edit_redirect(request, "objects", record_id)
         edit_row = get_section_row("objects", record_id) if error else None
     context = _section_template_context(request, current_user, "objects", flash=None if success else error, edit_row=edit_row)
+    if wants_json:
+        if success:
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "message": _translate("Object saved."),
+                    "reload": True,
+                    "redirect": _path(request, "/objects"),
+                }
+            )
+        return JSONResponse(
+            {"ok": False, "error": _translate(error or "Failed to save object.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
 
 
@@ -2484,6 +2518,16 @@ def objects_send_now(
 
     station_settings = get_station_settings()
     success, flash = enqueue_object_job(row, station_settings, trigger="manual", force_send=True)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(flash or "Failed to send object."),
+                "reload": success,
+                "redirect": _path(request, f"/objects?edit={record_id}"),
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     return RedirectResponse(
         url=_path(
             request,
@@ -2568,8 +2612,17 @@ def objects_delete(
     record_id: int,
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-) -> RedirectResponse:
+) -> object:
     delete_section_row("objects", record_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Object deleted."),
+                "reload": True,
+                "redirect": _path(request, "/objects"),
+            }
+        )
     return RedirectResponse(url=_path(request, "/objects"), status_code=status.HTTP_303_SEE_OTHER)
 
 
