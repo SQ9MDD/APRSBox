@@ -121,6 +121,20 @@ class StationDistanceUiTests(unittest.TestCase):
             stylesheet_source,
         )
 
+    def test_map_station_scroller_centers_map_on_click_and_keyboard_activation(self) -> None:
+        template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
+        script_source = Path("app/static/js/map-scroller-overlay.js").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/map.css").read_text(encoding="utf-8")
+        self.assertIn("data-i18n-center=\"{{ t('Center') }}\"", template_source)
+        self.assertIn("data-center-latitude", script_source)
+        self.assertIn("data-center-longitude", script_source)
+        self.assertIn("window.aprsboxCenterMapOn(latitude, longitude)", script_source)
+        self.assertIn('overlay.addEventListener("click"', script_source)
+        self.assertIn('overlay.addEventListener("keydown"', script_source)
+        self.assertIn('event.key !== "Enter" && event.key !== " "', script_source)
+        self.assertIn(".map-scroller-row-interactive:hover {", stylesheet_source)
+        self.assertIn(".map-scroller-row-interactive:focus-visible {", stylesheet_source)
+
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("mapTileEventsEndpoint", script_source)
