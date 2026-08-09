@@ -445,6 +445,56 @@ class NotificationTests(unittest.TestCase):
         for language in ("pl", "en", "es", "de"):
             self.assertTrue(Path(f"help/application/notifications.{language}.md").exists())
 
+    def test_notification_actions_use_shared_progress_and_confirmation_modals(self) -> None:
+        template_source = Path("app/templates/notifications.html").read_text(encoding="utf-8")
+        self.assertIn('id="notifications-action-progress"', template_source)
+        self.assertIn('id="notifications-action-confirm"', template_source)
+        self.assertIn("settings-progress-backdrop", template_source)
+        self.assertIn("settings-progress-modal", template_source)
+        self.assertIn("data-notifications-modal-action", template_source)
+        self.assertIn("data-notifications-confirm", template_source)
+        self.assertNotIn("onclick=\"return confirm(", template_source)
+        self.assertIn('"X-Requested-With": "XMLHttpRequest"', template_source)
+        self.assertIn('"Accept": "application/json"', template_source)
+
+    def test_notification_ajax_save_returns_modal_result_payload(self) -> None:
+        with temporary_database():
+            from fastapi.testclient import TestClient
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+                page = client.get("/notifications")
+                self.assertEqual(page.status_code, 200)
+                self.assertIn('id="notifications-action-progress"', page.text)
+
+                response = client.post(
+                    "/notifications/settings",
+                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                    data={
+                        "messages_enabled": "1",
+                        "messages_include_content": "1",
+                        "radar_enabled": "1",
+                        "radar_ignored_patterns": "SR*",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response.json(),
+                    {"ok": True, "message": "Notification settings updated.", "reload": True},
+                )
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
+
 
 if __name__ == "__main__":
     unittest.main()

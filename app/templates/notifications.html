@@ -13,6 +13,33 @@
 </section>
 {% endif %}
 
+{% if can_manage_notifications %}
+<div class="settings-progress-backdrop" id="notifications-action-progress" hidden>
+    <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
+        <div class="settings-progress-header">
+            <span class="settings-progress-spinner" aria-hidden="true"></span>
+            <h3 class="settings-progress-title">{{ t("Please wait") }}</h3>
+        </div>
+        <p class="settings-progress-message">{{ t("Working...") }}</p>
+        <div class="settings-progress-actions" hidden>
+            <button type="button" class="button button-secondary settings-progress-close">{{ t("OK") }}</button>
+        </div>
+    </div>
+</div>
+<div class="settings-progress-backdrop" id="notifications-action-confirm" hidden>
+    <div class="settings-progress-modal" role="dialog" aria-modal="true" aria-labelledby="notifications-action-confirm-title" aria-describedby="notifications-action-confirm-question">
+        <div class="settings-progress-header">
+            <h3 class="settings-progress-title" id="notifications-action-confirm-title">{{ t("Are you sure?") }}</h3>
+        </div>
+        <p class="settings-progress-message" id="notifications-action-confirm-question"></p>
+        <div class="settings-progress-actions">
+            <button type="button" class="button button-secondary" data-close-notifications-confirm>{{ t("Cancel") }}</button>
+            <button type="button" class="button" id="notifications-action-confirm-accept">{{ t("OK") }}</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <section class="panel">
     <div class="panel-body">
         <div class="panel-header">
@@ -51,7 +78,7 @@
                             {% if can_manage_notifications %}
                             <td>
                                 <div class="table-actions table-actions-start">
-                                    <form method="post" action="{{ request.scope.root_path }}/notifications/transports/{{ transport.id }}/test" class="table-action-form">
+                                    <form method="post" action="{{ request.scope.root_path }}/notifications/transports/{{ transport.id }}/test" class="table-action-form" data-notifications-modal-action>
                                         <button type="submit" class="table-icon-button" title="{{ t('Test') }}" aria-label="{{ t('Test') }} {{ transport.name }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/test-tube-empty.svg" alt="">
                                         </button>
@@ -59,8 +86,8 @@
                                     <a href="{{ request.scope.root_path }}/notifications?edit_transport={{ transport.id }}" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                                     </a>
-                                    <form method="post" action="{{ request.scope.root_path }}/notifications/transports/{{ transport.id }}/delete" class="table-action-form">
-                                        <button type="submit" class="table-icon-button table-icon-button-danger" title="{{ t('Delete') }}" aria-label="{{ t('Delete') }} {{ transport.name }}" onclick="return confirm({{ t('Delete this entry?')|tojson|forceescape }});">
+                                    <form method="post" action="{{ request.scope.root_path }}/notifications/transports/{{ transport.id }}/delete" class="table-action-form" data-notifications-modal-action>
+                                        <button type="submit" class="table-icon-button table-icon-button-danger" title="{{ t('Delete') }}" aria-label="{{ t('Delete') }} {{ transport.name }}" data-notifications-confirm="{{ t('Delete this entry?') }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                         </button>
                                     </form>
@@ -78,7 +105,7 @@
             </div>
 
             {% if can_manage_notifications %}
-            <form method="post" action="{{ request.scope.root_path }}/notifications/transports" class="form-grid" data-notification-transport-form>
+            <form method="post" action="{{ request.scope.root_path }}/notifications/transports" class="form-grid" data-notification-transport-form data-notifications-modal-action>
                 {% if notification_transport_form.id %}
                 <input type="hidden" name="transport_id" value="{{ notification_transport_form.id }}">
                 {% endif %}
@@ -147,7 +174,7 @@
             </div>
         </div>
         {% if can_manage_notifications %}
-        <form method="post" action="{{ request.scope.root_path }}/notifications/settings" class="form-grid">
+        <form method="post" action="{{ request.scope.root_path }}/notifications/settings" class="form-grid" data-notifications-modal-action>
             <label class="full checkbox-row">
                 <input type="checkbox" name="messages_enabled" value="1" {% if notification_settings.messages_enabled %}checked{% endif %}>
                 <span>{{ t("Enable APRS message notifications") }}</span>
@@ -219,8 +246,8 @@
                                     <a href="{{ request.scope.root_path }}/notifications?edit_rule={{ rule.id }}" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                                     </a>
-                                    <form method="post" action="{{ request.scope.root_path }}/notifications/radar-rules/{{ rule.id }}/delete" class="table-action-form">
-                                        <button type="submit" class="table-icon-button table-icon-button-danger" title="{{ t('Delete') }}" aria-label="{{ t('Delete') }} {{ rule.pattern }}" onclick="return confirm({{ t('Delete this entry?')|tojson|forceescape }});">
+                                    <form method="post" action="{{ request.scope.root_path }}/notifications/radar-rules/{{ rule.id }}/delete" class="table-action-form" data-notifications-modal-action>
+                                        <button type="submit" class="table-icon-button table-icon-button-danger" title="{{ t('Delete') }}" aria-label="{{ t('Delete') }} {{ rule.pattern }}" data-notifications-confirm="{{ t('Delete this entry?') }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                         </button>
                                     </form>
@@ -238,7 +265,7 @@
             </div>
 
             {% if can_manage_notifications %}
-            <form method="post" action="{{ request.scope.root_path }}/notifications/radar-rules" class="form-grid">
+            <form method="post" action="{{ request.scope.root_path }}/notifications/radar-rules" class="form-grid" data-notifications-modal-action>
                 {% if notification_radar_rule_form.id %}
                 <input type="hidden" name="rule_id" value="{{ notification_radar_rule_form.id }}">
                 {% endif %}
@@ -301,6 +328,135 @@
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script>
+    (() => {
+        const forms = Array.from(document.querySelectorAll("form[data-notifications-modal-action]"));
+        const progressModal = document.getElementById("notifications-action-progress");
+        const progressMessage = progressModal?.querySelector(".settings-progress-message");
+        const progressActions = progressModal?.querySelector(".settings-progress-actions");
+        const progressClose = progressModal?.querySelector(".settings-progress-close");
+        const confirmModal = document.getElementById("notifications-action-confirm");
+        const confirmQuestion = document.getElementById("notifications-action-confirm-question");
+        const confirmAccept = document.getElementById("notifications-action-confirm-accept");
+        const confirmCloseButtons = confirmModal ? confirmModal.querySelectorAll("[data-close-notifications-confirm]") : [];
+        const workingMessage = {{ t("Working...")|tojson }};
+        const failedMessage = {{ t("Operation failed.")|tojson }};
+        const okLabel = {{ t("OK")|tojson }};
+        let pendingAction = null;
+        let bypassConfirmation = false;
+
+        if (!forms.length || !progressModal || !confirmModal) return;
+
+        const controlsForForm = (form) => Array.from(form.querySelectorAll("button[type='submit'], input[type='submit']"));
+        const setBusy = (form, busy) => {
+            form.toggleAttribute("aria-busy", busy);
+            for (const control of controlsForForm(form)) control.disabled = busy;
+        };
+
+        const showProgress = (message, finished = false) => {
+            if (progressMessage) progressMessage.textContent = String(message || workingMessage);
+            if (progressActions) progressActions.hidden = !finished;
+            progressModal.hidden = false;
+        };
+
+        const hideProgress = () => {
+            progressModal.hidden = true;
+        };
+
+        const closeConfirm = () => {
+            confirmModal.hidden = true;
+            document.body.classList.remove("modal-open");
+            pendingAction = null;
+        };
+
+        const openConfirm = (form, submitter, question) => {
+            pendingAction = { form, submitter };
+            if (confirmQuestion) confirmQuestion.textContent = question;
+            if (confirmAccept) confirmAccept.textContent = submitter?.textContent?.trim() || okLabel;
+            confirmModal.hidden = false;
+            document.body.classList.add("modal-open");
+            confirmAccept?.focus();
+        };
+
+        if (progressClose) progressClose.addEventListener("click", hideProgress);
+        progressModal.addEventListener("click", (event) => {
+            if (event.target === progressModal && progressActions && !progressActions.hidden) hideProgress();
+        });
+        confirmCloseButtons.forEach((button) => button.addEventListener("click", closeConfirm));
+        confirmModal.addEventListener("click", (event) => {
+            if (event.target === confirmModal) closeConfirm();
+        });
+        confirmAccept?.addEventListener("click", () => {
+            const action = pendingAction;
+            if (!action) {
+                closeConfirm();
+                return;
+            }
+            closeConfirm();
+            bypassConfirmation = true;
+            action.form.requestSubmit(action.submitter);
+            bypassConfirmation = false;
+        });
+
+        for (const form of forms) {
+            form.addEventListener("submit", (event) => {
+                if (event.defaultPrevented) return;
+                const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
+                const question = String(submitter?.dataset.notificationsConfirm || form.dataset.notificationsConfirm || "").trim();
+                if (question && !bypassConfirmation) {
+                    event.preventDefault();
+                    openConfirm(form, submitter, question);
+                    return;
+                }
+
+                event.preventDefault();
+                const action = submitter?.getAttribute("formaction") || form.getAttribute("action") || form.action;
+                setBusy(form, true);
+                showProgress(workingMessage);
+                const startedAt = Date.now();
+
+                void window.fetch(action, {
+                    method: String(submitter?.getAttribute("formmethod") || form.method || "post").toUpperCase(),
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json",
+                    },
+                }).then(async (response) => {
+                    let payload = null;
+                    try {
+                        payload = await response.json();
+                    } catch (_error) {
+                        payload = null;
+                    }
+                    const remaining = Math.max(0, 500 - (Date.now() - startedAt));
+                    if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+                    if (!response.ok || !payload || payload.ok !== true) {
+                        const detail = payload && payload.error ? ` ${payload.error}` : ` HTTP ${response.status}`;
+                        throw new Error(detail.trim());
+                    }
+
+                    setBusy(form, false);
+                    showProgress(payload.message, true);
+                    if (payload.reload) {
+                        window.setTimeout(() => {
+                            if (payload.redirect) window.location.assign(payload.redirect);
+                            else window.location.reload();
+                        }, 1200);
+                    }
+                }).catch((error) => {
+                    setBusy(form, false);
+                    const detail = error && error.message ? ` ${error.message}` : "";
+                    showProgress(`${failedMessage}${detail}`, true);
+                });
+            });
+        }
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !confirmModal.hidden) closeConfirm();
+        });
+    })();
+
     (() => {
         const form = document.querySelector("[data-notification-transport-form]");
         const typeSelect = form instanceof HTMLFormElement ? form.querySelector("[data-notification-transport-type]") : null;

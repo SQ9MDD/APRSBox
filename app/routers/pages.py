@@ -3193,6 +3193,7 @@ def notifications_settings_update(
     radar_ignored_patterns: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_save_notification_settings(
         {
             "messages_enabled": messages_enabled,
@@ -3201,6 +3202,12 @@ def notifications_settings_update(
             "radar_ignored_patterns": radar_ignored_patterns,
         }
     )
+    if wants_json:
+        message = "Notification settings updated." if success else (error or "Failed to save notification settings.")
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3226,6 +3233,7 @@ def notifications_transport_save(
     timeout_s: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "name": name,
         "transport_type": transport_type,
@@ -3238,6 +3246,17 @@ def notifications_transport_save(
         "timeout_s": timeout_s,
     }
     success, error, _saved_transport_id = safe_save_notification_transport(payload, transport_id=transport_id)
+    if wants_json:
+        message = "Notification transport saved." if success else (error or "Failed to save notification transport.")
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": success,
+                "redirect": _path(request, "/notifications") if success else None,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3258,6 +3277,12 @@ def notifications_transport_test(
     templates = request.app.state.templates
     result = test_notification_transport(transport_id)
     success = bool(result.get("ok"))
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        message = "Notification transport test succeeded." if success else str(result.get("error") or "Notification transport test failed.")
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3276,6 +3301,15 @@ def notifications_transport_delete(
 ) -> object:
     templates = request.app.state.templates
     delete_notification_transport(transport_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Notification transport deleted."),
+                "reload": True,
+                "redirect": _path(request, "/notifications"),
+            }
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3295,12 +3329,24 @@ def notifications_radar_rule_save(
     distance_m: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "enabled": enabled,
         "pattern": pattern,
         "distance_m": distance_m,
     }
     success, error, _saved_rule_id = safe_save_notification_radar_rule(payload, rule_id=rule_id)
+    if wants_json:
+        message = "Radar rule saved." if success else (error or "Failed to save radar rule.")
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": success,
+                "redirect": _path(request, "/notifications") if success else None,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3320,6 +3366,15 @@ def notifications_radar_rule_delete(
 ) -> object:
     templates = request.app.state.templates
     delete_notification_radar_rule(rule_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Radar rule deleted."),
+                "reload": True,
+                "redirect": _path(request, "/notifications"),
+            }
+        )
     context = _notifications_page_context(
         request,
         current_user,
