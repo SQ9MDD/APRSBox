@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.3.dev - 2026-08-09
+- `GUI / Aktionen und Dialoge`: Speichern, Senden und Löschen wurden in Schnittstellen, Meine Station, WX, Benachrichtigungen, Objekten und Bulletins mit gemeinsamen Bestätigungen, Spinner-Dialogen und Ergebnismeldungen vereinheitlicht.
+- `Benachrichtigungen / Packet Routing`: Formulare behalten die Position des bearbeiteten Blocks bei; im Flow-Editor liegen die Aktionen in der Spalte der aktuellen Schritte, der Arbeitsbereich passt sich deren Inhalt an und der Filter- und Regelkatalog scrollt unabhängig.
+- `GUI / Scrollen und Karte`: Dezente, themeabhängige Scrollbars wurden im Routing-Katalog, in Konversationen, im Traffic Monitor und im Karten-Scroller ergänzt; ein Klick auf eine Station im Scroller zentriert sie auf der Karte.
+
 ## 1.10.2.dev - 2026-08-08
 - `Konfigurationssicherung v2`: Der Exportumfang wurde erweitert und ein sicherer Import ohne Verlust von Runtime-Verknüpfungen eingeführt; v1-Dateien werden nicht unterstützt.
 

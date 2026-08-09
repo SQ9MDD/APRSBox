@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.3.dev - 09.08.2026
+- `GUI / akcje i modale`: ujednolicono zapis, wysyłanie i usuwanie w Interfejsach, Mojej stacji, WX, Powiadomieniach, Obiektach i Biuletynach; akcje używają wspólnych potwierdzeń, modala ze spinnerem i komunikatu wyniku.
+- `Powiadomienia / Packet Routing`: formularze zachowują pozycję edytowanego bloku, a edytor flow ma akcje w kolumnie bieżących kroków, wysokość dopasowaną do ich zawartości i niezależnie przewijany katalog filtrów oraz reguł.
+- `GUI / przewijanie i mapa`: dodano dyskretne scrollbary zgodne z motywem w katalogu routingu, konwersacjach, Monitorze ruchu i scrollerze mapy; kliknięcie stacji w scrollerze centruje ją na mapie.
+
 ## 1.10.2.dev - 08.08.2026
 - `Kopia konfiguracji v2`: uzupełniono zakres eksportu i wprowadzono bezpieczny import bez zrywania powiązań runtime; pliki v1 nie są obsługiwane.
 
