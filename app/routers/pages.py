@@ -2855,6 +2855,7 @@ def wx_config_update(
     default_cache_max_age_s: str = Form("900"),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_save_wx_config(
         {
             "enabled": enabled,
@@ -2868,6 +2869,12 @@ def wx_config_update(
             "default_cache_max_age_s": default_cache_max_age_s.strip(),
         }
     )
+    if wants_json:
+        message = "WX configuration saved." if success else (error or "Failed to save WX configuration.")
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -2883,6 +2890,7 @@ async def wx_mappings_update(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     form = await request.form()
     payload_by_parameter: dict[str, dict[str, Any]] = {}
     for parameter_name in form.getlist("parameter_name"):
@@ -2898,6 +2906,12 @@ async def wx_mappings_update(
             "cache_max_age_s": str(form.get(f"cache_max_age_s__{normalized}") or "").strip(),
         }
     success, error = safe_save_wx_mappings(payload_by_parameter)
+    if wants_json:
+        message = "WX mappings saved." if success else (error or "Failed to save WX mappings.")
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -2913,7 +2927,14 @@ def wx_refresh_now(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, _, error = safe_refresh_wx_runtime(trigger="manual")
+    if wants_json:
+        message = "WX refresh completed." if success else (error or "WX refresh failed.")
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -2938,6 +2959,7 @@ def wx_send_now(
     default_cache_max_age_s: str = Form("900"),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_save_wx_config(
         {
             "enabled": enabled,
@@ -2952,15 +2974,30 @@ def wx_send_now(
         }
     )
     if not success:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save WX configuration.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _wx_page_context(request, current_user, flash=error, flash_success=False)
         return templates.TemplateResponse("wx.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     refreshed, _, refresh_error = safe_refresh_wx_runtime(trigger="manual-send")
     if not refreshed:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(refresh_error or "WX refresh failed.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _wx_page_context(request, current_user, flash=refresh_error, flash_success=False)
         return templates.TemplateResponse("wx.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     queued, queue_message = safe_enqueue_wx_outbound(trigger="manual")
+    if wants_json:
+        return JSONResponse(
+            {"ok": queued, "message" if queued else "error": _translate(queue_message), "reload": queued},
+            status_code=status.HTTP_200_OK if queued else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(request, current_user, flash=queue_message, flash_success=queued)
     return templates.TemplateResponse("wx.html", context, status_code=200 if queued else status.HTTP_400_BAD_REQUEST)
 
@@ -2972,6 +3009,7 @@ def wx_mapping_test_read(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     try:
         result = refresh_single_wx_mapping(parameter_name, trigger="manual-test")
         refreshed_row = (result.get("rows") or [{}])[0]
@@ -2988,6 +3026,11 @@ def wx_mapping_test_read(
         flash = str(exc)
         flash_success = False
         status_code = status.HTTP_400_BAD_REQUEST
+    if wants_json:
+        return JSONResponse(
+            {"ok": flash_success, "message" if flash_success else "error": _translate(flash), "reload": flash_success},
+            status_code=status_code,
+        )
     context = _wx_page_context(request, current_user, flash=flash, flash_success=flash_success)
     return templates.TemplateResponse("wx.html", context, status_code=status_code)
 
@@ -3009,6 +3052,7 @@ def wx_source_save(
     enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     normalized_source_id = int(source_id) if str(source_id or "").strip() else None
     success, error, _ = safe_save_wx_source(
         {
@@ -3025,6 +3069,17 @@ def wx_source_save(
         },
         source_id=normalized_source_id,
     )
+    if wants_json:
+        message = "WX source saved." if success else (error or "Failed to save WX source.")
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": success,
+                "redirect": _path(request, "/wx") if success else None,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -3040,8 +3095,17 @@ def wx_source_delete(
     source_id: int,
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-) -> RedirectResponse:
+) -> object:
     delete_wx_source(source_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("WX source deleted."),
+                "reload": True,
+                "redirect": _path(request, "/wx"),
+            }
+        )
     return RedirectResponse(url=_path(request, "/wx"), status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -3053,6 +3117,13 @@ def wx_source_test(
 ) -> object:
     templates = request.app.state.templates
     result = test_wx_source_connection(source_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        success = bool(result.get("ok"))
+        message = "WX source connection succeeded." if success else (result.get("error") or "WX source connection failed.")
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -3070,6 +3141,21 @@ def wx_source_discover(
 ) -> object:
     templates = request.app.state.templates
     result = discover_wx_source_items(source_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        success = bool(result.get("ok"))
+        message = "WX source discovery completed." if success else (result.get("error") or "WX source discovery failed.")
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": False,
+                "discovery": {
+                    "items": list(result.get("items") or []),
+                    "source": {"name": str((result.get("source") or {}).get("name") or "")},
+                } if success else None,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
