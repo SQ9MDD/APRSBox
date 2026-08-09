@@ -456,6 +456,11 @@ class NotificationTests(unittest.TestCase):
         self.assertNotIn("onclick=\"return confirm(", template_source)
         self.assertIn('"X-Requested-With": "XMLHttpRequest"', template_source)
         self.assertIn('"Accept": "application/json"', template_source)
+        self.assertIn('id="notification-transports"', template_source)
+        self.assertIn('id="notification-settings"', template_source)
+        self.assertIn('id="notification-radar-rules"', template_source)
+        self.assertIn("?edit_transport={{ transport.id }}#notification-transports", template_source)
+        self.assertIn("?edit_rule={{ rule.id }}#notification-radar-rules", template_source)
 
     def test_notification_ajax_save_returns_modal_result_payload(self) -> None:
         with temporary_database():
@@ -490,7 +495,12 @@ class NotificationTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(
                     response.json(),
-                    {"ok": True, "message": "Notification settings updated.", "reload": True},
+                    {
+                        "ok": True,
+                        "message": "Notification settings updated.",
+                        "reload": True,
+                        "redirect": "/notifications#notification-settings",
+                    },
                 )
             finally:
                 app.dependency_overrides.pop(get_current_user, None)

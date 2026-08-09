@@ -40,7 +40,7 @@
 </div>
 {% endif %}
 
-<section class="panel">
+<section class="panel" id="notification-transports">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -83,7 +83,7 @@
                                             <img src="{{ request.scope.root_path }}/static/icons/test-tube-empty.svg" alt="">
                                         </button>
                                     </form>
-                                    <a href="{{ request.scope.root_path }}/notifications?edit_transport={{ transport.id }}" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
+                                    <a href="{{ request.scope.root_path }}/notifications?edit_transport={{ transport.id }}#notification-transports" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                                     </a>
                                     <form method="post" action="{{ request.scope.root_path }}/notifications/transports/{{ transport.id }}/delete" class="table-action-form" data-notifications-modal-action>
@@ -155,7 +155,7 @@
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save") }}</button>
                     {% if notification_transport_form.id %}
-                    <a href="{{ request.scope.root_path }}/notifications" class="button button-secondary">{{ t("Cancel") }}</a>
+                    <a href="{{ request.scope.root_path }}/notifications#notification-transports" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% endif %}
                 </div>
             </form>
@@ -166,7 +166,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="notification-settings">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -210,7 +210,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="notification-radar-rules">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -243,7 +243,7 @@
                             {% if can_manage_notifications %}
                             <td>
                                 <div class="table-actions table-actions-start">
-                                    <a href="{{ request.scope.root_path }}/notifications?edit_rule={{ rule.id }}" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
+                                    <a href="{{ request.scope.root_path }}/notifications?edit_rule={{ rule.id }}#notification-radar-rules" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                                     </a>
                                     <form method="post" action="{{ request.scope.root_path }}/notifications/radar-rules/{{ rule.id }}/delete" class="table-action-form" data-notifications-modal-action>
@@ -284,7 +284,7 @@
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save") }}</button>
                     {% if notification_radar_rule_form.id %}
-                    <a href="{{ request.scope.root_path }}/notifications" class="button button-secondary">{{ t("Cancel") }}</a>
+                    <a href="{{ request.scope.root_path }}/notifications#notification-radar-rules" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% endif %}
                 </div>
             </form>

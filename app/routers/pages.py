@@ -3205,7 +3205,12 @@ def notifications_settings_update(
     if wants_json:
         message = "Notification settings updated." if success else (error or "Failed to save notification settings.")
         return JSONResponse(
-            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": success,
+                "redirect": _path(request, "/notifications#notification-settings") if success else None,
+            },
             status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
         )
     context = _notifications_page_context(
@@ -3253,7 +3258,7 @@ def notifications_transport_save(
                 "ok": success,
                 "message" if success else "error": _translate(message),
                 "reload": success,
-                "redirect": _path(request, "/notifications") if success else None,
+                "redirect": _path(request, "/notifications#notification-transports") if success else None,
             },
             status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
         )
@@ -3280,7 +3285,12 @@ def notifications_transport_test(
     if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
         message = "Notification transport test succeeded." if success else str(result.get("error") or "Notification transport test failed.")
         return JSONResponse(
-            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": success,
+                "redirect": _path(request, "/notifications#notification-transports") if success else None,
+            },
             status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
         )
     context = _notifications_page_context(
@@ -3307,7 +3317,7 @@ def notifications_transport_delete(
                 "ok": True,
                 "message": _translate("Notification transport deleted."),
                 "reload": True,
-                "redirect": _path(request, "/notifications"),
+                "redirect": _path(request, "/notifications#notification-transports"),
             }
         )
     context = _notifications_page_context(
@@ -3343,7 +3353,7 @@ def notifications_radar_rule_save(
                 "ok": success,
                 "message" if success else "error": _translate(message),
                 "reload": success,
-                "redirect": _path(request, "/notifications") if success else None,
+                "redirect": _path(request, "/notifications#notification-radar-rules") if success else None,
             },
             status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
         )
@@ -3372,7 +3382,7 @@ def notifications_radar_rule_delete(
                 "ok": True,
                 "message": _translate("Radar rule deleted."),
                 "reload": True,
-                "redirect": _path(request, "/notifications"),
+                "redirect": _path(request, "/notifications#notification-radar-rules"),
             }
         )
     context = _notifications_page_context(
