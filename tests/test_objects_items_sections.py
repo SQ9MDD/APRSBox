@@ -47,6 +47,9 @@ class ObjectAndItemFormTests(unittest.TestCase):
             "Every {value} {unit}",
             "First activation (UTC)",
             "Delete this bulletin?",
+            "Send this bulletin now?",
+            "Bulletin saved.",
+            "Bulletin deleted.",
             "Delete this object?",
             "Object transmission is not implemented yet. APRS object names are stored unpadded here, but will later be encoded into the fixed 9-character APRS object field with an automatic timestamp.",
             "Prepare APRS object records with protocol-safe names, status, position, symbol and future RF path.",
@@ -981,6 +984,11 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         self.assertIn("datetime-local", template_source)
         self.assertIn("Bulletins TX Log", template_source)
         self.assertIn("No bulletin outbound jobs yet.", template_source)
+        self.assertIn('id="bulletin-action-progress"', template_source)
+        self.assertIn('id="bulletin-action-confirm"', template_source)
+        self.assertIn("data-bulletin-modal-action", template_source)
+        self.assertIn("data-bulletin-confirm", template_source)
+        self.assertIn("Send this bulletin now?", template_source)
 
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         self.assertNotIn("['igate']", base_source)
@@ -991,6 +999,96 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         self.assertNotIn('"key": "igate"', helpers_source)
         self.assertNotIn('"label": "iGATE settings"', helpers_source)
         self.assertNotIn("Digi Settings", helpers_source)
+
+    def test_bulletin_ajax_save_returns_modal_result_payload(self) -> None:
+        with temporary_database():
+            from fastapi.testclient import TestClient
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                response = TestClient(app).post(
+                    "/bulletins",
+                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                    data={
+                        "message_kind": "bulletin",
+                        "bulletin_code": "1",
+                        "group_name": "",
+                        "interval_minutes": "30",
+                        "activation_mode": "manual",
+                        "path": "WIDE2-1",
+                        "is_enabled": "1",
+                        "message_text": "Net starts at 19:30 UTC",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                payload = response.json()
+                self.assertTrue(payload["ok"])
+                self.assertEqual(payload["message"], "Bulletin saved.")
+                self.assertTrue(payload["reload"])
+                self.assertRegex(payload["redirect"], r"^/bulletins\?edit=\d+$")
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
+
+    def test_bulletin_ajax_send_and_delete_return_modal_result_payloads(self) -> None:
+        with temporary_database():
+            from fastapi.testclient import TestClient
+            from unittest.mock import patch
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            success, error = safe_create_section_row(
+                "bulletins",
+                {
+                    "message_kind": "bulletin",
+                    "bulletin_code": "1",
+                    "interval_minutes": "30",
+                    "path": "",
+                    "message_text": "Net starts at 19:30 UTC",
+                },
+            )
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            row = fetch_one("SELECT id FROM bulletins ORDER BY id DESC LIMIT 1")
+            assert row is not None
+            bulletin_id = int(row["id"])
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+                with patch("app.routers.pages.enqueue_message_job", return_value=(True, "Bulletin queued.")):
+                    send_response = client.post(
+                        f"/settings/bulletins/{bulletin_id}/send",
+                        headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                    )
+                self.assertEqual(send_response.status_code, 200)
+                self.assertTrue(send_response.json()["ok"])
+                self.assertEqual(send_response.json()["redirect"], f"/bulletins?edit={bulletin_id}")
+
+                delete_response = client.post(
+                    f"/settings/bulletins/{bulletin_id}/delete",
+                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                )
+                self.assertEqual(delete_response.status_code, 200)
+                self.assertEqual(delete_response.json()["message"], "Bulletin deleted.")
+                self.assertEqual(delete_response.json()["redirect"], "/bulletins")
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
 
     def test_object_actions_use_shared_progress_and_confirmation_modals(self) -> None:
         template_source = Path("app/templates/section.html").read_text(encoding="utf-8")

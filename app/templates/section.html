@@ -218,7 +218,7 @@
                             {% endif %}
                             {% if can_edit and section.supports_delete %}
                             <td>
-                                <form method="post" action="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation();{% if section.slug != 'objects' %} return confirm({{ t(delete_confirm_message)|tojson }});{% endif %}"{% if section.slug == 'objects' %} data-object-modal-action data-object-confirm="{{ t(delete_confirm_message) }}"{% endif %}>
+                                <form method="post" action="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation();{% if section.slug not in ['objects', 'bulletins'] %} return confirm({{ t(delete_confirm_message)|tojson }});{% endif %}"{% if section.slug == 'objects' %} data-object-modal-action data-object-confirm="{{ t(delete_confirm_message) }}"{% elif section.slug == 'bulletins' %} data-bulletin-modal-action data-bulletin-confirm="{{ t(delete_confirm_message) }}"{% endif %}>
                                     <button
                                         type="submit"
                                         class="table-icon-button table-icon-button-danger"
@@ -265,7 +265,7 @@
             {% if section.slug in ['objects', 'items', 'modems', 'bulletins'] and flash %}
             <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
             {% endif %}
-            <form method="post" class="form-grid" id="{{ section.slug }}-form"{% if section.slug == 'modems' %} data-interface-save-action{% elif section.slug == 'objects' %} data-object-modal-action{% endif %}>
+            <form method="post" class="form-grid" id="{{ section.slug }}-form"{% if section.slug == 'modems' %} data-interface-save-action{% elif section.slug == 'objects' %} data-object-modal-action{% elif section.slug == 'bulletins' %} data-bulletin-modal-action{% endif %}>
                 {% if section.supports_editing and edit_row %}
                 <input type="hidden" name="record_id" value="{{ edit_row.id }}">
                 {% endif %}
@@ -456,7 +456,7 @@
                         class="button button-secondary button-label-icon"
                         formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/send"
                         formmethod="post"
-                        {% if section.slug == 'objects' %}data-object-confirm="{{ t('Send this object now?') }}"{% endif %}
+                        {% if section.slug == 'objects' %}data-object-confirm="{{ t('Send this object now?') }}"{% elif section.slug == 'bulletins' %}data-bulletin-confirm="{{ t('Send this bulletin now?') }}"{% endif %}
                     >
                         <img src="{{ request.scope.root_path }}/static/icons/send-outline.svg" alt="">
                         <span>{{ t("Send now") }}</span>
@@ -465,7 +465,7 @@
                     {% if section.supports_editing and edit_row %}
                     <a href="{{ request.scope.root_path }}{{ '/objects' if section.slug == 'objects' else ('/items' if section.slug == 'items' else ('/bulletins' if section.slug == 'bulletins' else '/settings/' ~ section.slug)) }}" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% if section.supports_delete %}
-                    <button type="submit" class="button button-secondary button-danger" formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/delete" formmethod="post"{% if section.slug == 'objects' %} data-object-confirm="{{ t(delete_confirm_message) }}"{% else %} onclick="return confirm({{ t(delete_confirm_message)|tojson }});"{% endif %}>{{ t("Delete") }}</button>
+                    <button type="submit" class="button button-secondary button-danger" formaction="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ edit_row.id }}/delete" formmethod="post"{% if section.slug == 'objects' %} data-object-confirm="{{ t(delete_confirm_message) }}"{% elif section.slug == 'bulletins' %} data-bulletin-confirm="{{ t(delete_confirm_message) }}"{% else %} onclick="return confirm({{ t(delete_confirm_message)|tojson }});"{% endif %}>{{ t("Delete") }}</button>
                     {% endif %}
                     {% endif %}
                 </div>
@@ -609,6 +609,32 @@
         <div class="settings-progress-actions">
             <button type="button" class="button button-secondary" data-close-object-confirm>{{ t("Cancel") }}</button>
             <button type="button" class="button" id="object-action-confirm-accept">{{ t("OK") }}</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% if section.slug == 'bulletins' %}
+<div class="settings-progress-backdrop" id="bulletin-action-progress" hidden>
+    <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
+        <div class="settings-progress-header">
+            <span class="settings-progress-spinner" aria-hidden="true"></span>
+            <h3 class="settings-progress-title">{{ t("Please wait") }}</h3>
+        </div>
+        <p class="settings-progress-message">{{ t("Working...") }}</p>
+        <div class="settings-progress-actions" hidden>
+            <button type="button" class="button button-secondary settings-progress-close">{{ t("OK") }}</button>
+        </div>
+    </div>
+</div>
+<div class="settings-progress-backdrop" id="bulletin-action-confirm" hidden>
+    <div class="settings-progress-modal" role="dialog" aria-modal="true" aria-labelledby="bulletin-action-confirm-title" aria-describedby="bulletin-action-confirm-question">
+        <div class="settings-progress-header">
+            <h3 class="settings-progress-title" id="bulletin-action-confirm-title">{{ t("Are you sure?") }}</h3>
+        </div>
+        <p class="settings-progress-message" id="bulletin-action-confirm-question"></p>
+        <div class="settings-progress-actions">
+            <button type="button" class="button button-secondary" data-close-bulletin-confirm>{{ t("Cancel") }}</button>
+            <button type="button" class="button" id="bulletin-action-confirm-accept">{{ t("OK") }}</button>
         </div>
     </div>
 </div>
@@ -1219,17 +1245,18 @@
             });
         }
     })();
-    {% if section.slug == 'objects' %}
+    {% if section.slug in ['objects', 'bulletins'] %}
     (() => {
-        const forms = Array.from(document.querySelectorAll("form[data-object-modal-action]"));
-        const progressModal = document.getElementById("object-action-progress");
+        const actionSubject = {{ ('object' if section.slug == 'objects' else 'bulletin')|tojson }};
+        const forms = Array.from(document.querySelectorAll(`form[data-${actionSubject}-modal-action]`));
+        const progressModal = document.getElementById(`${actionSubject}-action-progress`);
         const progressMessage = progressModal?.querySelector(".settings-progress-message");
         const progressActions = progressModal?.querySelector(".settings-progress-actions");
         const progressClose = progressModal?.querySelector(".settings-progress-close");
-        const confirmModal = document.getElementById("object-action-confirm");
-        const confirmQuestion = document.getElementById("object-action-confirm-question");
-        const confirmAccept = document.getElementById("object-action-confirm-accept");
-        const confirmCloseButtons = confirmModal ? confirmModal.querySelectorAll("[data-close-object-confirm]") : [];
+        const confirmModal = document.getElementById(`${actionSubject}-action-confirm`);
+        const confirmQuestion = document.getElementById(`${actionSubject}-action-confirm-question`);
+        const confirmAccept = document.getElementById(`${actionSubject}-action-confirm-accept`);
+        const confirmCloseButtons = confirmModal ? confirmModal.querySelectorAll(`[data-close-${actionSubject}-confirm]`) : [];
         const workingMessage = {{ t("Working...")|tojson }};
         const failedMessage = {{ t("Operation failed.")|tojson }};
         const okLabel = {{ t("OK")|tojson }};
@@ -1293,7 +1320,8 @@
             form.addEventListener("submit", (event) => {
                 if (event.defaultPrevented) return;
                 const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
-                const question = String(submitter?.dataset.objectConfirm || form.dataset.objectConfirm || "").trim();
+                const confirmAttribute = `data-${actionSubject}-confirm`;
+                const question = String(submitter?.getAttribute(confirmAttribute) || form.getAttribute(confirmAttribute) || "").trim();
                 if (question && !bypassConfirmation) {
                     event.preventDefault();
                     openConfirm(form, submitter, question);
