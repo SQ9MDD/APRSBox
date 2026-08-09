@@ -4,6 +4,7 @@
 - `GUI / acciones y diálogos`: se unificaron el guardado, el envío y la eliminación en Interfaces, Mi estación, WX, Notificaciones, Objetos y Boletines mediante confirmaciones, diálogos con indicador de progreso y mensajes de resultado comunes.
 - `Notificaciones / Packet Routing`: los formularios conservan la posición del bloque editado; el editor de flujos mantiene las acciones en la columna de pasos actuales, ajusta el área de trabajo a su contenido y desplaza de forma independiente el catálogo de filtros y reglas.
 - `GUI / desplazamiento y mapa`: se añadieron barras de desplazamiento discretas y adaptadas al tema en el catálogo de routing, las conversaciones, el Monitor de tráfico y el scroller del mapa; al pulsar una estación del scroller, el mapa se centra en ella.
+- `APRS Device Identification`: al abrir Ajustes, la base de datos se actualiza silenciosamente en segundo plano si nunca se actualizó o si la última actualización correcta tiene más de 30 días; los fallos aplican una espera de 24 horas antes de reintentar.
 
 ## 1.10.2.dev - 2026-08-08
 - `Copia de configuración v2`: se amplió el alcance de la exportación y se añadió una importación segura que conserva las referencias de ejecución; los archivos v1 no son compatibles.

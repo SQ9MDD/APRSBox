@@ -513,6 +513,7 @@
             action="{{ request.scope.root_path }}/settings/update-aprs-device-identification"
             class="form-stack"
             data-settings-action-id="update-aprs-device-identification"
+            data-auto-update-due="{{ 'true' if aprs_device_identification_status.auto_update_due else 'false' }}"
             onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-aprs-device-identification', message: {{ t('Starting update, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
             <button type="submit" class="button">{{ t("Update now") }}</button>
@@ -1579,6 +1580,30 @@
         window.__aprsboxSettingsSubmit = submitSettingsAction;
         window.aprsboxShowSettingsProgress = showSettingsProgress;
         window.aprsboxHideSettingsProgress = hideBackdrop;
+
+        const automaticDeviceIdentificationUpdateForm = document.querySelector(
+            'form[data-settings-action-id="update-aprs-device-identification"][data-auto-update-due="true"]'
+        );
+        if (automaticDeviceIdentificationUpdateForm instanceof HTMLFormElement) {
+            const runAutomaticDeviceIdentificationUpdate = async () => {
+                if (automaticDeviceIdentificationUpdateForm.getAttribute("aria-busy") === "true") return;
+                automaticDeviceIdentificationUpdateForm.dataset.autoUpdateDue = "false";
+                try {
+                    await window.fetch(automaticDeviceIdentificationUpdateForm.action, {
+                        method: String(automaticDeviceIdentificationUpdateForm.method || "post").toUpperCase(),
+                        body: new FormData(automaticDeviceIdentificationUpdateForm),
+                        credentials: "same-origin",
+                        headers: {
+                            "X-Requested-With": "XMLHttpRequest",
+                            "Accept": "application/json",
+                        },
+                    });
+                } catch (_error) {
+                    // This maintenance refresh is intentionally silent and will be retried later.
+                }
+            };
+            window.setTimeout(() => void runAutomaticDeviceIdentificationUpdate(), 750);
+        }
 
         backdrop.addEventListener("click", (event) => {
             if (event.target === backdrop) {

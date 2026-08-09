@@ -4,11 +4,12 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 from app.config import settings
-from app.db import get_app_setting, init_db
+from app.db import get_app_setting, init_db, set_app_setting
 from app.services import aprs_device_identification as device_id
 
 
@@ -81,6 +82,37 @@ def write_runtime_cache(payload: dict[str, object]) -> Path:
 
 
 class AprsDeviceIdentificationTests(unittest.TestCase):
+    def test_automatic_update_is_due_when_no_success_was_recorded(self) -> None:
+        with temporary_database():
+            self.assertTrue(
+                device_id.is_aprs_device_identification_auto_update_due(
+                    now=datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc)
+                )
+            )
+
+    def test_automatic_update_is_due_after_thirty_days(self) -> None:
+        with temporary_database():
+            now = datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc)
+            set_app_setting(device_id.UPDATE_SUCCESS_AT_KEY, (now - timedelta(days=31)).isoformat())
+            self.assertTrue(device_id.is_aprs_device_identification_auto_update_due(now=now))
+
+    def test_recent_success_or_failed_attempt_suppresses_automatic_update(self) -> None:
+        with temporary_database():
+            now = datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc)
+            set_app_setting(device_id.UPDATE_SUCCESS_AT_KEY, (now - timedelta(days=29)).isoformat())
+            self.assertFalse(device_id.is_aprs_device_identification_auto_update_due(now=now))
+
+            set_app_setting(device_id.UPDATE_SUCCESS_AT_KEY, (now - timedelta(days=31)).isoformat())
+            set_app_setting(device_id.UPDATE_ATTEMPT_AT_KEY, (now - timedelta(hours=2)).isoformat())
+            self.assertFalse(device_id.is_aprs_device_identification_auto_update_due(now=now))
+
+    def test_settings_gui_starts_due_update_silently(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('data-auto-update-due="{{ \'true\' if aprs_device_identification_status.auto_update_due else \'false\' }}"', template_source)
+        self.assertIn("runAutomaticDeviceIdentificationUpdate", template_source)
+        self.assertIn("window.setTimeout(() => void runAutomaticDeviceIdentificationUpdate(), 750)", template_source)
+        self.assertNotIn("automaticDeviceIdentificationUpdateForm.requestSubmit()", template_source)
+
     def test_lookup_uses_runtime_cache_for_tocall_wildcard(self) -> None:
         with temporary_database():
             write_runtime_cache(sample_database_payload())
