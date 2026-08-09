@@ -9,7 +9,7 @@
 <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
 {% endif %}
 <div class="grid two settings-primary-grid">
-<section class="panel">
+<section class="panel" id="settings-panel-global" data-settings-panel="global">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -136,7 +136,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="settings-panel-update" data-settings-panel="update">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -214,7 +214,7 @@
 </section>
 </div>
 
-<section class="panel">
+<section class="panel" id="settings-panel-alarms" data-settings-panel="alarms">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -318,7 +318,7 @@
     </div>
 </section>
 
-<section class="panel map-sources-panel">
+<section class="panel map-sources-panel" id="settings-panel-map-sources" data-settings-panel="map-sources">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -390,7 +390,7 @@
                                             <img src="{{ request.scope.root_path }}/static/icons/star-outline.svg" alt="">
                                         </button>
                                     </form>
-                                    <a href="{{ request.scope.root_path }}/settings?edit_map_source={{ source.id }}" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
+                                    <a href="{{ request.scope.root_path }}/settings?edit_map_source={{ source.id }}#settings-panel-map-sources" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                                     </a>
                                     <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/delete" class="table-action-form">
@@ -460,7 +460,7 @@
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save map source") }}</button>
                     {% if map_source_form.record_id %}
-                    <a href="{{ request.scope.root_path }}/settings" class="button button-secondary">{{ t("Cancel") }}</a>
+                    <a href="{{ request.scope.root_path }}/settings#settings-panel-map-sources" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% endif %}
                 </div>
             </form>
@@ -471,7 +471,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="settings-panel-device-identification" data-settings-panel="device-identification">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -524,7 +524,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="settings-panel-configuration-backup" data-settings-panel="configuration-backup">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -571,7 +571,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="settings-panel-database" data-settings-panel="database">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -671,7 +671,7 @@
     </div>
 </section>
 
-<section class="panel danger-zone-panel">
+<section class="panel danger-zone-panel" id="settings-panel-danger-zone" data-settings-panel="danger-zone">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -745,6 +745,80 @@
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script>
+    (() => {
+        const storageKey = "aprsbox-settings-scroll-position-v1";
+        const maxAgeMs = 30 * 60 * 1000;
+        const settingsPath = {{ (request.scope.root_path ~ '/settings')|tojson }};
+        let pendingPosition = null;
+
+        const capturePosition = (source) => {
+            const element = source instanceof Element ? source : document.activeElement;
+            const panel = element instanceof Element ? element.closest("[data-settings-panel]") : null;
+            if (!(panel instanceof HTMLElement)) return null;
+            const panelTop = window.scrollY + panel.getBoundingClientRect().top;
+            return {
+                panel: String(panel.dataset.settingsPanel || ""),
+                relativeOffset: window.scrollY - panelTop,
+                scrollY: window.scrollY,
+                savedAt: Date.now(),
+            };
+        };
+
+        const preparePosition = (source) => {
+            pendingPosition = capturePosition(source) || pendingPosition;
+        };
+
+        const rememberPosition = (source) => {
+            const state = capturePosition(source) || pendingPosition;
+            if (!state) return;
+            window.sessionStorage.setItem(storageKey, JSON.stringify(state));
+        };
+
+        const restorePosition = () => {
+            let state = null;
+            try {
+                const raw = window.sessionStorage.getItem(storageKey);
+                state = raw ? JSON.parse(raw) : null;
+            } catch (_error) {
+                state = null;
+            }
+            window.sessionStorage.removeItem(storageKey);
+            if (!state || Date.now() - Number(state.savedAt || 0) > maxAgeMs) return;
+
+            const panelKey = String(state.panel || "");
+            const panel = Array.from(document.querySelectorAll("[data-settings-panel]"))
+                .find((candidate) => String(candidate.dataset.settingsPanel || "") === panelKey);
+            window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+                if (panel instanceof HTMLElement) {
+                    const panelTop = window.scrollY + panel.getBoundingClientRect().top;
+                    window.scrollTo(0, Math.max(0, panelTop + Number(state.relativeOffset || 0)));
+                } else {
+                    window.scrollTo(0, Math.max(0, Number(state.scrollY || 0)));
+                }
+            }));
+        };
+
+        document.addEventListener("click", (event) => {
+            const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+            if (!(link instanceof HTMLAnchorElement)) return;
+            const targetUrl = new URL(link.href, window.location.href);
+            if (targetUrl.pathname === settingsPath) {
+                rememberPosition(link);
+            }
+        }, true);
+
+        document.addEventListener("submit", (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement)) return;
+            preparePosition(form);
+            if (!form.dataset.settingsActionId) rememberPosition(form);
+        }, true);
+
+        window.aprsboxPrepareSettingsPosition = preparePosition;
+        window.aprsboxRememberSettingsPosition = rememberPosition;
+        restorePosition();
+    })();
+
     (() => {
         const rootPath = {{ request.scope.root_path|tojson }};
         const fallbackCloseLabel = {{ t("OK")|tojson }};
@@ -871,6 +945,7 @@
                     const message = job && job.message ? String(job.message) : "";
                     fallbackShow(message || fallbackWorkingLabel);
                     if (status === "success") {
+                        window.aprsboxRememberSettingsPosition?.();
                         window.setTimeout(() => window.location.reload(), 1200);
                         return;
                     }
@@ -926,6 +1001,7 @@
 
                 fallbackShow(payload.message || fallbackDoneLabel);
                 if (payload.reload || options.reloadOnSuccess) {
+                    window.aprsboxRememberSettingsPosition?.();
                     window.setTimeout(() => window.location.reload(), 1200);
                 }
             } catch (error) {
@@ -934,6 +1010,7 @@
         };
 
         window.aprsboxSubmitSettingsAction = (form, options) => {
+            window.aprsboxPrepareSettingsPosition?.(form);
             try {
                 if (typeof window.__aprsboxSettingsSubmit === "function") {
                     return window.__aprsboxSettingsSubmit(form, options);
@@ -1264,6 +1341,7 @@
                 detail: options.detail,
             });
             if (options.reload) {
+                window.aprsboxRememberSettingsPosition?.();
                 const parsedDelay = Number(options.reloadDelayMs);
                 const reloadDelayMs = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : 1200;
                 window.setTimeout(() => {

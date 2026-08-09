@@ -183,6 +183,27 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertNotIn('{{ t("Update log") }}', template_source)
         self.assertNotIn("update-log-preview", template_source)
 
+    def test_settings_actions_restore_the_active_panel_after_navigation_or_reload(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        for panel_key in (
+            "global",
+            "update",
+            "alarms",
+            "map-sources",
+            "device-identification",
+            "configuration-backup",
+            "database",
+            "danger-zone",
+        ):
+            self.assertIn(f'data-settings-panel="{panel_key}"', template_source)
+        self.assertIn("aprsbox-settings-scroll-position-v1", template_source)
+        self.assertIn("relativeOffset: window.scrollY - panelTop", template_source)
+        self.assertIn("window.aprsboxPrepareSettingsPosition = preparePosition", template_source)
+        self.assertIn("window.aprsboxRememberSettingsPosition = rememberPosition", template_source)
+        self.assertIn("window.aprsboxRememberSettingsPosition?.();", template_source)
+        self.assertIn("?edit_map_source={{ source.id }}#settings-panel-map-sources", template_source)
+        self.assertIn('/settings#settings-panel-map-sources', template_source)
+
     def test_settings_template_contains_container_mode_guards(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("{% if is_container_mode %}", template_source)

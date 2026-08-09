@@ -5,6 +5,7 @@
 - `Powiadomienia / Packet Routing`: formularze zachowują pozycję edytowanego bloku, a edytor flow ma akcje w kolumnie bieżących kroków, wysokość dopasowaną do ich zawartości i niezależnie przewijany katalog filtrów oraz reguł.
 - `GUI / przewijanie i mapa`: dodano dyskretne scrollbary zgodne z motywem w katalogu routingu, konwersacjach, Monitorze ruchu i scrollerze mapy; kliknięcie stacji w scrollerze centruje ją na mapie.
 - `APRS Device Identification`: wejście do Ustawień cicho odświeża bazę w tle, gdy nie była wcześniej aktualizowana lub ostatnia udana aktualizacja ma ponad 30 dni; nieudane próby mają 24-godzinny odstęp.
+- `Ustawienia / ergonomia`: akcje, edycja źródeł mapy i przeładowania po zapisie zachowują aktywny panel oraz pozycję przewinięcia zamiast wracać na początek strony.
 
 ## 1.10.2.dev - 08.08.2026
 - `Kopia konfiguracji v2`: uzupełniono zakres eksportu i wprowadzono bezpieczny import bez zrywania powiązań runtime; pliki v1 nie są obsługiwane.
