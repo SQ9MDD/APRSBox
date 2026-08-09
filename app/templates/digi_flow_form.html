@@ -110,15 +110,14 @@
                     </div>
                     <input type="hidden" name="steps_json" id="digi-steps-json">
                     <div class="digi-steps-chain" id="digi-steps-chain"></div>
+                    <div class="form-actions digi-flow-steps-actions">
+                        <button type="submit" class="button">{{ t("Save Changes") if flow_id else t("Create Flow") }}</button>
+                        {% if flow_id %}
+                        <a href="{{ request.scope.root_path }}/digi-flows/new?duplicate={{ flow_id }}" class="button button-secondary">{{ t("Duplicate into draft") }}</a>
+                        {% endif %}
+                    </div>
                 </div>
             </section>
-
-            <div class="form-actions">
-                <button type="submit" class="button">{{ t("Save Changes") if flow_id else t("Create Flow") }}</button>
-                {% if flow_id %}
-                <a href="{{ request.scope.root_path }}/digi-flows/new?duplicate={{ flow_id }}" class="button button-secondary">{{ t("Duplicate into draft") }}</a>
-                {% endif %}
-            </div>
         </form>
     </div>
 </section>
@@ -257,6 +256,8 @@
         const form = document.getElementById("digi-flow-form");
         const stepsJsonInput = document.getElementById("digi-steps-json");
         const stepsChain = document.getElementById("digi-steps-chain");
+        const palette = document.querySelector(".digi-flow-palette");
+        const stepsSection = document.querySelector(".digi-flow-steps-section");
         const sourceSelectorInput = document.getElementById("flow-source-selector");
         const targetSelectorInput = document.getElementById("flow-target-selector");
         const sourceKindInput = document.getElementById("flow-source-kind");
@@ -266,6 +267,25 @@
         const paletteButtons = Array.from(document.querySelectorAll(".digi-palette-button"));
         if (!form || !stepsJsonInput || !stepsChain || !sourceSelectorInput || !targetSelectorInput || !sourceKindInput || !sourceRefInput || !targetKindInput || !targetRefInput) {
             return;
+        }
+
+        const narrowBuilder = window.matchMedia("(max-width: 720px)");
+        const syncPaletteHeight = () => {
+            if (!(palette instanceof HTMLElement) || !(stepsSection instanceof HTMLElement)) return;
+            if (narrowBuilder.matches) {
+                palette.style.removeProperty("height");
+                return;
+            }
+            palette.style.height = `${Math.ceil(stepsSection.getBoundingClientRect().height)}px`;
+        };
+        if (palette instanceof HTMLElement && stepsSection instanceof HTMLElement) {
+            if (typeof ResizeObserver === "function") {
+                const stepsSectionObserver = new ResizeObserver(syncPaletteHeight);
+                stepsSectionObserver.observe(stepsSection);
+            }
+            narrowBuilder.addEventListener?.("change", syncPaletteHeight);
+            window.addEventListener("resize", syncPaletteHeight);
+            window.requestAnimationFrame(syncPaletteHeight);
         }
 
         const typeMeta = {{ type_meta|tojson }};

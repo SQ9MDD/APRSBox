@@ -3651,6 +3651,18 @@ select:focus-visible,
     color: var(--text);
 }
 
+.digi-flow-palette {
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+    overflow: hidden;
+}
+
+.digi-flow-steps-section {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
 .digi-flow-endpoint-card h3 {
     margin: 0;
     font-size: 0.96rem;
@@ -3658,7 +3670,18 @@ select:focus-visible,
 
 .digi-step-palette {
     display: grid;
+    align-content: start;
     gap: var(--space-3);
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.2rem;
+}
+
+.digi-flow-steps-actions {
+    justify-content: flex-end;
+    margin-top: auto;
+    padding-top: var(--space-3);
 }
 
 .digi-palette-button {
@@ -8087,6 +8110,14 @@ button.message-delivery-badge {
 
     .dashboard-hero {
         grid-template-columns: 1fr;
+    }
+
+    .digi-flow-palette {
+        height: auto !important;
+    }
+
+    .digi-step-palette {
+        max-height: min(32rem, 60vh);
     }
 
     .activation-grid-spacer {

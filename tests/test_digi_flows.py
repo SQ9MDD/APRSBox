@@ -214,6 +214,25 @@ class DigiFlowsTests(unittest.TestCase):
         self.assertIn("aria-label=\"{{ t('Source Interface') }}\"", template_source)
         self.assertIn("aria-label=\"{{ t('Target Interface') }}\"", template_source)
 
+    def test_digi_flow_builder_keeps_actions_with_steps_and_scrolls_palette_independently(self) -> None:
+        template_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
+        steps_section_start = template_source.index('<div class="digi-flow-steps-section">')
+        steps_section_end = template_source.index("</section>", steps_section_start)
+        actions_index = template_source.index("digi-flow-steps-actions", steps_section_start)
+        self.assertLess(actions_index, steps_section_end)
+        self.assertIn('class="form-actions digi-flow-steps-actions"', template_source)
+        self.assertIn('class="digi-step-palette" id="digi-step-palette"', template_source)
+        self.assertIn('const syncPaletteHeight = () => {', template_source)
+        self.assertIn('stepsSection.getBoundingClientRect().height', template_source)
+        self.assertIn('stepsSectionObserver.observe(stepsSection)', template_source)
+        self.assertIn(".digi-step-palette {", stylesheet_source)
+        self.assertIn("overflow-y: auto;", stylesheet_source)
+        self.assertIn("overscroll-behavior: contain;", stylesheet_source)
+        self.assertIn(".digi-flow-steps-actions {", stylesheet_source)
+        self.assertIn("justify-content: flex-end;", stylesheet_source)
+
     def test_init_db_creates_digi_flow_tables_and_allows_duplicate_route_pairs(self) -> None:
         with temporary_database():
             insert_aprsis_interface()
