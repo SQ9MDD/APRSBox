@@ -110,6 +110,17 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("border-radius: var(--radius);", stylesheet_source)
         self.assertIn("box-shadow: var(--shadow-soft);", stylesheet_source)
 
+    def test_map_station_scroller_uses_themed_scrollbar(self) -> None:
+        template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/map.css").read_text(encoding="utf-8")
+        self.assertIn('id="map-scroller-overlay" class="map-scroller-overlay"', template_source)
+        self.assertIn(".map-scroller-overlay::-webkit-scrollbar-thumb {", stylesheet_source)
+        self.assertIn("scrollbar-width: thin;", stylesheet_source)
+        self.assertIn(
+            "scrollbar-color: color-mix(in srgb, var(--accent) 42%, var(--border)) transparent;",
+            stylesheet_source,
+        )
+
     def test_map_script_supports_track_toggle_state(self) -> None:
         script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         self.assertIn("mapTileEventsEndpoint", script_source)
