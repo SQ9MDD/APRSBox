@@ -230,6 +230,9 @@ class DigiFlowsTests(unittest.TestCase):
         self.assertIn(".digi-step-palette {", stylesheet_source)
         self.assertIn("overflow-y: auto;", stylesheet_source)
         self.assertIn("overscroll-behavior: contain;", stylesheet_source)
+        self.assertIn(".digi-step-palette::-webkit-scrollbar-thumb {", stylesheet_source)
+        self.assertIn("scrollbar-width: thin;", stylesheet_source)
+        self.assertIn("scrollbar-color: color-mix(in srgb, var(--accent) 42%, var(--border)) transparent;", stylesheet_source)
         self.assertIn(".digi-flow-steps-actions {", stylesheet_source)
         self.assertIn("justify-content: flex-end;", stylesheet_source)
 
