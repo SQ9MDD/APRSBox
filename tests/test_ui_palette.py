@@ -57,7 +57,7 @@ class UiPaletteTests(unittest.TestCase):
             ".station-settings-group",
             ".location-picker-dialog",
             ".phg-generator-dialog",
-            ".beacon-confirm-dialog",
+            ".settings-progress-modal",
         ):
             with self.subTest(window_selector=window_selector):
                 self.assertIn(window_selector, stylesheet)

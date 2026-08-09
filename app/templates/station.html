@@ -186,60 +186,20 @@
         justify-content: flex-end;
     }
 
-    .beacon-confirm-modal[hidden] {
-        display: none !important;
-    }
-
-    .beacon-confirm-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 1300;
-    }
-
-    .beacon-confirm-backdrop {
-        position: absolute;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.58);
-    }
-
-    .beacon-confirm-dialog {
-        position: relative;
-        width: min(30rem, calc(100vw - 2rem));
-        margin: clamp(1rem, 10vh, 5.5rem) auto;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        background: var(--panel);
-        box-shadow: var(--shadow-lg);
-        display: grid;
-        gap: var(--space-3);
-        padding: var(--space-3);
-    }
-
-    .beacon-confirm-dialog h3 {
-        margin: 0;
-        font-size: 0.94rem;
-    }
-
-    .beacon-confirm-copy {
+    .settings-confirm-copy {
         display: grid;
         gap: var(--space-2);
     }
 
-    .beacon-confirm-copy p,
-    .beacon-confirm-copy ul {
+    .settings-confirm-copy p,
+    .settings-confirm-copy ul {
         margin: 0;
     }
 
-    .beacon-confirm-copy ul {
+    .settings-confirm-copy ul {
         padding-left: 1.1rem;
         display: grid;
         gap: 0.16rem;
-    }
-
-    .beacon-confirm-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--space-2);
     }
 
     @media (max-width: 640px) {
@@ -496,14 +456,13 @@
                 </div>
             </div>
         </div>
-        <div class="beacon-confirm-modal" id="station-manual-send-confirm-modal" hidden>
-            <div class="beacon-confirm-backdrop" data-close-manual-send-confirm></div>
-            <div class="beacon-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="station-manual-send-confirm-title" aria-describedby="station-manual-send-confirm-question">
-                <h3 id="station-manual-send-confirm-title">{{ t("Are you sure?") }}</h3>
-                <div class="beacon-confirm-copy">
-                    <p id="station-manual-send-confirm-question"></p>
+        <div class="settings-progress-backdrop" id="station-manual-send-confirm-modal" hidden>
+            <div class="settings-progress-modal" role="dialog" aria-modal="true" aria-labelledby="station-manual-send-confirm-title" aria-describedby="station-manual-send-confirm-question">
+                <div class="settings-progress-header">
+                    <h3 class="settings-progress-title" id="station-manual-send-confirm-title">{{ t("Are you sure?") }}</h3>
                 </div>
-                <div class="beacon-confirm-actions">
+                <p class="settings-progress-message" id="station-manual-send-confirm-question"></p>
+                <div class="settings-progress-actions">
                     <button type="button" class="button button-secondary" data-close-manual-send-confirm>{{ t("Cancel") }}</button>
                     <button type="button" class="button" id="station-manual-send-confirm-accept">{{ t("Send now") }}</button>
                 </div>
@@ -599,11 +558,12 @@
                 </div>
             </div>
         </div>
-        <div class="beacon-confirm-modal" id="station-beacon-confirm-modal" hidden>
-            <div class="beacon-confirm-backdrop" data-close-beacon-confirm></div>
-            <div class="beacon-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="station-beacon-confirm-title">
-                <h3 id="station-beacon-confirm-title">{{ t("This setting can significantly increase RF channel load.") }}</h3>
-                <div class="beacon-confirm-copy">
+        <div class="settings-progress-backdrop" id="station-beacon-confirm-modal" hidden>
+            <div class="settings-progress-modal" role="dialog" aria-modal="true" aria-labelledby="station-beacon-confirm-title">
+                <div class="settings-progress-header">
+                    <h3 class="settings-progress-title" id="station-beacon-confirm-title">{{ t("This setting can significantly increase RF channel load.") }}</h3>
+                </div>
+                <div class="settings-progress-message settings-confirm-copy">
                     <p>{{ t("Beacon path is wide while the transmission interval is short.") }}</p>
                     <p>{{ t("Recommendation:") }}</p>
                     <ul>
@@ -612,7 +572,7 @@
                     </ul>
                     <p>{{ t("Are you sure you want to save this configuration?") }}</p>
                 </div>
-                <div class="beacon-confirm-actions">
+                <div class="settings-progress-actions">
                     <button type="button" class="button button-secondary" data-close-beacon-confirm>{{ t("Cancel") }}</button>
                     <button type="button" class="button" id="station-beacon-confirm-accept">{{ t("Save despite warning") }}</button>
                 </div>
@@ -895,6 +855,11 @@
             };
 
             sendConfirmCloseButtons.forEach((button) => button.addEventListener("click", closeSendConfirm));
+            if (sendConfirmModal) {
+                sendConfirmModal.addEventListener("click", (event) => {
+                    if (event.target === sendConfirmModal) closeSendConfirm();
+                });
+            }
             if (sendConfirmAccept) {
                 sendConfirmAccept.addEventListener("click", () => {
                     const submitter = pendingManualSubmitter;
@@ -1273,6 +1238,9 @@
 
             confirmCloseButtons.forEach((button) => {
                 button.addEventListener("click", closeConfirmModal);
+            });
+            confirmModal.addEventListener("click", (event) => {
+                if (event.target === confirmModal) closeConfirmModal();
             });
 
             confirmAcceptButton.addEventListener("click", () => {

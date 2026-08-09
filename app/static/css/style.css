@@ -1350,7 +1350,7 @@ body {
     .station-settings-group,
     .location-picker-dialog,
     .phg-generator-dialog,
-    .beacon-confirm-dialog
+    .settings-progress-modal
 ) {
     border-color: color-mix(in srgb, #fa6831 38%, transparent);
 }
