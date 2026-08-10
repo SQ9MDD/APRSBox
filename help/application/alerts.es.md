@@ -4,6 +4,12 @@ La pestaña `Alarmas` muestra alarmas lógicas creadas a partir de tramas APRS d
 
 `NWS-WARN` sirve para recibir avisos meteorológicos compactos por condados de Estados Unidos. Los detalles incluyen, entre otros datos, el evento, el nivel, la caducidad y los códigos de área UGC; APRSBox resalta en el mapa los condados reconocidos. Es un perfil de solo recepción: APRSBox no puede enviar ni cancelar una alarma `NWS-WARN`. La configuración del grupo, el formato, los niveles, el mapeo de áreas y las limitaciones se explican en la [guía detallada de NWS-WARN](settings_alarms_nws_warn.es.md).
 
+## Interpretación del código de evento y el nivel
+
+Los detalles de la alarma mantienen visible el código original junto a su descripción. En CAWF, la descripción se obtiene del registro de eventos CAWF v1 y los niveles `1`, `2` y `3` significan amarillo, naranja y rojo. Un código fuera del registro o un nivel fuera de esa escala se marca como no reconocido.
+
+En `NWS-WARN`, el nombre del evento es texto libre proporcionado por el remitente. APRSBox puede asignar un nombre reconocido a una categoría descriptiva, pero esto no sustituye al producto oficial de NWS. Un dígito final es el mapeo 1–3 elegido por el publicador del repetidor, no una gravedad oficial de NWS CAP. Consulta las guías de [CAWF](settings_alarms_cawf.es.md) y [NWS-WARN](settings_alarms_nws_warn.es.md).
+
 - Al hacer clic en una fila se abre el modal con la trama de alarma más reciente.
 - El botón de detalles de la alarma abre el registro completo y el historial de tramas relacionadas.
 - Silenciar no detiene las actualizaciones de la alarma ni el contador de tramas.

@@ -6,6 +6,12 @@ Zakładka `Alarmy` pokazuje logiczne alarmy utworzone z natywnych ramek APRS eme
 
 Alarm CAWF wysłany z formularza APRSBox również trafia do tej listy i zachowuje się jak każdy inny alarm.
 
+## Interpretacja kodu i poziomu
+
+W szczegółach alarmu surowy kod pozostaje widoczny obok opisu. Dla CAWF opis jest dobierany według rejestru zdarzeń CAWF v1, a poziomy `1`, `2` i `3` oznaczają odpowiednio żółty, pomarańczowy i czerwony. Kod spoza rejestru albo poziom spoza tej skali jest oznaczany jako nierozpoznany.
+
+W `NWS-WARN` nazwa zdarzenia jest swobodnym tekstem nadawcy. APRSBox może przypisać rozpoznaną nazwę do opisowej kategorii, ale nie zastępuje to oficjalnego produktu NWS. Końcowa cyfra jest mapowaniem 1–3 przyjętym przez wydawcę przekaźnika, a nie oficjalnym poziomem ważności NWS CAP. Szczegółowe zasady opisują pomoce [CAWF](settings_alarms_cawf.pl.md) i [NWS-WARN](settings_alarms_nws_warn.pl.md).
+
 Jeżeli pełny znak źródłowy alarmu CAWF jest identyczny ze znakiem skonfigurowanej stacji, na liście pojawia się przycisk `Odwołaj alarm`. Po potwierdzeniu APRSBox zatrzymuje powtórzenia i wysyła protokolarną ramkę CAWF `CANCEL` z tym samym źródłem, grupą i logicznym `ALERT_ID`.
 
 Przycisk `Wyślij alarm` obok `Usuń zaznaczone` otwiera osobną stronę kreatora. W formularzu pole `Ścieżka (RF)` określa ścieżkę używaną podczas nadawania radiowego. Domyślnie wybrana jest ścieżka skonfigurowana dla stacji. `Direct (bez ścieżki)` nadaje bez hopów digi. Wybrana ścieżka jest zapisywana z alarmem i pozostaje taka sama dla jego powtórzeń oraz ramki `CANCEL`. Nie jest to wybór trasy serwerowej APRS-IS.

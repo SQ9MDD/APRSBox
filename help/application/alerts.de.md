@@ -4,6 +4,12 @@ Die Registerkarte `Alarme` zeigt logische Alarme aus nativen APRS-Notfallframes 
 
 `NWS-WARN` dient zum Empfang kompakter US-Wetterwarnungen auf County-Ebene. Die Alarmdetails enthalten unter anderem Ereignis, Stufe, Ablaufzeit und UGC-Gebietscodes; erkannte Countys werden auf der Karte hervorgehoben. Dieses Profil ist nur für den Empfang bestimmt: APRSBox kann einen `NWS-WARN`-Alarm weder senden noch aufheben. Gruppenkonfiguration, Frame-Format, Stufen, Gebietszuordnung und Einschränkungen beschreibt die [ausführliche NWS-WARN-Hilfe](settings_alarms_nws_warn.de.md).
 
+## Interpretation von Ereigniscode und Stufe
+
+In den Alarmdetails bleibt der Rohcode neben seiner Beschreibung sichtbar. Bei CAWF wird die Beschreibung anhand des CAWF-v1-Ereignisregisters bestimmt; die Stufen `1`, `2` und `3` bedeuten Gelb, Orange und Rot. Ein Code außerhalb des Registers oder eine Stufe außerhalb dieser Skala wird als nicht erkannt gekennzeichnet.
+
+Bei `NWS-WARN` ist der Ereignisname Freitext des Absenders. APRSBox kann einen erkannten Namen einer beschreibenden Kategorie zuordnen, ersetzt damit jedoch nicht das offizielle NWS-Produkt. Eine abschließende Ziffer ist die vom Relay-Herausgeber gewählte 1–3-Zuordnung und keine offizielle NWS-CAP-Schwere. Einzelheiten enthalten die Hilfen zu [CAWF](settings_alarms_cawf.de.md) und [NWS-WARN](settings_alarms_nws_warn.de.md).
+
 - Ein Klick auf eine Zeile öffnet das Modal mit dem neuesten Alarmframe.
 - Die Schaltfläche mit den Alarmdetails öffnet den vollständigen Datensatz und den Verlauf der zugehörigen Frames.
 - Das Stummschalten stoppt weder die Aktualisierung des Alarms noch den Frame-Zähler.

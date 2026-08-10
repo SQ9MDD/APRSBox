@@ -16,7 +16,6 @@ class AlertInterpretationTests(unittest.TestCase):
         self.assertTrue(result["event_known"])
         self.assertEqual(result["severity_level_label"], "Level 2")
         self.assertEqual(result["severity_color_label"], "Orange")
-        self.assertIn("CAWF v1", result["severity_note"])
 
     def test_nws_warn_marks_event_as_category_and_level_as_relay_mapping(self) -> None:
         result = interpret_group_alert(
@@ -29,7 +28,6 @@ class AlertInterpretationTests(unittest.TestCase):
         self.assertEqual(result["event_label"], "Tornado")
         self.assertTrue(result["event_known"])
         self.assertEqual(result["severity_color_label"], "Red")
-        self.assertIn("not an official NWS CAP severity", result["severity_note"])
 
     def test_format_specific_unknown_values_are_not_overstated(self) -> None:
         cawf = interpret_group_alert(

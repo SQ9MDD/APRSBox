@@ -95,16 +95,12 @@
             <dt>{{ t("Warning format") }}</dt>
             <dd>{{ alert.interpretation.format_label }}</dd>
             <dt class="alert-detail-critical-value">{{ t("Event description") }}</dt>
-            <dd class="alert-detail-critical-value">
-                {{ t(alert.interpretation.event_label) }}
-                <span class="muted">({{ t(alert.interpretation.event_note) }})</span>
-            </dd>
+            <dd class="alert-detail-critical-value">{{ t(alert.interpretation.event_label) }}</dd>
             <dt class="alert-detail-critical-value">{{ t("Event code") }}</dt>
             <dd class="alert-detail-critical-value"><code>{{ alert.event_code or "-" }}</code></dd>
             <dt class="alert-detail-critical-value">{{ t("Threat level") }}</dt>
             <dd class="alert-detail-critical-value">
                 {{ t(alert.interpretation.severity_level_label) }}{% if alert.interpretation.severity_color_label %} — {{ t(alert.interpretation.severity_color_label) }}{% endif %}
-                <span class="muted">({{ t(alert.interpretation.severity_note) }})</span>
             </dd>
             <dt class="alert-detail-critical-value">{{ t("Comment") }}</dt>
             <dd class="alert-detail-critical-value">{{ alert.protocol_comment or "-" }}</dd>

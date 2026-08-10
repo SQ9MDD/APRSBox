@@ -38,23 +38,11 @@ def interpret_group_alert(
         event_known = event_label is not None
         event_label = event_label or "Unrecognized sender event label"
         format_label = "NWS-WARN"
-        event_note = (
-            "NWS-WARN event names are sender-provided free text; APRSBox maps "
-            "recognized names to a category."
-        )
-        severity_note = (
-            "NWS-WARN level is the relay publisher's 1-3 mapping, not an "
-            "official NWS CAP severity."
-        )
     else:
         event_label = _CAWF_LABELS.get(event_family)
         event_known = event_label is not None
         event_label = event_label or "Unrecognized CAWF event code"
         format_label = "CAWF v1"
-        event_note = (
-            "CAWF event codes are interpreted against the CAWF v1 event registry."
-        )
-        severity_note = "CAWF v1 defines levels 1-3 as yellow, orange, and red."
 
     try:
         normalized_level = int(severity_level)
@@ -66,9 +54,7 @@ def interpret_group_alert(
         "format_label": format_label,
         "event_label": event_label,
         "event_known": event_known,
-        "event_note": event_note,
         "severity_level_label": level_parts[0] if level_parts else "Unknown level",
         "severity_color_label": level_parts[1] if level_parts else "",
         "severity_known": level_parts is not None,
-        "severity_note": severity_note,
     }
