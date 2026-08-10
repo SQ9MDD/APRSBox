@@ -2,7 +2,7 @@
 
 Zakładka `Alarmy` pokazuje logiczne alarmy utworzone z natywnych ramek APRS emergency oraz wiadomości grupowych CAWF i `NWS-WARN`. Wszystkie trafiają do tej samej listy i mają szczegóły, historię ramek, wyciszanie oraz usuwanie.
 
-`NWS-WARN` służy do odbioru zwartych ostrzeżeń pogodowych dla powiatów USA. W szczegółach alarmu APRSBox pokazuje między innymi rodzaj zdarzenia, poziom, czas wygaśnięcia i kody obszarów UGC, a rozpoznane powiaty zaznacza na mapie. Jest to profil odbiorczy: alarmu `NWS-WARN` nie można wysłać ani odwołać z APRSBox. Konfigurację grupy, format ramki, poziomy, mapowanie obszarów i ograniczenia opisuje [szczegółowa pomoc NWS-WARN](settings_alarms_nws_warn.pl.md).
+`NWS-WARN` służy do odbioru zwartych ostrzeżeń pogodowych dla powiatów USA. W szczegółach alarmu APRSBox pokazuje między innymi surowy kod i rozpoznany opis zdarzenia, opis poziomu, czas wygaśnięcia i kody obszarów UGC, a rozpoznane powiaty zaznacza na mapie. Widok wyraźnie odróżnia poziom CAWF (zdefiniowana skala żółty–pomarańczowy–czerwony) od sufiksu `NWS-WARN`, który jest mapowaniem wydawcy przekaźnika, a nie oficjalną ważnością NWS CAP. Jest to profil odbiorczy: alarmu `NWS-WARN` nie można wysłać ani odwołać z APRSBox. Konfigurację grupy, format ramki, poziomy, mapowanie obszarów i ograniczenia opisuje [szczegółowa pomoc NWS-WARN](settings_alarms_nws_warn.pl.md).
 
 Alarm CAWF wysłany z formularza APRSBox również trafia do tej listy i zachowuje się jak każdy inny alarm.
 

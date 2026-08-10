@@ -842,7 +842,7 @@ class AprsAlertTests(unittest.TestCase):
             alert_detail_source,
         )
         self.assertLess(
-            alert_detail_source.index('{{ t("Severity level") }}'),
+            alert_detail_source.index('{{ t("Threat level") }}'),
             alert_detail_source.index('{{ alert.protocol_comment or "-" }}'),
         )
         self.assertLess(
