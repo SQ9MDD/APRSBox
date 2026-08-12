@@ -683,6 +683,8 @@
   "QSY": "QSY",
   "Map controls": "Kartensteuerung",
   "Reset view": "Ansicht zurücksetzen",
+  "Show Maidenhead grid": "Maidenhead-Gitter anzeigen",
+  "Hide Maidenhead grid": "Maidenhead-Gitter ausblenden",
   "Mask opacity": "Deckkraft der Maske",
   "Coverage fill opacity": "Deckkraft der Deckungsfüllung",
   "Coverage outline opacity": "Deckkraft der Abdeckungsumrisse",

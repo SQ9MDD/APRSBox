@@ -679,6 +679,8 @@
   "QSY": "QSY",
   "Map controls": "Sterowanie mapą",
   "Reset view": "Resetuj widok",
+  "Show Maidenhead grid": "Pokaż siatkę Maidenhead",
+  "Hide Maidenhead grid": "Ukryj siatkę Maidenhead",
   "Mask opacity": "Przezroczystość maski",
   "Coverage fill opacity": "Przezroczystość wypełnienia zasięgu",
   "Coverage outline opacity": "Przezroczystość obwiedni zasięgu",

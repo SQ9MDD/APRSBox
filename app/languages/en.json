@@ -680,6 +680,8 @@
   "QSY": "QSY",
   "Map controls": "Map controls",
   "Reset view": "Reset view",
+  "Show Maidenhead grid": "Show Maidenhead grid",
+  "Hide Maidenhead grid": "Hide Maidenhead grid",
   "Mask opacity": "Mask opacity",
   "Coverage fill opacity": "Coverage fill opacity",
   "Coverage outline opacity": "Coverage outline opacity",

@@ -374,6 +374,14 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("actionId: 'update-application'", template_source)
         self.assertIn("lockTimeoutMs: 1200000", template_source)
 
+    def test_update_application_uses_styled_confirmation_modal(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('id="application-update-confirm-modal"', template_source)
+        self.assertIn('aria-labelledby="application-update-confirm-title"', template_source)
+        self.assertIn('id="application-update-confirm-accept"', template_source)
+        self.assertIn('data-close-application-update-confirm', template_source)
+        self.assertNotIn("return confirm({{ t('Start application update now?')", template_source)
+
     def test_restart_services_has_reload_delay(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("actionId: 'restart-services'", template_source)
