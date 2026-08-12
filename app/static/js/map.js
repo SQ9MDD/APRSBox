@@ -1092,7 +1092,9 @@
         const cellPixelWidth = Math.abs(projectedRight.x - projectedLeft.x);
         const maximumLabelFontSize = spec.precision === 2
             ? 54
-            : (spec.precision === 4 ? 38 : (spec.precision === 6 ? 30 : 24));
+            : (spec.precision === 4
+                ? 38
+                : (spec.precision === 6 ? (map.getZoom() === 11 ? 18 : 30) : 24));
         const widthLimitedLabelFontSize = cellPixelWidth / (spec.precision * 0.72);
 
         for (let longitudeIndex = firstLongitudeIndex; longitudeIndex <= lastLongitudeIndex + 1; longitudeIndex += 1) {
