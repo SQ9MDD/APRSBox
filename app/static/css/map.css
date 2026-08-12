@@ -220,22 +220,14 @@
     transform: translate(-50%, -50%);
     color: #6b7280;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 1.7rem;
+    font-size: var(--maidenhead-label-size, 1.7rem);
     font-weight: 700;
     line-height: 1;
     letter-spacing: 0.06em;
-    opacity: 0.2;
+    opacity: 0.38;
     text-align: center;
     white-space: nowrap;
     user-select: none;
-}
-
-.maidenhead-grid-label-field span {
-    font-size: 2.4rem;
-}
-
-.maidenhead-grid-label-subsquare span {
-    font-size: 1.25rem;
 }
 
 .map-alerts-overlay[hidden] {

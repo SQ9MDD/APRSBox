@@ -1045,9 +1045,38 @@
             pane: maidenheadGridPaneName,
             interactive: false,
             color: "#6b7280",
-            opacity: 0.34,
-            weight: spec.precision === 2 ? 1.5 : 1,
+            opacity: 0.58,
+            weight: spec.precision === 2 ? 1.6 : 1.2,
         };
+        const mapCenter = map.getCenter();
+        const cellCenterLatitude = Math.max(
+            -90 + (spec.latitudeStep / 2),
+            Math.min(90 - (spec.latitudeStep / 2), mapCenter.lat)
+        );
+        const projectedLeft = map.project(
+            [cellCenterLatitude, mapCenter.lng - (spec.longitudeStep / 2)],
+            map.getZoom()
+        );
+        const projectedRight = map.project(
+            [cellCenterLatitude, mapCenter.lng + (spec.longitudeStep / 2)],
+            map.getZoom()
+        );
+        const projectedTop = map.project(
+            [cellCenterLatitude + (spec.latitudeStep / 2), mapCenter.lng],
+            map.getZoom()
+        );
+        const projectedBottom = map.project(
+            [cellCenterLatitude - (spec.latitudeStep / 2), mapCenter.lng],
+            map.getZoom()
+        );
+        const cellPixelWidth = Math.abs(projectedRight.x - projectedLeft.x);
+        const cellPixelHeight = Math.abs(projectedBottom.y - projectedTop.y);
+        const maximumLabelFontSize = spec.precision === 2 ? 44 : (spec.precision === 4 ? 30 : 24);
+        const labelFontSize = Math.max(9, Math.min(
+            maximumLabelFontSize,
+            cellPixelHeight * 0.34,
+            cellPixelWidth / (spec.precision * 0.68)
+        ));
 
         for (let longitudeIndex = firstLongitudeIndex; longitudeIndex <= lastLongitudeIndex + 1; longitudeIndex += 1) {
             const longitude = -180 + (longitudeIndex * spec.longitudeStep);
@@ -1076,7 +1105,7 @@
                     keyboard: false,
                     icon: window.L.divIcon({
                         className: `maidenhead-grid-label-icon maidenhead-grid-label-${spec.sizeClass}`,
-                        html: `<span>${locator}</span>`,
+                        html: `<span style="--maidenhead-label-size: ${labelFontSize.toFixed(2)}px">${locator}</span>`,
                         iconSize: [0, 0],
                         iconAnchor: [0, 0],
                     }),
