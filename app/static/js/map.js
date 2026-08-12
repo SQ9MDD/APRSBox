@@ -1003,7 +1003,7 @@
         if (zoom <= 5) {
             return { longitudeStep: 20, latitudeStep: 10, precision: 2, sizeClass: "field" };
         }
-        if (zoom <= 11) {
+        if (zoom <= 10) {
             return { longitudeStep: 2, latitudeStep: 1, precision: 4, sizeClass: "square" };
         }
         if (zoom <= 14) {
