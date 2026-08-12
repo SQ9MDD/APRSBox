@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}-modal-layer-1">
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
 {% endblock %}
 
@@ -12,6 +12,33 @@
         <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
     </div>
 </section>
+{% endif %}
+
+{% if can_edit %}
+<div class="settings-progress-backdrop" id="wx-action-progress" hidden>
+    <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
+        <div class="settings-progress-header">
+            <span class="settings-progress-spinner" aria-hidden="true"></span>
+            <h3 class="settings-progress-title">{{ t("Please wait") }}</h3>
+        </div>
+        <p class="settings-progress-message">{{ t("Working...") }}</p>
+        <div class="settings-progress-actions" hidden>
+            <button type="button" class="button button-secondary settings-progress-close">{{ t("OK") }}</button>
+        </div>
+    </div>
+</div>
+<div class="settings-progress-backdrop" id="wx-action-confirm" hidden>
+    <div class="settings-progress-modal" role="dialog" aria-modal="true" aria-labelledby="wx-action-confirm-title" aria-describedby="wx-action-confirm-question">
+        <div class="settings-progress-header">
+            <h3 class="settings-progress-title" id="wx-action-confirm-title">{{ t("Are you sure?") }}</h3>
+        </div>
+        <p class="settings-progress-message" id="wx-action-confirm-question"></p>
+        <div class="settings-progress-actions">
+            <button type="button" class="button button-secondary" data-close-wx-confirm>{{ t("Cancel") }}</button>
+            <button type="button" class="button" id="wx-action-confirm-accept">{{ t("OK") }}</button>
+        </div>
+    </div>
+</div>
 {% endif %}
 
 <section class="panel">
@@ -32,7 +59,7 @@
         </div>
         {% set selected_wx_interface_id = '__ALL_ACTIVE__' if wx_config.beacon_tx_scope == 'all_active' else (wx_config.beacon_interface_id|string if wx_config.beacon_interface_id is not none else '') %}
         {% if can_edit %}
-        <form method="post" action="{{ request.scope.root_path }}/wx/config" class="form-grid">
+        <form method="post" action="{{ request.scope.root_path }}/wx/config" class="form-grid" data-wx-modal-action>
             <label>
                 <span>{{ t("Callsign") }}</span>
                 <input type="text" value="{{ wx_config.callsign or '' }}" readonly>
@@ -101,7 +128,7 @@
             <div class="form-actions">
                 <button type="submit" class="button">{{ t("Save WX configuration") }}</button>
                 <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/wx/refresh">{{ t("Refresh now") }}</button>
-                <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/wx/send">{{ t("Send now") }}</button>
+                <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/wx/send" data-wx-confirm="{{ t('Are you sure you want to send WX now?') }}">{{ t("Send now") }}</button>
             </div>
         </form>
         {% else %}
@@ -170,7 +197,7 @@
         </div>
         {% endif %}
         {% if can_edit %}
-        <form method="post" action="{{ request.scope.root_path }}/wx/mappings" class="form-stack">
+        <form method="post" action="{{ request.scope.root_path }}/wx/mappings" class="form-stack" data-wx-modal-action>
             <div class="wx-mapping-groups">
                 <div class="wx-mapping-group">
                     <h3>{{ t("Required parameters") }}</h3>
@@ -382,12 +409,12 @@
                         <td>
                             <div class="wx-inline-actions table-actions table-actions-start">
                                 {% if can_edit %}
-                                <form method="post" action="{{ request.scope.root_path }}/wx/sources/{{ source.id }}/test" class="inline-form">
+                                <form method="post" action="{{ request.scope.root_path }}/wx/sources/{{ source.id }}/test" class="inline-form" data-wx-modal-action>
                                     <button type="submit" class="table-icon-button" title="{{ t('Run test read') }}" aria-label="{{ t('Run test read') }} {{ source.name }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/test-tube.svg" alt="">
                                     </button>
                                 </form>
-                                <form method="post" action="{{ request.scope.root_path }}/wx/sources/{{ source.id }}/discover" class="inline-form">
+                                <form method="post" action="{{ request.scope.root_path }}/wx/sources/{{ source.id }}/discover" class="inline-form" data-wx-modal-action>
                                     <button type="submit" class="table-icon-button" title="{{ t('Discover source') }}" aria-label="{{ t('Discover source') }} {{ source.name }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/magnify.svg" alt="">
                                     </button>
@@ -398,13 +425,13 @@
                                         <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                                     </button>
                                 </form>
-                                <form method="post" action="{{ request.scope.root_path }}/wx/sources/{{ source.id }}/delete" class="inline-form">
+                                <form method="post" action="{{ request.scope.root_path }}/wx/sources/{{ source.id }}/delete" class="inline-form" data-wx-modal-action>
                                     <button
                                         type="submit"
                                         class="table-icon-button table-icon-button-danger"
                                         title="{{ t('Delete source') }}"
                                         aria-label="{{ t('Delete source') }} {{ source.name }}"
-                                        onclick="return confirm({{ t('Delete this WX source?')|tojson }});"
+                                        data-wx-confirm="{{ t('Delete this WX source?') }}"
                                     >
                                         <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                     </button>
@@ -424,7 +451,7 @@
             </table>
         </div>
         {% if can_edit %}
-        <form method="post" action="{{ request.scope.root_path }}/wx/sources" class="form-grid wx-source-form">
+        <form method="post" action="{{ request.scope.root_path }}/wx/sources" class="form-grid wx-source-form" data-wx-modal-action>
             <input type="hidden" name="source_id" value="{{ wx_source_form.id or '' }}">
             <label>
                 <span>{{ t("Source name") }}</span>
@@ -529,13 +556,12 @@
     </div>
 </section>
 
-{% if wx_source_discovery and wx_source_discovery.ok %}
-<section class="panel">
+<section class="panel" id="wx-discovery-results"{% if not (wx_source_discovery and wx_source_discovery.ok) %} hidden{% endif %}>
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
                 <h2>{{ t("Discovery preview") }}</h2>
-                <p class="section-lead">{{ tf("Discovered items from {name}.", {"name": wx_source_discovery.source.name}) }}</p>
+                <p class="section-lead" id="wx-discovery-lead">{% if wx_source_discovery and wx_source_discovery.ok %}{{ tf("Discovered items from {name}.", {"name": wx_source_discovery.source.name}) }}{% endif %}</p>
             </div>
         </div>
         <div class="table-wrap">
@@ -549,8 +575,8 @@
                         <th>{{ t("Unit") }}</th>
                     </tr>
                 </thead>
-                <tbody>
-                    {% for item in wx_source_discovery.items %}
+                <tbody id="wx-discovery-body">
+                    {% for item in (wx_source_discovery.items if wx_source_discovery and wx_source_discovery.ok else []) %}
                     <tr>
                         <td><code>{{ item.identifier }}</code></td>
                         <td>{{ item.label }}</td>
@@ -568,7 +594,6 @@
         </div>
     </div>
 </section>
-{% endif %}
 {% include "partials/help_modal.html" %}
 {% endblock %}
 
@@ -576,6 +601,174 @@
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.js?v={{ app_version }}"></script>
 <script>
+    (() => {
+        const forms = Array.from(document.querySelectorAll("form[data-wx-modal-action]"));
+        const progressModal = document.getElementById("wx-action-progress");
+        const progressMessage = progressModal?.querySelector(".settings-progress-message");
+        const progressActions = progressModal?.querySelector(".settings-progress-actions");
+        const progressClose = progressModal?.querySelector(".settings-progress-close");
+        const confirmModal = document.getElementById("wx-action-confirm");
+        const confirmQuestion = document.getElementById("wx-action-confirm-question");
+        const confirmAccept = document.getElementById("wx-action-confirm-accept");
+        const confirmCloseButtons = confirmModal ? confirmModal.querySelectorAll("[data-close-wx-confirm]") : [];
+        const workingMessage = {{ t("Working...")|tojson }};
+        const failedMessage = {{ t("Operation failed.")|tojson }};
+        const continueLabel = {{ t("OK")|tojson }};
+        const discoveryLeadTemplate = {{ t("Discovered items from {name}.")|tojson }};
+        const noItemsLabel = {{ t("No items discovered.")|tojson }};
+        let pendingAction = null;
+        let bypassConfirmation = false;
+
+        if (!forms.length || !progressModal || !confirmModal) return;
+
+        const controlsForForm = (form) => Array.from(form.querySelectorAll("button[type='submit'], input[type='submit']"));
+        const setBusy = (form, busy) => {
+            form.toggleAttribute("aria-busy", busy);
+            for (const control of controlsForForm(form)) control.disabled = busy;
+        };
+
+        const showProgress = (message, finished = false) => {
+            if (progressMessage) progressMessage.textContent = String(message || workingMessage);
+            if (progressActions) progressActions.hidden = !finished;
+            progressModal.hidden = false;
+        };
+
+        const hideProgress = () => {
+            progressModal.hidden = true;
+        };
+
+        const closeConfirm = () => {
+            confirmModal.hidden = true;
+            document.body.classList.remove("modal-open");
+            pendingAction = null;
+        };
+
+        const openConfirm = (form, submitter, question) => {
+            pendingAction = { form, submitter };
+            if (confirmQuestion) confirmQuestion.textContent = question;
+            if (confirmAccept) confirmAccept.textContent = submitter?.textContent?.trim() || continueLabel;
+            confirmModal.hidden = false;
+            document.body.classList.add("modal-open");
+            confirmAccept?.focus();
+        };
+
+        const renderDiscovery = (discovery) => {
+            if (!discovery || typeof discovery !== "object") return;
+            const section = document.getElementById("wx-discovery-results");
+            const lead = document.getElementById("wx-discovery-lead");
+            const body = document.getElementById("wx-discovery-body");
+            if (!section || !lead || !body) return;
+
+            const sourceName = String(discovery.source?.name || "");
+            lead.textContent = discoveryLeadTemplate.replace("{name}", sourceName);
+            body.textContent = "";
+            const items = Array.isArray(discovery.items) ? discovery.items : [];
+            if (!items.length) {
+                const row = document.createElement("tr");
+                const cell = document.createElement("td");
+                cell.colSpan = 5;
+                cell.textContent = noItemsLabel;
+                row.appendChild(cell);
+                body.appendChild(row);
+            } else {
+                for (const item of items) {
+                    const row = document.createElement("tr");
+                    const values = [item.identifier, item.label, item.selector_hint, item.value_preview, item.unit || "-"];
+                    values.forEach((value, index) => {
+                        const cell = document.createElement("td");
+                        const content = [0, 2, 3].includes(index) ? document.createElement("code") : cell;
+                        content.textContent = String(value ?? "");
+                        if (content !== cell) cell.appendChild(content);
+                        row.appendChild(cell);
+                    });
+                    body.appendChild(row);
+                }
+            }
+            section.hidden = false;
+            section.scrollIntoView({ behavior: "smooth", block: "start" });
+        };
+
+        if (progressClose) progressClose.addEventListener("click", hideProgress);
+        progressModal.addEventListener("click", (event) => {
+            if (event.target === progressModal && progressActions && !progressActions.hidden) hideProgress();
+        });
+        confirmCloseButtons.forEach((button) => button.addEventListener("click", closeConfirm));
+        confirmModal.addEventListener("click", (event) => {
+            if (event.target === confirmModal) closeConfirm();
+        });
+        confirmAccept?.addEventListener("click", () => {
+            const action = pendingAction;
+            if (!action) {
+                closeConfirm();
+                return;
+            }
+            closeConfirm();
+            bypassConfirmation = true;
+            action.form.requestSubmit(action.submitter);
+            bypassConfirmation = false;
+        });
+
+        for (const form of forms) {
+            form.addEventListener("submit", (event) => {
+                if (event.defaultPrevented) return;
+                const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
+                const question = String(submitter?.dataset.wxConfirm || form.dataset.wxConfirm || "").trim();
+                if (question && !bypassConfirmation) {
+                    event.preventDefault();
+                    openConfirm(form, submitter, question);
+                    return;
+                }
+
+                event.preventDefault();
+                const action = submitter?.getAttribute("formaction") || form.getAttribute("action") || form.action;
+                setBusy(form, true);
+                showProgress(workingMessage);
+                const startedAt = Date.now();
+
+                void window.fetch(action, {
+                    method: String(submitter?.getAttribute("formmethod") || form.method || "post").toUpperCase(),
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json",
+                    },
+                }).then(async (response) => {
+                    let payload = null;
+                    try {
+                        payload = await response.json();
+                    } catch (_error) {
+                        payload = null;
+                    }
+                    const remaining = Math.max(0, 500 - (Date.now() - startedAt));
+                    if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+                    if (!response.ok || !payload || payload.ok !== true) {
+                        const detail = payload && payload.error ? ` ${payload.error}` : ` HTTP ${response.status}`;
+                        throw new Error(detail.trim());
+                    }
+
+                    setBusy(form, false);
+                    renderDiscovery(payload.discovery);
+                    showProgress(payload.message, true);
+                    if (payload.reload) {
+                        window.setTimeout(() => {
+                            if (payload.redirect) window.location.assign(payload.redirect);
+                            else window.location.reload();
+                        }, 1200);
+                    }
+                }).catch((error) => {
+                    setBusy(form, false);
+                    const detail = error && error.message ? ` ${error.message}` : "";
+                    showProgress(`${failedMessage}${detail}`, true);
+                });
+            });
+        }
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !confirmModal.hidden) closeConfirm();
+        });
+    })();
+
     (() => {
         const rootPath = String({{ request.scope.root_path|tojson }} || "");
         const scrollStateStorageKey = "aprsbox-wx-scroll-restore-v1";

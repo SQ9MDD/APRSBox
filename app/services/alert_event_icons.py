@@ -39,6 +39,19 @@ def resolve_alert_event_category(event_code: Any) -> str:
     return "OTHER"
 
 
+def resolve_alert_event_label(event_code: Any) -> str | None:
+    """Return a descriptive label only when the event family is recognized."""
+
+    category_key = resolve_alert_event_category(event_code)
+    if category_key == "OTHER":
+        return None
+    return next(
+        str(category["label"])
+        for category in ALERT_EVENT_CATEGORIES
+        if category["key"] == category_key
+    )
+
+
 def resolve_alert_event_icon(
     event_code: Any,
     *,

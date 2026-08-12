@@ -24,6 +24,7 @@ from app.services.messages import (
     QUERY_MESSAGE_KIND,
     _format_heard_parts,
     _heard_recently_state,
+    clear_message_inbox,
     get_message_settings,
     get_unread_inbox_count,
     get_messages_page_data,
@@ -95,6 +96,21 @@ def station_payload(interface_id: int, *, ssid: str = "4") -> dict[str, str]:
 
 
 class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
+    def test_clear_message_inbox_removes_all_conversations_and_cancels_queued_jobs(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            queue_outgoing_message(callsign="SP8ABC", message_text="Test 1", path="")
+            queue_outgoing_message(callsign="DL1XYZ-9", message_text="Test 2", path="")
+
+            result = clear_message_inbox()
+
+            self.assertEqual(result, {"conversation_count": 2, "message_count": 2})
+            self.assertEqual(int(fetch_one("SELECT COUNT(*) AS total FROM aprs_message_conversations")["total"]), 0)
+            self.assertEqual(int(fetch_one("SELECT COUNT(*) AS total FROM aprs_messages")["total"]), 0)
+            queued_jobs = fetch_all("SELECT status FROM outbound_jobs WHERE kind = 'message' ORDER BY id ASC")
+            self.assertEqual([str(row["status"]) for row in queued_jobs], ["cancelled", "cancelled"])
+
     def test_configured_alarm_group_is_not_stored_as_message_or_conversation(self) -> None:
         with temporary_database():
             save_aprs_alarm_groups("PL-WARN")

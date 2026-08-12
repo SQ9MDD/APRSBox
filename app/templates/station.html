@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}-modal-layer-1">
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet/leaflet.css?v={{ app_version }}">
 <style>
     .field-counter-inline {
@@ -186,60 +186,20 @@
         justify-content: flex-end;
     }
 
-    .beacon-confirm-modal[hidden] {
-        display: none !important;
-    }
-
-    .beacon-confirm-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 1300;
-    }
-
-    .beacon-confirm-backdrop {
-        position: absolute;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.58);
-    }
-
-    .beacon-confirm-dialog {
-        position: relative;
-        width: min(30rem, calc(100vw - 2rem));
-        margin: clamp(1rem, 10vh, 5.5rem) auto;
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        background: var(--panel);
-        box-shadow: var(--shadow-lg);
-        display: grid;
-        gap: var(--space-3);
-        padding: var(--space-3);
-    }
-
-    .beacon-confirm-dialog h3 {
-        margin: 0;
-        font-size: 0.94rem;
-    }
-
-    .beacon-confirm-copy {
+    .settings-confirm-copy {
         display: grid;
         gap: var(--space-2);
     }
 
-    .beacon-confirm-copy p,
-    .beacon-confirm-copy ul {
+    .settings-confirm-copy p,
+    .settings-confirm-copy ul {
         margin: 0;
     }
 
-    .beacon-confirm-copy ul {
+    .settings-confirm-copy ul {
         padding-left: 1.1rem;
         display: grid;
         gap: 0.16rem;
-    }
-
-    .beacon-confirm-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--space-2);
     }
 
     @media (max-width: 640px) {
@@ -484,6 +444,30 @@
                 <button type="submit" class="button button-secondary" formaction="{{ request.scope.root_path }}/station/send-status">{{ t("Send status") }}</button>
             </div>
         </form>
+        <div class="settings-progress-backdrop" id="station-save-progress" hidden>
+            <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
+                <div class="settings-progress-header">
+                    <span class="settings-progress-spinner" aria-hidden="true"></span>
+                    <h3 class="settings-progress-title">{{ t("Please wait") }}</h3>
+                </div>
+                <p class="settings-progress-message">{{ t("Saving...") }}</p>
+                <div class="settings-progress-actions" hidden>
+                    <button type="button" class="button button-secondary settings-progress-close">{{ t("OK") }}</button>
+                </div>
+            </div>
+        </div>
+        <div class="settings-progress-backdrop" id="station-manual-send-confirm-modal" hidden>
+            <div class="settings-progress-modal" role="dialog" aria-modal="true" aria-labelledby="station-manual-send-confirm-title" aria-describedby="station-manual-send-confirm-question">
+                <div class="settings-progress-header">
+                    <h3 class="settings-progress-title" id="station-manual-send-confirm-title">{{ t("Are you sure?") }}</h3>
+                </div>
+                <p class="settings-progress-message" id="station-manual-send-confirm-question"></p>
+                <div class="settings-progress-actions">
+                    <button type="button" class="button button-secondary" data-close-manual-send-confirm>{{ t("Cancel") }}</button>
+                    <button type="button" class="button" id="station-manual-send-confirm-accept">{{ t("Send now") }}</button>
+                </div>
+            </div>
+        </div>
         <div class="location-picker-modal" id="station-location-picker" hidden>
             <div class="location-picker-backdrop" data-close-location-picker></div>
             <div
@@ -574,11 +558,12 @@
                 </div>
             </div>
         </div>
-        <div class="beacon-confirm-modal" id="station-beacon-confirm-modal" hidden>
-            <div class="beacon-confirm-backdrop" data-close-beacon-confirm></div>
-            <div class="beacon-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="station-beacon-confirm-title">
-                <h3 id="station-beacon-confirm-title">{{ t("This setting can significantly increase RF channel load.") }}</h3>
-                <div class="beacon-confirm-copy">
+        <div class="settings-progress-backdrop" id="station-beacon-confirm-modal" hidden>
+            <div class="settings-progress-modal" role="dialog" aria-modal="true" aria-labelledby="station-beacon-confirm-title">
+                <div class="settings-progress-header">
+                    <h3 class="settings-progress-title" id="station-beacon-confirm-title">{{ t("This setting can significantly increase RF channel load.") }}</h3>
+                </div>
+                <div class="settings-progress-message settings-confirm-copy">
                     <p>{{ t("Beacon path is wide while the transmission interval is short.") }}</p>
                     <p>{{ t("Recommendation:") }}</p>
                     <ul>
@@ -587,7 +572,7 @@
                     </ul>
                     <p>{{ t("Are you sure you want to save this configuration?") }}</p>
                 </div>
-                <div class="beacon-confirm-actions">
+                <div class="settings-progress-actions">
                     <button type="button" class="button button-secondary" data-close-beacon-confirm>{{ t("Cancel") }}</button>
                     <button type="button" class="button" id="station-beacon-confirm-accept">{{ t("Save despite warning") }}</button>
                 </div>
@@ -805,6 +790,146 @@
                 });
                 input.value = input.value.toUpperCase();
             }
+        };
+
+        const initStationSaveProgress = () => {
+            const form = document.getElementById("station-form");
+            const saveProgress = document.getElementById("station-save-progress");
+            if (!(form instanceof HTMLFormElement) || !(saveProgress instanceof HTMLElement)) {
+                return;
+            }
+
+            const progressMessage = saveProgress.querySelector(".settings-progress-message");
+            const progressActions = saveProgress.querySelector(".settings-progress-actions");
+            const progressClose = saveProgress.querySelector(".settings-progress-close");
+            const sendConfirmModal = document.getElementById("station-manual-send-confirm-modal");
+            const sendConfirmQuestion = document.getElementById("station-manual-send-confirm-question");
+            const sendConfirmAccept = document.getElementById("station-manual-send-confirm-accept");
+            const sendConfirmCloseButtons = sendConfirmModal ? sendConfirmModal.querySelectorAll("[data-close-manual-send-confirm]") : [];
+            const submitControls = Array.from(form.querySelectorAll("button[type='submit'], input[type='submit']"));
+            const savingMessage = {{ t("Saving...")|tojson }};
+            const workingMessage = {{ t("Working...")|tojson }};
+            const failedMessage = {{ t("Operation failed.")|tojson }};
+            const beaconQuestion = {{ t("Are you sure you want to send the beacon now?")|tojson }};
+            const statusQuestion = {{ t("Are you sure you want to send the APRS status now?")|tojson }};
+            let pendingManualSubmitter = null;
+            let bypassManualConfirmation = false;
+
+            const setSaving = (saving) => {
+                form.toggleAttribute("aria-busy", saving);
+                for (const control of submitControls) {
+                    control.disabled = saving;
+                }
+            };
+
+            const showProgress = (message, finished = false) => {
+                if (progressMessage) progressMessage.textContent = String(message || savingMessage);
+                if (progressActions) progressActions.hidden = !finished;
+                saveProgress.hidden = false;
+            };
+
+            const hideProgress = () => {
+                saveProgress.hidden = true;
+            };
+
+            if (progressClose) progressClose.addEventListener("click", hideProgress);
+            saveProgress.addEventListener("click", (event) => {
+                if (event.target === saveProgress && progressActions && !progressActions.hidden) hideProgress();
+            });
+
+            const closeSendConfirm = () => {
+                if (sendConfirmModal) sendConfirmModal.hidden = true;
+                document.body.classList.remove("modal-open");
+                pendingManualSubmitter = null;
+            };
+
+            const openSendConfirm = (submitter, question) => {
+                if (!sendConfirmModal || !sendConfirmQuestion || !sendConfirmAccept) return false;
+                pendingManualSubmitter = submitter;
+                sendConfirmQuestion.textContent = question;
+                sendConfirmAccept.textContent = submitter.textContent || {{ t("Send now")|tojson }};
+                sendConfirmModal.hidden = false;
+                document.body.classList.add("modal-open");
+                sendConfirmAccept.focus();
+                return true;
+            };
+
+            sendConfirmCloseButtons.forEach((button) => button.addEventListener("click", closeSendConfirm));
+            if (sendConfirmModal) {
+                sendConfirmModal.addEventListener("click", (event) => {
+                    if (event.target === sendConfirmModal) closeSendConfirm();
+                });
+            }
+            if (sendConfirmAccept) {
+                sendConfirmAccept.addEventListener("click", () => {
+                    const submitter = pendingManualSubmitter;
+                    if (!submitter) {
+                        closeSendConfirm();
+                        return;
+                    }
+                    closeSendConfirm();
+                    bypassManualConfirmation = true;
+                    form.requestSubmit(submitter);
+                    bypassManualConfirmation = false;
+                });
+            }
+
+            form.addEventListener("submit", (event) => {
+                if (event.defaultPrevented) return;
+                const submitter = event.submitter;
+                const submitterAction = submitter ? (submitter.getAttribute("formaction") || "") : "";
+                const isBeaconAction = submitterAction.endsWith("/station/send-beacon");
+                const isStatusAction = submitterAction.endsWith("/station/send-status");
+                const isManualAction = isBeaconAction || isStatusAction;
+                if (submitterAction && !isManualAction && !submitterAction.endsWith("/station")) return;
+
+                if (isManualAction && !bypassManualConfirmation) {
+                    event.preventDefault();
+                    openSendConfirm(submitter, isBeaconAction ? beaconQuestion : statusQuestion);
+                    return;
+                }
+
+                event.preventDefault();
+                setSaving(true);
+                showProgress(isManualAction ? workingMessage : savingMessage);
+                const startedAt = Date.now();
+
+                void window.fetch(submitterAction || form.action, {
+                    method: String(form.method || "post").toUpperCase(),
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json",
+                    },
+                }).then(async (response) => {
+                    let payload = null;
+                    try {
+                        payload = await response.json();
+                    } catch (_error) {
+                        payload = null;
+                    }
+                    const remaining = Math.max(0, 500 - (Date.now() - startedAt));
+                    if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+
+                    if (!response.ok || !payload || payload.ok !== true) {
+                        const detail = payload && payload.error ? ` ${payload.error}` : ` HTTP ${response.status}`;
+                        throw new Error(detail.trim());
+                    }
+
+                    setSaving(false);
+                    showProgress(payload.message, true);
+                    if (payload.reload) window.setTimeout(() => window.location.reload(), 1200);
+                }).catch((error) => {
+                    setSaving(false);
+                    const detail = error && error.message ? ` ${error.message}` : "";
+                    showProgress(`${failedMessage}${detail}`, true);
+                });
+            });
+
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && sendConfirmModal && !sendConfirmModal.hidden) closeSendConfirm();
+            });
         };
 
         const initBeaconPathHealth = () => {
@@ -1113,6 +1238,9 @@
 
             confirmCloseButtons.forEach((button) => {
                 button.addEventListener("click", closeConfirmModal);
+            });
+            confirmModal.addEventListener("click", (event) => {
+                if (event.target === confirmModal) closeConfirmModal();
             });
 
             confirmAcceptButton.addEventListener("click", () => {
@@ -1474,6 +1602,7 @@
         initLengthCounters();
         initUppercaseInputs();
         initBeaconPathHealth();
+        initStationSaveProgress();
         initLocationPicker();
         initPhgGenerator();
     })();

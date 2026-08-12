@@ -1,12 +1,22 @@
 # APRS emergency alerts
 
-The `Alerts` tab shows logical alerts created from APRS emergency and CAWF frames. A CAWF alert sent from the APRSBox form enters the same list and behaves like every other alert, including normal details, frame history, muting, and deletion.
+The `Alerts` tab shows logical alerts created from native APRS emergency frames and CAWF or `NWS-WARN` group messages. They all enter the same list and provide details, frame history, muting, and deletion.
 
-When the alert's full source callsign exactly matches the configured station callsign, the list shows a `Cancel alarm` action. After confirmation, APRSBox stops repeats and sends a CAWF `CANCEL` frame with the same source, group, and logical `ALERT_ID`.
+`NWS-WARN` receives compact U.S. county weather warnings. Alert details include the event, level, expiry, and UGC area codes, and APRSBox highlights recognized counties on the map. This is a receive-only profile: APRSBox cannot send or cancel a `NWS-WARN` alert. Group setup, frame format, levels, area mapping, and limitations are covered in the [detailed NWS-WARN guide](settings_alarms_nws_warn.en.md).
+
+A CAWF alert sent from the APRSBox form also enters this list and behaves like every other alert.
+
+## Interpreting the event code and level
+
+Alert details keep the raw code visible beside its description. For CAWF, the description is resolved against the CAWF v1 event registry, while levels `1`, `2`, and `3` mean yellow, orange, and red. A code outside the registry or a level outside that scale is marked as unrecognized.
+
+In `NWS-WARN`, the event name is sender-provided free text. APRSBox can map a recognized name to a descriptive category, but this does not replace the official NWS product. A final digit is the relay publisher's chosen 1–3 mapping, not an official NWS CAP severity. See the detailed [CAWF](settings_alarms_cawf.en.md) and [NWS-WARN](settings_alarms_nws_warn.en.md) guides.
+
+When a CAWF alert's full source callsign exactly matches the configured station callsign, the list shows a `Cancel alarm` action. After confirmation, APRSBox stops repeats and sends a CAWF `CANCEL` frame with the same source, group, and logical `ALERT_ID`.
 
 The `Send alarm` button next to `Delete selected` opens a separate composer page. In the form, `Path (RF)` selects the path used for radio transmission. The station's configured path is selected by default. `Direct (no path)` transmits without digipeater hops. The selected path is stored with the alert and remains unchanged for repeats and the `CANCEL` frame. It does not select an APRS-IS server route.
 
-- Clicking a row opens the modal with the latest emergency frame.
+- Clicking a row opens the modal with the latest alert frame.
 - The alert details button opens the complete record and related frame history.
 - Muting does not stop alert updates or the frame counter.
 - Deleting an alert does not delete the original Traffic Monitor frames.
@@ -26,12 +36,12 @@ This permission must be configured in the browser on the display computer. The A
 
 Also verify that the tab, browser, and operating system are not muted and that the correct audio output is selected.
 
-After autoplay is allowed, an unmuted emergency frame opens the modal and starts the sound without an additional click. A muted alert continues to update but intentionally remains silent.
+After autoplay is allowed, an unmuted frame selected for an alert popup opens the modal and starts the sound without an additional click. This also applies to `NWS-WARN` when its category and level meet the configured popup threshold. A muted alert continues to update but intentionally remains silent.
 
 ## Muting
 
-Alerts can be muted for `1 hour`, `4 hours`, `24 hours`, or indefinitely. After a timed mute expires, only a subsequent emergency frame can open the modal and start the sound.
+Alerts can be muted for `1 hour`, `4 hours`, `24 hours`, or indefinitely. After a timed mute expires, only a subsequent frame for that alert can open the modal and start the sound.
 
 ## Deleting
 
-Deleting removes the logical alert record and its relations. Original frames remain in Traffic Monitor. The next emergency frame from that source creates a new alert.
+Deleting removes the logical alert record and its relations. Original frames remain in Traffic Monitor. A subsequent matching frame may create the alert again.

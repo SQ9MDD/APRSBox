@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}-modal-layer-1">
 {% endblock %}
 
 {% block content %}
@@ -9,7 +9,7 @@
 <div class="alert {% if flash_success %}success{% endif %}">{{ t(flash) }}</div>
 {% endif %}
 <div class="grid two settings-primary-grid">
-<section class="panel">
+<section class="panel" id="settings-panel-global" data-settings-panel="global">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -136,7 +136,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="settings-panel-update" data-settings-panel="update">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -198,12 +198,12 @@
             </form>
             {% if can_manage_updates and not is_container_mode %}
             <form
+                id="application-update-form"
                 method="post"
                 action="{{ request.scope.root_path }}/settings/update-application"
                 class="form-stack"
                 data-settings-action-id="update-application"
                 data-settings-action-group="update-controls"
-                onsubmit="return confirm({{ t('Start application update now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
@@ -214,7 +214,7 @@
 </section>
 </div>
 
-<section class="panel">
+<section class="panel" id="settings-panel-alarms" data-settings-panel="alarms">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -318,7 +318,7 @@
     </div>
 </section>
 
-<section class="panel map-sources-panel">
+<section class="panel map-sources-panel" id="settings-panel-map-sources" data-settings-panel="map-sources">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -390,7 +390,7 @@
                                             <img src="{{ request.scope.root_path }}/static/icons/star-outline.svg" alt="">
                                         </button>
                                     </form>
-                                    <a href="{{ request.scope.root_path }}/settings?edit_map_source={{ source.id }}" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
+                                    <a href="{{ request.scope.root_path }}/settings?edit_map_source={{ source.id }}#settings-panel-map-sources" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                                     </a>
                                     <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/delete" class="table-action-form">
@@ -460,7 +460,7 @@
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save map source") }}</button>
                     {% if map_source_form.record_id %}
-                    <a href="{{ request.scope.root_path }}/settings" class="button button-secondary">{{ t("Cancel") }}</a>
+                    <a href="{{ request.scope.root_path }}/settings#settings-panel-map-sources" class="button button-secondary">{{ t("Cancel") }}</a>
                     {% endif %}
                 </div>
             </form>
@@ -471,7 +471,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="settings-panel-device-identification" data-settings-panel="device-identification">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -513,6 +513,7 @@
             action="{{ request.scope.root_path }}/settings/update-aprs-device-identification"
             class="form-stack"
             data-settings-action-id="update-aprs-device-identification"
+            data-auto-update-due="{{ 'true' if aprs_device_identification_status.auto_update_due else 'false' }}"
             onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-aprs-device-identification', message: {{ t('Starting update, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
             <button type="submit" class="button">{{ t("Update now") }}</button>
@@ -523,7 +524,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="settings-panel-configuration-backup" data-settings-panel="configuration-backup">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -570,7 +571,7 @@
     </div>
 </section>
 
-<section class="panel">
+<section class="panel" id="settings-panel-database" data-settings-panel="database">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -670,7 +671,7 @@
     </div>
 </section>
 
-<section class="panel danger-zone-panel">
+<section class="panel danger-zone-panel" id="settings-panel-danger-zone" data-settings-panel="danger-zone">
     <div class="panel-body">
         <div class="panel-header">
             <div class="panel-header-copy">
@@ -738,12 +739,107 @@
     </div>
 </section>
 
+{% if can_manage_updates and not is_container_mode %}
+<div class="settings-progress-backdrop" id="application-update-confirm-modal" hidden>
+    <div
+        class="settings-progress-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-update-confirm-title"
+        aria-describedby="application-update-confirm-question"
+    >
+        <div class="settings-progress-header">
+            <h3 class="settings-progress-title" id="application-update-confirm-title">{{ t("Are you sure?") }}</h3>
+        </div>
+        <p class="settings-progress-message" id="application-update-confirm-question">{{ t("Start application update now?") }}</p>
+        <div class="settings-progress-actions">
+            <button type="button" class="button button-secondary" data-close-application-update-confirm>{{ t("Cancel") }}</button>
+            <button type="button" class="button" id="application-update-confirm-accept">{{ t("Update application") }}</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% include "partials/help_modal.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script>
+    (() => {
+        const storageKey = "aprsbox-settings-scroll-position-v1";
+        const maxAgeMs = 30 * 60 * 1000;
+        const settingsPath = {{ (request.scope.root_path ~ '/settings')|tojson }};
+        let pendingPosition = null;
+
+        const capturePosition = (source) => {
+            const element = source instanceof Element ? source : document.activeElement;
+            const panel = element instanceof Element ? element.closest("[data-settings-panel]") : null;
+            if (!(panel instanceof HTMLElement)) return null;
+            const panelTop = window.scrollY + panel.getBoundingClientRect().top;
+            return {
+                panel: String(panel.dataset.settingsPanel || ""),
+                relativeOffset: window.scrollY - panelTop,
+                scrollY: window.scrollY,
+                savedAt: Date.now(),
+            };
+        };
+
+        const preparePosition = (source) => {
+            pendingPosition = capturePosition(source) || pendingPosition;
+        };
+
+        const rememberPosition = (source) => {
+            const state = capturePosition(source) || pendingPosition;
+            if (!state) return;
+            window.sessionStorage.setItem(storageKey, JSON.stringify(state));
+        };
+
+        const restorePosition = () => {
+            let state = null;
+            try {
+                const raw = window.sessionStorage.getItem(storageKey);
+                state = raw ? JSON.parse(raw) : null;
+            } catch (_error) {
+                state = null;
+            }
+            window.sessionStorage.removeItem(storageKey);
+            if (!state || Date.now() - Number(state.savedAt || 0) > maxAgeMs) return;
+
+            const panelKey = String(state.panel || "");
+            const panel = Array.from(document.querySelectorAll("[data-settings-panel]"))
+                .find((candidate) => String(candidate.dataset.settingsPanel || "") === panelKey);
+            window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+                if (panel instanceof HTMLElement) {
+                    const panelTop = window.scrollY + panel.getBoundingClientRect().top;
+                    window.scrollTo(0, Math.max(0, panelTop + Number(state.relativeOffset || 0)));
+                } else {
+                    window.scrollTo(0, Math.max(0, Number(state.scrollY || 0)));
+                }
+            }));
+        };
+
+        document.addEventListener("click", (event) => {
+            const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+            if (!(link instanceof HTMLAnchorElement)) return;
+            const targetUrl = new URL(link.href, window.location.href);
+            if (targetUrl.pathname === settingsPath) {
+                rememberPosition(link);
+            }
+        }, true);
+
+        document.addEventListener("submit", (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement)) return;
+            preparePosition(form);
+            if (!form.dataset.settingsActionId) rememberPosition(form);
+        }, true);
+
+        window.aprsboxPrepareSettingsPosition = preparePosition;
+        window.aprsboxRememberSettingsPosition = rememberPosition;
+        restorePosition();
+    })();
+
     (() => {
         const rootPath = {{ request.scope.root_path|tojson }};
         const fallbackCloseLabel = {{ t("OK")|tojson }};
@@ -870,6 +966,7 @@
                     const message = job && job.message ? String(job.message) : "";
                     fallbackShow(message || fallbackWorkingLabel);
                     if (status === "success") {
+                        window.aprsboxRememberSettingsPosition?.();
                         window.setTimeout(() => window.location.reload(), 1200);
                         return;
                     }
@@ -925,6 +1022,7 @@
 
                 fallbackShow(payload.message || fallbackDoneLabel);
                 if (payload.reload || options.reloadOnSuccess) {
+                    window.aprsboxRememberSettingsPosition?.();
                     window.setTimeout(() => window.location.reload(), 1200);
                 }
             } catch (error) {
@@ -933,6 +1031,7 @@
         };
 
         window.aprsboxSubmitSettingsAction = (form, options) => {
+            window.aprsboxPrepareSettingsPosition?.(form);
             try {
                 if (typeof window.__aprsboxSettingsSubmit === "function") {
                     return window.__aprsboxSettingsSubmit(form, options);
@@ -1263,6 +1362,7 @@
                 detail: options.detail,
             });
             if (options.reload) {
+                window.aprsboxRememberSettingsPosition?.();
                 const parsedDelay = Number(options.reloadDelayMs);
                 const reloadDelayMs = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : 1200;
                 window.setTimeout(() => {
@@ -1580,6 +1680,30 @@
         window.aprsboxShowSettingsProgress = showSettingsProgress;
         window.aprsboxHideSettingsProgress = hideBackdrop;
 
+        const automaticDeviceIdentificationUpdateForm = document.querySelector(
+            'form[data-settings-action-id="update-aprs-device-identification"][data-auto-update-due="true"]'
+        );
+        if (automaticDeviceIdentificationUpdateForm instanceof HTMLFormElement) {
+            const runAutomaticDeviceIdentificationUpdate = async () => {
+                if (automaticDeviceIdentificationUpdateForm.getAttribute("aria-busy") === "true") return;
+                automaticDeviceIdentificationUpdateForm.dataset.autoUpdateDue = "false";
+                try {
+                    await window.fetch(automaticDeviceIdentificationUpdateForm.action, {
+                        method: String(automaticDeviceIdentificationUpdateForm.method || "post").toUpperCase(),
+                        body: new FormData(automaticDeviceIdentificationUpdateForm),
+                        credentials: "same-origin",
+                        headers: {
+                            "X-Requested-With": "XMLHttpRequest",
+                            "Accept": "application/json",
+                        },
+                    });
+                } catch (_error) {
+                    // This maintenance refresh is intentionally silent and will be retried later.
+                }
+            };
+            window.setTimeout(() => void runAutomaticDeviceIdentificationUpdate(), 750);
+        }
+
         backdrop.addEventListener("click", (event) => {
             if (event.target === backdrop) {
                 hideBackdrop();
@@ -1604,6 +1728,63 @@
         }
 
         resumeActiveJob();
+    })();
+    (() => {
+        const form = document.getElementById("application-update-form");
+        const modal = document.getElementById("application-update-confirm-modal");
+        const acceptButton = document.getElementById("application-update-confirm-accept");
+        const closeButtons = modal
+            ? modal.querySelectorAll("[data-close-application-update-confirm]")
+            : [];
+        let returnFocus = null;
+
+        if (!(form instanceof HTMLFormElement) || !(modal instanceof HTMLElement)) return;
+
+        const closeModal = ({ restoreFocus = true } = {}) => {
+            modal.hidden = true;
+            document.body.classList.remove("modal-open");
+            if (restoreFocus && returnFocus instanceof HTMLElement) {
+                returnFocus.focus();
+            }
+            returnFocus = null;
+        };
+
+        const openModal = () => {
+            returnFocus = document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : form.querySelector("button[type='submit']");
+            modal.hidden = false;
+            document.body.classList.add("modal-open");
+            acceptButton?.focus();
+        };
+
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            openModal();
+        });
+
+        closeButtons.forEach((button) => button.addEventListener("click", () => closeModal()));
+        modal.addEventListener("click", (event) => {
+            if (event.target === modal) closeModal();
+        });
+        modal.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                closeModal();
+            }
+        });
+        acceptButton?.addEventListener("click", () => {
+            closeModal({ restoreFocus: false });
+            window.aprsboxSubmitSettingsAction(form, {
+                actionId: 'update-application',
+                group: 'update-controls',
+                message: {{ t("Update started. Please wait...")|tojson }},
+                busyLabel: {{ t("Starting update...")|tojson }},
+                mode: 'job',
+                lockTimeoutMs: 1200000,
+                reloadOnSuccess: true,
+            });
+        });
     })();
 </script>
 <script>

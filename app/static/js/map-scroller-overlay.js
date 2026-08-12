@@ -24,6 +24,7 @@
         hide: root.dataset.i18nHide || "Hide",
         trafficMonitor: root.dataset.i18nTrafficMonitor || "Traffic Monitor",
         noFrames: root.dataset.i18nNoFrames || "No frames received yet.",
+        center: root.dataset.i18nCenter || "Center",
     });
 
     const tnc2Regex = /^(?<source>[^>]+?)\s*>\s*(?<destination>[^,:]+?)(?:\s*,\s*(?<path>[^:]+))?\s*:(?<info>.*)$/;
@@ -121,9 +122,7 @@
                 longitude: Number((station && station.longitude)),
             };
             registerStationLookupEntry(station && station.display_callsign, stationInfo);
-            if (!String((station && station.display_callsign) || "").trim()) {
-                registerStationLookupEntry(station && station.callsign, stationInfo);
-            }
+            registerStationLookupEntry(station && station.callsign, stationInfo);
         }
     }
 
@@ -416,6 +415,7 @@
             const marker = resolveMarker(parsed, direction);
             const displayCallsign = String((frame && frame.display_callsign) || parsed.station || "").trim() || parsed.station;
             const stationLabel = `${displayCallsign}${marker}`;
+            const stationInfo = stationByCallsignKey.get(normalizeCallsignKey(displayCallsign || parsed.station));
             entries.push({
                 timestamp: shortTimestamp(frame && frame.timestamp),
                 station: displayCallsign,
@@ -424,6 +424,8 @@
                 stationIconPath: frameIconPath(frame, displayCallsign || parsed.station),
                 stationIconOverlay: stationIconOverlay(displayCallsign || parsed.station),
                 stationColor: stationTextColor(displayCallsign || parsed.station),
+                latitude: stationInfo ? Number(stationInfo.latitude) : NaN,
+                longitude: stationInfo ? Number(stationInfo.longitude) : NaN,
             });
             if (entries.length >= maxEntries) {
                 break;
@@ -437,8 +439,14 @@
             overlay.innerHTML = `<p class="map-scroller-empty">${escapeHtml(i18n.noFrames)}</p>`;
             return;
         }
-        overlay.innerHTML = entries.map((entry) => (
-            `<div class="map-scroller-row">`
+        overlay.innerHTML = entries.map((entry) => {
+            const canCenter = Number.isFinite(entry.latitude) && Number.isFinite(entry.longitude);
+            const centerLabel = `${i18n.center}: ${entry.station}`;
+            const interactionAttributes = canCenter
+                ? ` role="button" tabindex="0" class="map-scroller-row map-scroller-row-interactive" data-center-latitude="${entry.latitude}" data-center-longitude="${entry.longitude}" title="${escapeHtml(centerLabel)}" aria-label="${escapeHtml(centerLabel)}"`
+                : ` class="map-scroller-row"`;
+            return (
+            `<div${interactionAttributes}>`
                 + `<span class="map-scroller-icon-wrap" title="${escapeHtml(entry.timestamp)}">`
                     + `<img class="map-scroller-icon" src="${escapeHtml(entry.stationIconPath)}" alt="">`
                     + `${entry.stationIconOverlay ? `<span class="aprs-symbol-overlay" aria-hidden="true">${escapeHtml(entry.stationIconOverlay)}</span>` : ""}`
@@ -446,7 +454,20 @@
                 + `<span class="map-scroller-station" style="color:${escapeHtml(entry.stationColor)}">${escapeHtml(entry.stationLabel)}</span>`
                 + `<span class="map-scroller-digi">${escapeHtml(entry.digipeater)}</span>`
             + `</div>`
-        )).join("");
+            );
+        }).join("");
+    }
+
+    function centerMapFromRow(row) {
+        if (!(row instanceof HTMLElement) || typeof window.aprsboxCenterMapOn !== "function") {
+            return;
+        }
+        const latitude = Number(row.dataset.centerLatitude);
+        const longitude = Number(row.dataset.centerLongitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            return;
+        }
+        window.aprsboxCenterMapOn(latitude, longitude);
     }
 
     function applySnapshot(snapshot) {
@@ -499,6 +520,26 @@
             applyScrollerToggleState(!scrollerVisible);
         });
     }
+
+    overlay.addEventListener("click", function (event) {
+        const row = event.target instanceof Element
+            ? event.target.closest(".map-scroller-row-interactive")
+            : null;
+        centerMapFromRow(row);
+    });
+    overlay.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") {
+            return;
+        }
+        const row = event.target instanceof Element
+            ? event.target.closest(".map-scroller-row-interactive")
+            : null;
+        if (!row) {
+            return;
+        }
+        event.preventDefault();
+        centerMapFromRow(row);
+    });
 
     root.addEventListener(stationsRefreshEventName, function (event) {
         const detail = event && event.detail ? event.detail : {};

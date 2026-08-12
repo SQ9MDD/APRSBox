@@ -51,7 +51,8 @@
 .help-viewer-modal {
     position: fixed;
     inset: 0;
-    z-index: 85;
+    /* Leaflet controls reach 1000 and the global emergency modal reaches 10000. */
+    z-index: 11000;
 }
 
 .help-viewer-backdrop {

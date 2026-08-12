@@ -35,6 +35,17 @@ class MessagesTemplateTests(unittest.TestCase):
         self.assertIn("max-height: none;", stylesheet_source)
         self.assertIn("align-content: safe end;", stylesheet_source)
 
+    def test_conversation_list_and_thread_use_themed_scrollbars(self) -> None:
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn(".messages-conversation-list,\n.messages-thread-history {", stylesheet_source)
+        self.assertIn(".messages-conversation-list::-webkit-scrollbar-thumb,", stylesheet_source)
+        self.assertIn(".messages-thread-history::-webkit-scrollbar-thumb {", stylesheet_source)
+        self.assertIn("scrollbar-width: thin;", stylesheet_source)
+        self.assertIn(
+            "scrollbar-color: color-mix(in srgb, var(--accent) 42%, var(--border)) transparent;",
+            stylesheet_source,
+        )
+
     def test_group_threads_render_the_sender_above_each_message(self) -> None:
         template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
         self.assertIn('conversation.kind === "group"', template_source)

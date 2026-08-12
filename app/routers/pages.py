@@ -120,6 +120,7 @@ from app.services.digi_flows import (
     set_digi_flow_enabled,
 )
 from app.services.messages import (
+    clear_message_inbox,
     create_or_update_conversation,
     delete_conversation as delete_message_conversation,
     get_messages_page_data as get_live_messages_page_data,
@@ -1271,12 +1272,22 @@ def modems_create(
     aprsis_passcode: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
+
+    def error_response(message: object, context: dict[str, Any]) -> object:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(message)},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+
     normalized_modem_type = modem_type.strip().upper()
     if normalized_modem_type == "SERIAL":
         normalized_modem_type = "SERIALL"
     if normalized_modem_type not in {"SERIALL", "TCP", OPENWEBRX_MQTT_MODEM_TYPE, APRSIS_MODEM_TYPE}:
         context = _section_template_context(request, current_user, "modems", flash="Unsupported interface type.")
-        return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+        return error_response("Unsupported interface type.", context)
     normalized_device_path = device_path.strip()
     if record_id is not None and normalized_modem_type == OPENWEBRX_MQTT_MODEM_TYPE and "***" in normalized_device_path:
         existing_row = fetch_one("SELECT modem_type, device_path FROM modems WHERE id = ?", (record_id,))
@@ -1328,7 +1339,7 @@ def modems_create(
                 edit_row=edit_row,
                 form_data={**payload, **aprsis_form_data},
             )
-            return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+            return error_response(str(exc), context)
     if record_id is None:
         if normalized_modem_type == APRSIS_MODEM_TYPE:
             existing_aprsis = fetch_one("SELECT id FROM modems WHERE UPPER(modem_type) = 'APRSIS' LIMIT 1")
@@ -1341,7 +1352,7 @@ def modems_create(
                     flash="An APRSIS interface already exists. Edit the existing interface instead.",
                     edit_row=get_section_row("modems", existing_id),
                 )
-                return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+                return error_response("An APRSIS interface already exists. Edit the existing interface instead.", context)
         success, error = safe_create_section_row("modems", payload)
         edit_row = None
     else:
@@ -1350,6 +1361,19 @@ def modems_create(
         edit_row = get_section_row("modems", record_id)
     if success and normalized_aprsis_config is not None:
         save_aprsis_config(normalized_aprsis_config)
+    if wants_json:
+        if not success:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save interface settings.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Interface settings updated."),
+                "reload": True,
+            }
+        )
     context = _section_template_context(
         request,
         current_user,
@@ -2412,6 +2436,7 @@ def objects_create(
     comment: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "name": name.strip(),
         "lifetime": lifetime.strip(),
@@ -2437,14 +2462,47 @@ def objects_create(
         if success:
             created_row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", (payload["name"],))
             if created_row is not None:
+                if wants_json:
+                    created_id = int(created_row["id"])
+                    return JSONResponse(
+                        {
+                            "ok": True,
+                            "message": _translate("Object saved."),
+                            "reload": True,
+                            "redirect": _path(request, f"/objects?edit={created_id}"),
+                        }
+                    )
                 return _section_edit_redirect(request, "objects", int(created_row["id"]))
         edit_row = None
     else:
         success, error = safe_update_section_row("objects", record_id, payload)
         if success:
+            if wants_json:
+                return JSONResponse(
+                    {
+                        "ok": True,
+                        "message": _translate("Object saved."),
+                        "reload": True,
+                        "redirect": _path(request, f"/objects?edit={record_id}"),
+                    }
+                )
             return _section_edit_redirect(request, "objects", record_id)
         edit_row = get_section_row("objects", record_id) if error else None
     context = _section_template_context(request, current_user, "objects", flash=None if success else error, edit_row=edit_row)
+    if wants_json:
+        if success:
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "message": _translate("Object saved."),
+                    "reload": True,
+                    "redirect": _path(request, "/objects"),
+                }
+            )
+        return JSONResponse(
+            {"ok": False, "error": _translate(error or "Failed to save object.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
 
 
@@ -2460,6 +2518,16 @@ def objects_send_now(
 
     station_settings = get_station_settings()
     success, flash = enqueue_object_job(row, station_settings, trigger="manual", force_send=True)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(flash or "Failed to send object."),
+                "reload": success,
+                "redirect": _path(request, f"/objects?edit={record_id}"),
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     return RedirectResponse(
         url=_path(
             request,
@@ -2544,8 +2612,17 @@ def objects_delete(
     record_id: int,
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-) -> RedirectResponse:
+) -> object:
     delete_section_row("objects", record_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Object deleted."),
+                "reload": True,
+                "redirect": _path(request, "/objects"),
+            }
+        )
     return RedirectResponse(url=_path(request, "/objects"), status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -2601,6 +2678,7 @@ def bulletins_create(
     message_text: str = Form(...),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "message_kind": message_kind.strip(),
         "bulletin_code": bulletin_code.strip(),
@@ -2618,11 +2696,50 @@ def bulletins_create(
     }
     if record_id is None:
         success, error = safe_create_section_row("bulletins", payload)
+        if success:
+            created_row = fetch_one("SELECT id FROM bulletins ORDER BY id DESC LIMIT 1")
+            if created_row is not None:
+                created_id = int(created_row["id"])
+                if wants_json:
+                    return JSONResponse(
+                        {
+                            "ok": True,
+                            "message": _translate("Bulletin saved."),
+                            "reload": True,
+                            "redirect": _path(request, f"/bulletins?edit={created_id}"),
+                        }
+                    )
+                return _section_edit_redirect(request, "bulletins", created_id)
         edit_row = None
     else:
         success, error = safe_update_section_row("bulletins", record_id, payload)
+        if success:
+            if wants_json:
+                return JSONResponse(
+                    {
+                        "ok": True,
+                        "message": _translate("Bulletin saved."),
+                        "reload": True,
+                        "redirect": _path(request, f"/bulletins?edit={record_id}"),
+                    }
+                )
+            return _section_edit_redirect(request, "bulletins", record_id)
         edit_row = get_section_row("bulletins", record_id) if error else None
     context = _section_template_context(request, current_user, "bulletins", flash=None if success else error, edit_row=edit_row)
+    if wants_json:
+        if success:
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "message": _translate("Bulletin saved."),
+                    "reload": True,
+                    "redirect": _path(request, "/bulletins"),
+                }
+            )
+        return JSONResponse(
+            {"ok": False, "error": _translate(error or "Failed to save bulletin.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
 
 
@@ -2638,6 +2755,16 @@ def bulletins_send_now(
 
     station_settings = get_station_settings()
     success, flash = enqueue_message_job(row, station_settings, trigger="manual", force_send=True)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(flash or "Failed to send bulletin."),
+                "reload": success,
+                "redirect": _path(request, f"/bulletins?edit={record_id}"),
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     return RedirectResponse(
         url=_path(
             request,
@@ -2652,8 +2779,17 @@ def bulletins_delete(
     record_id: int,
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-) -> RedirectResponse:
+) -> object:
     delete_section_row("bulletins", record_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Bulletin deleted."),
+                "reload": True,
+                "redirect": _path(request, "/bulletins"),
+            }
+        )
     return RedirectResponse(url=_path(request, "/bulletins"), status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -2831,6 +2967,7 @@ def wx_config_update(
     default_cache_max_age_s: str = Form("900"),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_save_wx_config(
         {
             "enabled": enabled,
@@ -2844,6 +2981,12 @@ def wx_config_update(
             "default_cache_max_age_s": default_cache_max_age_s.strip(),
         }
     )
+    if wants_json:
+        message = "WX configuration saved." if success else (error or "Failed to save WX configuration.")
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -2859,6 +3002,7 @@ async def wx_mappings_update(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     form = await request.form()
     payload_by_parameter: dict[str, dict[str, Any]] = {}
     for parameter_name in form.getlist("parameter_name"):
@@ -2874,6 +3018,12 @@ async def wx_mappings_update(
             "cache_max_age_s": str(form.get(f"cache_max_age_s__{normalized}") or "").strip(),
         }
     success, error = safe_save_wx_mappings(payload_by_parameter)
+    if wants_json:
+        message = "WX mappings saved." if success else (error or "Failed to save WX mappings.")
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -2889,7 +3039,14 @@ def wx_refresh_now(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, _, error = safe_refresh_wx_runtime(trigger="manual")
+    if wants_json:
+        message = "WX refresh completed." if success else (error or "WX refresh failed.")
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -2914,6 +3071,7 @@ def wx_send_now(
     default_cache_max_age_s: str = Form("900"),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_save_wx_config(
         {
             "enabled": enabled,
@@ -2928,15 +3086,30 @@ def wx_send_now(
         }
     )
     if not success:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save WX configuration.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _wx_page_context(request, current_user, flash=error, flash_success=False)
         return templates.TemplateResponse("wx.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     refreshed, _, refresh_error = safe_refresh_wx_runtime(trigger="manual-send")
     if not refreshed:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(refresh_error or "WX refresh failed.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _wx_page_context(request, current_user, flash=refresh_error, flash_success=False)
         return templates.TemplateResponse("wx.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     queued, queue_message = safe_enqueue_wx_outbound(trigger="manual")
+    if wants_json:
+        return JSONResponse(
+            {"ok": queued, "message" if queued else "error": _translate(queue_message), "reload": queued},
+            status_code=status.HTTP_200_OK if queued else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(request, current_user, flash=queue_message, flash_success=queued)
     return templates.TemplateResponse("wx.html", context, status_code=200 if queued else status.HTTP_400_BAD_REQUEST)
 
@@ -2948,6 +3121,7 @@ def wx_mapping_test_read(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     try:
         result = refresh_single_wx_mapping(parameter_name, trigger="manual-test")
         refreshed_row = (result.get("rows") or [{}])[0]
@@ -2964,6 +3138,11 @@ def wx_mapping_test_read(
         flash = str(exc)
         flash_success = False
         status_code = status.HTTP_400_BAD_REQUEST
+    if wants_json:
+        return JSONResponse(
+            {"ok": flash_success, "message" if flash_success else "error": _translate(flash), "reload": flash_success},
+            status_code=status_code,
+        )
     context = _wx_page_context(request, current_user, flash=flash, flash_success=flash_success)
     return templates.TemplateResponse("wx.html", context, status_code=status_code)
 
@@ -2985,6 +3164,7 @@ def wx_source_save(
     enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     normalized_source_id = int(source_id) if str(source_id or "").strip() else None
     success, error, _ = safe_save_wx_source(
         {
@@ -3001,6 +3181,17 @@ def wx_source_save(
         },
         source_id=normalized_source_id,
     )
+    if wants_json:
+        message = "WX source saved." if success else (error or "Failed to save WX source.")
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": success,
+                "redirect": _path(request, "/wx") if success else None,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -3016,8 +3207,17 @@ def wx_source_delete(
     source_id: int,
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
-) -> RedirectResponse:
+) -> object:
     delete_wx_source(source_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("WX source deleted."),
+                "reload": True,
+                "redirect": _path(request, "/wx"),
+            }
+        )
     return RedirectResponse(url=_path(request, "/wx"), status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -3029,6 +3229,13 @@ def wx_source_test(
 ) -> object:
     templates = request.app.state.templates
     result = test_wx_source_connection(source_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        success = bool(result.get("ok"))
+        message = "WX source connection succeeded." if success else (result.get("error") or "WX source connection failed.")
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(message), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -3046,6 +3253,21 @@ def wx_source_discover(
 ) -> object:
     templates = request.app.state.templates
     result = discover_wx_source_items(source_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        success = bool(result.get("ok"))
+        message = "WX source discovery completed." if success else (result.get("error") or "WX source discovery failed.")
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": False,
+                "discovery": {
+                    "items": list(result.get("items") or []),
+                    "source": {"name": str((result.get("source") or {}).get("name") or "")},
+                } if success else None,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _wx_page_context(
         request,
         current_user,
@@ -3083,6 +3305,7 @@ def notifications_settings_update(
     radar_ignored_patterns: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_save_notification_settings(
         {
             "messages_enabled": messages_enabled,
@@ -3091,6 +3314,17 @@ def notifications_settings_update(
             "radar_ignored_patterns": radar_ignored_patterns,
         }
     )
+    if wants_json:
+        message = "Notification settings updated." if success else (error or "Failed to save notification settings.")
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": success,
+                "redirect": _path(request, "/notifications#notification-settings") if success else None,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3116,6 +3350,7 @@ def notifications_transport_save(
     timeout_s: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "name": name,
         "transport_type": transport_type,
@@ -3128,6 +3363,17 @@ def notifications_transport_save(
         "timeout_s": timeout_s,
     }
     success, error, _saved_transport_id = safe_save_notification_transport(payload, transport_id=transport_id)
+    if wants_json:
+        message = "Notification transport saved." if success else (error or "Failed to save notification transport.")
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": success,
+                "redirect": _path(request, "/notifications#notification-transports") if success else None,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3148,6 +3394,17 @@ def notifications_transport_test(
     templates = request.app.state.templates
     result = test_notification_transport(transport_id)
     success = bool(result.get("ok"))
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        message = "Notification transport test succeeded." if success else str(result.get("error") or "Notification transport test failed.")
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": success,
+                "redirect": _path(request, "/notifications#notification-transports") if success else None,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3166,6 +3423,15 @@ def notifications_transport_delete(
 ) -> object:
     templates = request.app.state.templates
     delete_notification_transport(transport_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Notification transport deleted."),
+                "reload": True,
+                "redirect": _path(request, "/notifications#notification-transports"),
+            }
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3185,12 +3451,24 @@ def notifications_radar_rule_save(
     distance_m: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "enabled": enabled,
         "pattern": pattern,
         "distance_m": distance_m,
     }
     success, error, _saved_rule_id = safe_save_notification_radar_rule(payload, rule_id=rule_id)
+    if wants_json:
+        message = "Radar rule saved." if success else (error or "Failed to save radar rule.")
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(message),
+                "reload": success,
+                "redirect": _path(request, "/notifications#notification-radar-rules") if success else None,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3210,6 +3488,15 @@ def notifications_radar_rule_delete(
 ) -> object:
     templates = request.app.state.templates
     delete_notification_radar_rule(rule_id)
+    if request.headers.get("x-requested-with", "").lower() == "xmlhttprequest":
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Radar rule deleted."),
+                "reload": True,
+                "redirect": _path(request, "/notifications#notification-radar-rules"),
+            }
+        )
     context = _notifications_page_context(
         request,
         current_user,
@@ -3243,6 +3530,7 @@ def station_update(
     tx_enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     current_default_units = get_station_settings().get("default_units", "metric")
     payload = {
         "callsign": callsign.strip(),
@@ -3266,8 +3554,21 @@ def station_update(
     }
     success, error = safe_update_station_settings(payload)
     if not success:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save station settings.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _station_page_context(request, current_user, flash=error, flash_success=False, station=payload)
         return templates.TemplateResponse("station.html", context, status_code=status.HTTP_400_BAD_REQUEST)
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Station settings saved."),
+                "reload": True,
+            }
+        )
     context = _station_page_context(request, current_user, flash="Station settings saved.", flash_success=True)
     return templates.TemplateResponse("station.html", context)
 
@@ -3296,6 +3597,7 @@ def station_send_beacon(
     tx_enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     current_default_units = get_station_settings().get("default_units", "metric")
     payload = {
         "callsign": callsign.strip(),
@@ -3319,10 +3621,20 @@ def station_send_beacon(
     }
     success, error = safe_update_station_settings(payload)
     if not success:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save station settings.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _station_page_context(request, current_user, flash=error, flash_success=False, station=payload)
         return templates.TemplateResponse("station.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     station_settings = get_station_settings()
     success, flash = enqueue_beacon_job(station_settings)
+    if wants_json:
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(flash), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _station_page_context(request, current_user, flash=flash, flash_success=success, station=station_settings)
     return templates.TemplateResponse("station.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
@@ -3363,6 +3675,7 @@ def station_send_status(
     tx_enabled: str | None = Form(None),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     current_default_units = get_station_settings().get("default_units", "metric")
     payload = {
         "callsign": callsign.strip(),
@@ -3386,10 +3699,20 @@ def station_send_status(
     }
     success, error = safe_update_station_settings(payload)
     if not success:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save station settings.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _station_page_context(request, current_user, flash=error, flash_success=False, station=payload)
         return templates.TemplateResponse("station.html", context, status_code=status.HTTP_400_BAD_REQUEST)
     station_settings = get_station_settings()
     success, flash = enqueue_status_job(station_settings)
+    if wants_json:
+        return JSONResponse(
+            {"ok": success, "message" if success else "error": _translate(flash), "reload": success},
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _station_page_context(request, current_user, flash=flash, flash_success=success, station=station_settings)
     return templates.TemplateResponse("station.html", context, status_code=200 if success else status.HTTP_400_BAD_REQUEST)
 
@@ -3943,6 +4266,14 @@ def messages_delete(
 ) -> JSONResponse:
     delete_message_conversation(conversation_id)
     return JSONResponse({"ok": True, "messages_view": get_live_messages_page_data()})
+
+
+@router.post("/api/messages/clear")
+def messages_clear(
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    deleted = clear_message_inbox()
+    return JSONResponse({"ok": True, "deleted": deleted, "messages_view": get_live_messages_page_data()})
 
 
 @router.post("/api/messages/{message_id}/retry")

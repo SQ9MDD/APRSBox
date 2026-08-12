@@ -63,10 +63,13 @@
             data-i18n-hide-latest-overlay="{{ t('Hide latest packet widget') }}"
             data-i18n-show-ruler="{{ t('Show ruler') }}"
             data-i18n-hide-ruler="{{ t('Hide ruler') }}"
+            data-i18n-show-maidenhead-grid="{{ t('Show Maidenhead grid') }}"
+            data-i18n-hide-maidenhead-grid="{{ t('Hide Maidenhead grid') }}"
             data-i18n-tile-provider-unavailable="{{ t('Tile provider unavailable') }}"
             data-i18n-tile-provider-recovered="{{ t('Tile provider recovered') }}"
             data-i18n-show="{{ t('Show') }}"
             data-i18n-hide="{{ t('Hide') }}"
+            data-i18n-center="{{ t('Center') }}"
             data-i18n-emergency-frame-received="{{ t('Emergency frame received') }}"
             data-i18n-active-emergency="{{ t('Active emergency') }}"
         >
@@ -136,6 +139,16 @@
                         title="{{ t('Hide ruler') }}"
                     >
                         <img id="map-toggle-ruler-icon" src="{{ request.scope.root_path }}/static/icons/ruler.svg" alt="">
+                    </button>
+                    <button
+                        type="button"
+                        class="button button-secondary button-icon"
+                        id="map-toggle-maidenhead-grid"
+                        aria-label="{{ t('Hide Maidenhead grid') }}"
+                        title="{{ t('Hide Maidenhead grid') }}"
+                        aria-pressed="true"
+                    >
+                        <img id="map-toggle-maidenhead-grid-icon" src="{{ request.scope.root_path }}/static/icons/grid.svg" alt="">
                     </button>
                     <label class="map-mask-opacity-control" for="map-mask-opacity">
                         <select id="map-mask-opacity" class="map-mask-opacity-select" aria-label="{{ t('Mask opacity') }}">

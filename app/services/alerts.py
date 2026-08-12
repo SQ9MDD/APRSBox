@@ -13,6 +13,7 @@ from app.services.alarm_groups import (
     get_aprs_alarm_groups,
 )
 from app.services.alert_event_icons import resolve_alert_event_icon
+from app.services.alert_interpretation import interpret_group_alert
 from app.services.aprs_warning_identity import (
     build_aprs_alert_identity_key,
     build_aprs_alert_part_identity_key,
@@ -913,6 +914,12 @@ def _serialize_alert(row: Mapping[str, Any], *, now: datetime | None = None) -> 
             ),
         }
     )
+    if item["destination_group"]:
+        item["interpretation"] = interpret_group_alert(
+            destination_group=item["destination_group"],
+            event_code=item.get("event_code"),
+            severity_level=item.get("severity_level"),
+        )
     if parsed and item.get("last_frame_id") is not None:
         emergency_data = build_emergency_frame_data(
             parsed=parsed,

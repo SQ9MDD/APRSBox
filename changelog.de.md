@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.3.dev - 2026-08-09
+- `GUI / Aktionen und Dialoge`: Speichern, Senden und Löschen wurden in Schnittstellen, Meine Station, WX, Benachrichtigungen, Objekten und Bulletins mit gemeinsamen Bestätigungen, Spinner-Dialogen und Ergebnismeldungen vereinheitlicht.
+- `Benachrichtigungen / Packet Routing`: Formulare behalten die Position des bearbeiteten Blocks bei; im Flow-Editor liegen die Aktionen in der Spalte der aktuellen Schritte, der Arbeitsbereich passt sich deren Inhalt an und der Filter- und Regelkatalog scrollt unabhängig.
+- `GUI / Scrollen und Karte`: Dezente, themeabhängige Scrollbars wurden im Routing-Katalog, in Konversationen, im Traffic Monitor und im Karten-Scroller ergänzt; ein Klick auf eine Station im Scroller zentriert sie auf der Karte.
+- `APRS Device Identification`: Beim Öffnen der Einstellungen wird die Datenbank im Hintergrund aktualisiert, wenn sie noch nie oder seit mehr als 30 Tagen nicht erfolgreich aktualisiert wurde; nach Fehlern gilt ein Wiederholungsabstand von 24 Stunden.
+- `Einstellungen / Ergonomie`: Aktionen, die Bearbeitung von Kartenquellen und Neuladevorgänge nach dem Speichern behalten das aktive Panel und die Scrollposition bei, statt zum Seitenanfang zurückzukehren.
+
+## 1.10.2.dev - 2026-08-08
+- `Konfigurationssicherung v2`: Der Exportumfang wurde erweitert und ein sicherer Import ohne Verlust von Runtime-Verknüpfungen eingeführt; v1-Dateien werden nicht unterstützt.
+
 ## 1.10 - 2026-08-06
 - `Stabile Version`: Die Änderungen aus `1.9.1.dev–1.9.8.dev` wurden zusammengeführt, darunter APRS- und Wetteralarme, ein neues Dashboard, erweiterte Bandbedingungen, eine übersichtlichere APRS-IS- und GUI-Konfiguration, ausgebaute Hilfe, Stationsfilter sowie sicherere Anwendungsaktualisierungen und Systemaufträge.
 

@@ -1132,6 +1132,81 @@ class WxOutboundRuntimeTests(unittest.IsolatedAsyncioTestCase):
         for language in ("pl", "en", "es", "de"):
             self.assertTrue(Path(f"help/application/wx.{language}.md").exists())
 
+    def test_wx_actions_use_the_shared_progress_and_confirmation_modals(self) -> None:
+        template_source = Path("app/templates/wx.html").read_text(encoding="utf-8")
+        self.assertIn('id="wx-action-progress"', template_source)
+        self.assertIn('id="wx-action-confirm"', template_source)
+        self.assertIn("settings-progress-backdrop", template_source)
+        self.assertIn("settings-progress-modal", template_source)
+        self.assertIn("data-wx-modal-action", template_source)
+        self.assertIn("Are you sure you want to send WX now?", template_source)
+        self.assertNotIn("onclick=\"return confirm(", template_source)
+        self.assertIn('"X-Requested-With": "XMLHttpRequest"', template_source)
+        self.assertIn('"Accept": "application/json"', template_source)
+        self.assertIn('id="wx-discovery-results"', template_source)
+
+    def test_wx_ajax_save_returns_modal_result_payload(self) -> None:
+        with temporary_database():
+            from fastapi.testclient import TestClient
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            modem_id = insert_modem()
+            update_station_settings(
+                {
+                    "callsign": "SQ9XYZ",
+                    "ssid": "4",
+                    "beacon_interface_id": str(modem_id),
+                    "beacon_comment": "",
+                    "beacon_interval_minutes": "30",
+                    "beacon_path": "",
+                    "status_enabled": "",
+                    "status_text": "",
+                    "status_interval_minutes": "30",
+                    "latitude": "52.2297",
+                    "longitude": "21.0122",
+                    "symbol_table": "/",
+                    "symbol_code": ">",
+                    "default_units": "metric",
+                    "tx_enabled": "",
+                }
+            )
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                client = TestClient(app)
+                page = client.get("/wx")
+                self.assertEqual(page.status_code, 200)
+                self.assertIn('id="wx-action-progress"', page.text)
+
+                response = client.post(
+                    "/wx/config",
+                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                    data={
+                        "ssid": "13",
+                        "beacon_interface_id": str(modem_id),
+                        "path": "",
+                        "latitude": "52.2297",
+                        "longitude": "21.0122",
+                        "refresh_interval_s": "300",
+                        "allow_cache_fallback": "1",
+                        "default_cache_max_age_s": "900",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response.json(),
+                    {"ok": True, "message": "WX configuration saved.", "reload": True},
+                )
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
+
 
 if __name__ == "__main__":
     unittest.main()

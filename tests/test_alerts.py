@@ -793,6 +793,9 @@ class AprsAlertTests(unittest.TestCase):
         )
         map_js_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
         style_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        help_style_source = Path("app/static/css/help-viewer.css").read_text(
+            encoding="utf-8"
+        )
 
         self.assertIn('{% include "partials/emergency_modal.html" %}', base_source)
         self.assertIn("map-emergency-modal.js", base_source)
@@ -831,6 +834,7 @@ class AprsAlertTests(unittest.TestCase):
         self.assertIn(".alert-category-badge-level-2", style_source)
         self.assertIn(".alert-category-badge-level-3", style_source)
         self.assertIn(".alert-category-badge-unknown", style_source)
+        self.assertIn("z-index: 11000", help_style_source)
         self.assertIn("file-document-alert-outline.svg", alerts_source)
         self.assertIn('href="{{ request.scope.root_path }}{{ alert.detail_href }}"', alerts_source)
         self.assertIn("alert-emergency-panel alert-detail-panel", alert_detail_source)
@@ -842,7 +846,7 @@ class AprsAlertTests(unittest.TestCase):
             alert_detail_source,
         )
         self.assertLess(
-            alert_detail_source.index('{{ t("Severity level") }}'),
+            alert_detail_source.index('{{ t("Threat level") }}'),
             alert_detail_source.index('{{ alert.protocol_comment or "-" }}'),
         )
         self.assertLess(

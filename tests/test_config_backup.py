@@ -69,7 +69,8 @@ class ConfigBackupTests(unittest.TestCase):
             payload = export_configuration_backup()
 
             self.assertEqual(CONFIG_BACKUP_FORMAT, payload["format"])
-            self.assertEqual(CONFIG_BACKUP_VERSION, payload["backup_version"])
+            self.assertEqual(2, CONFIG_BACKUP_VERSION)
+            self.assertEqual(2, payload["backup_version"])
             modem_rows = payload["tables"]["modems"]
             self.assertEqual(1, len(modem_rows))
             self.assertEqual("TNC-A", modem_rows[0]["name"])
@@ -89,6 +90,9 @@ class ConfigBackupTests(unittest.TestCase):
                 payload["app_settings"]["aprs.alarm_category_thresholds"],
             )
             self.assertNotIn("scheduler.wx.last_refresh_at", payload["app_settings"])
+            self.assertNotIn("band_condition_reference_stations", payload["tables"])
+            self.assertIn("messages.default_path", payload["app_settings"])
+            self.assertIsNone(payload["app_settings"]["messages.default_path"])
 
     def test_import_restores_configuration_without_overwriting_runtime_app_settings(self) -> None:
         with temporary_database():
@@ -163,6 +167,166 @@ class ConfigBackupTests(unittest.TestCase):
             ok, error = safe_import_configuration_backup(json.dumps(payload).encode("utf-8"))
             self.assertFalse(ok)
             self.assertIn("missing table data", str(error))
+
+            payload = export_configuration_backup()
+            payload["backup_version"] = 1
+            ok, error = safe_import_configuration_backup(json.dumps(payload).encode("utf-8"))
+            self.assertFalse(ok)
+            self.assertIn("Unsupported backup version", str(error))
+
+            payload = export_configuration_backup()
+            del payload["app_settings"]["messages.default_path"]
+            ok, error = safe_import_configuration_backup(json.dumps(payload).encode("utf-8"))
+            self.assertFalse(ok)
+            self.assertIn("missing app settings", str(error))
+
+    def test_export_and_import_restores_messages_and_notification_configuration(self) -> None:
+        with temporary_database():
+            for key, value in (
+                ("messages.default_path", "WIDE1-1"),
+                ("messages.receive_any_ssid", "1"),
+                ("messages.target_groups", "ALL,QST"),
+                ("station.tx.internal_mode", "1"),
+                ("messages_enabled", "1"),
+                ("messages_include_content", "1"),
+                ("radar_enabled", "1"),
+                ("radar_ignored_patterns", "TEST*,N0CALL"),
+            ):
+                set_app_setting(key, value)
+            execute(
+                """
+                INSERT INTO notification_transports(
+                    name, transport_type, enabled, url, secret_header_name, secret_token,
+                    bot_token, chat_id, timeout_s, last_test_status, last_test_error, last_test_at,
+                    created_at, updated_at
+                )
+                VALUES (
+                    'Primary webhook', 'webhook', 1, 'https://example.invalid/original', 'Authorization', 'secret',
+                    '', '', 7, 'ok', '', '2026-01-01T00:00:00+00:00',
+                    '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'
+                )
+                """
+            )
+            execute(
+                """
+                INSERT INTO notification_radar_rules(enabled, pattern, distance_m, created_at, updated_at)
+                VALUES (1, 'SP0*', 50000, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                """
+            )
+
+            backup_payload = export_configuration_backup_bytes()
+            decoded = json.loads(backup_payload)
+            transport_payload = decoded["tables"]["notification_transports"][0]
+            self.assertNotIn("last_test_status", transport_payload)
+            self.assertNotIn("last_test_error", transport_payload)
+            self.assertNotIn("last_test_at", transport_payload)
+
+            set_app_setting("messages.default_path", "")
+            set_app_setting("messages_enabled", "0")
+            execute(
+                """
+                UPDATE notification_transports
+                SET url = 'https://example.invalid/changed', last_test_status = 'error',
+                    last_test_error = 'runtime result', last_test_at = '2026-02-01T00:00:00+00:00'
+                """
+            )
+            execute("UPDATE notification_radar_rules SET pattern = 'CHANGED', distance_m = 1")
+
+            success, error = safe_import_configuration_backup(backup_payload)
+            self.assertTrue(success, error)
+            self.assertEqual("WIDE1-1", get_app_setting("messages.default_path"))
+            self.assertEqual("1", get_app_setting("messages_enabled"))
+            transport = fetch_one("SELECT * FROM notification_transports WHERE name = 'Primary webhook'")
+            assert transport is not None
+            self.assertEqual("https://example.invalid/original", transport["url"])
+            self.assertEqual("error", transport["last_test_status"])
+            self.assertEqual("runtime result", transport["last_test_error"])
+            rule = fetch_one("SELECT pattern, distance_m FROM notification_radar_rules")
+            assert rule is not None
+            self.assertEqual("SP0*", rule["pattern"])
+            self.assertEqual(50000, int(rule["distance_m"]))
+
+    def test_importing_identical_backup_preserves_runtime_references_and_flow_logs(self) -> None:
+        with temporary_database():
+            execute(
+                """
+                INSERT INTO modems(name, modem_type, band, device_path, baud_rate, enabled, notes, created_at, updated_at)
+                VALUES ('TNC-A', 'TCP', '2m', '127.0.0.1:8001', NULL, 1, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                """
+            )
+            modem = fetch_one("SELECT id FROM modems WHERE name = 'TNC-A'")
+            assert modem is not None
+            execute(
+                """
+                INSERT INTO outbound_jobs(kind, interface_id, payload_json, status, scheduled_at, created_at, updated_at)
+                VALUES ('beacon', ?, '{}', 'queued', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                """,
+                (int(modem["id"]),),
+            )
+            execute(
+                """
+                INSERT INTO digi_flows(name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at)
+                VALUES ('Flow A', '', 'receiver_rf', 'TNC-A', 'action_log', 'log', 1, 0, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                """
+            )
+            flow = fetch_one("SELECT id FROM digi_flows WHERE name = 'Flow A'")
+            assert flow is not None
+            execute(
+                """
+                INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
+                VALUES ('frame-1', ?, NULL, 'flow', 'accepted', 'runtime log', '2026-01-01T00:00:00+00:00')
+                """,
+                (int(flow["id"]),),
+            )
+
+            backup_payload = export_configuration_backup_bytes()
+            success, error = safe_import_configuration_backup(backup_payload)
+            self.assertTrue(success, error)
+
+            outbound = fetch_one("SELECT interface_id FROM outbound_jobs")
+            assert outbound is not None
+            self.assertEqual(int(modem["id"]), int(outbound["interface_id"]))
+            flow_log = fetch_one("SELECT flow_id, message FROM digi_flow_event_log WHERE frame_uid = 'frame-1'")
+            assert flow_log is not None
+            self.assertEqual(int(flow["id"]), int(flow_log["flow_id"]))
+            self.assertEqual("runtime log", flow_log["message"])
+
+    def test_import_handles_unique_values_that_were_swapped_between_existing_ids(self) -> None:
+        with temporary_database():
+            for name, endpoint in (("TNC-A", "127.0.0.1:8001"), ("TNC-B", "127.0.0.1:8002")):
+                execute(
+                    """
+                    INSERT INTO modems(name, modem_type, band, device_path, baud_rate, enabled, notes, created_at, updated_at)
+                    VALUES (?, 'TCP', '2m', ?, NULL, 1, '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """,
+                    (name, endpoint),
+                )
+            modem_a = fetch_one("SELECT id FROM modems WHERE name = 'TNC-A'")
+            modem_b = fetch_one("SELECT id FROM modems WHERE name = 'TNC-B'")
+            assert modem_a is not None and modem_b is not None
+            execute(
+                """
+                INSERT INTO outbound_jobs(kind, interface_id, payload_json, status, scheduled_at, created_at, updated_at)
+                VALUES ('beacon', ?, '{}', 'queued', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                """,
+                (int(modem_a["id"]),),
+            )
+            backup_payload = export_configuration_backup_bytes()
+
+            execute("UPDATE modems SET name = '__TEMP__' WHERE id = ?", (int(modem_a["id"]),))
+            execute("UPDATE modems SET name = 'TNC-A' WHERE id = ?", (int(modem_b["id"]),))
+            execute("UPDATE modems SET name = 'TNC-B' WHERE id = ?", (int(modem_a["id"]),))
+
+            success, error = safe_import_configuration_backup(backup_payload)
+            self.assertTrue(success, error)
+            restored_a = fetch_one("SELECT name FROM modems WHERE id = ?", (int(modem_a["id"]),))
+            restored_b = fetch_one("SELECT name FROM modems WHERE id = ?", (int(modem_b["id"]),))
+            assert restored_a is not None and restored_b is not None
+            self.assertEqual("TNC-A", restored_a["name"])
+            self.assertEqual("TNC-B", restored_b["name"])
+            outbound = fetch_one("SELECT interface_id FROM outbound_jobs")
+            assert outbound is not None
+            self.assertEqual(int(modem_a["id"]), int(outbound["interface_id"]))
 
     def test_import_clears_runtime_foreign_keys_when_backup_has_no_modems(self) -> None:
         with temporary_database():

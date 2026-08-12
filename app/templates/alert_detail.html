@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}">
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}-modal-layer-1">
 {% endblock %}
 
 {% block content %}
@@ -92,10 +92,16 @@
             <dd>{{ alert.destination_group }}</dd>
             <dt>{{ t("Logical alert ID") }}</dt>
             <dd>{% if alert.logical_alert_id %}<code>{{ alert.logical_alert_id }}</code>{% else %}-{% endif %}</dd>
+            <dt>{{ t("Warning format") }}</dt>
+            <dd>{{ alert.interpretation.format_label }}</dd>
+            <dt class="alert-detail-critical-value">{{ t("Event description") }}</dt>
+            <dd class="alert-detail-critical-value">{{ t(alert.interpretation.event_label) }}</dd>
             <dt class="alert-detail-critical-value">{{ t("Event code") }}</dt>
-            <dd class="alert-detail-critical-value">{{ alert.event_code or "-" }}</dd>
-            <dt class="alert-detail-critical-value">{{ t("Severity level") }}</dt>
-            <dd class="alert-detail-critical-value">{{ alert.severity_level if alert.severity_level is not none else "-" }}</dd>
+            <dd class="alert-detail-critical-value"><code>{{ alert.event_code or "-" }}</code></dd>
+            <dt class="alert-detail-critical-value">{{ t("Threat level") }}</dt>
+            <dd class="alert-detail-critical-value">
+                {{ t(alert.interpretation.severity_level_label) }}{% if alert.interpretation.severity_color_label %} — {{ t(alert.interpretation.severity_color_label) }}{% endif %}
+            </dd>
             <dt class="alert-detail-critical-value">{{ t("Comment") }}</dt>
             <dd class="alert-detail-critical-value">{{ alert.protocol_comment or "-" }}</dd>
             <dt>{{ t("Received parts") }}</dt>

@@ -24,6 +24,18 @@ class TrafficTemplateTests(unittest.TestCase):
         self.assertIn(".traffic-summary-stream {", stylesheet_source)
         self.assertIn(".traffic-summary-stream {\n    max-height: none;\n    margin-bottom: 0;", stylesheet_source)
 
+    def test_live_traffic_frame_stream_uses_themed_scrollbar(self) -> None:
+        template_source = Path("app/templates/traffic.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn('class="traffic-stream" id="traffic-stream"', template_source)
+        self.assertIn("#traffic-stream {", stylesheet_source)
+        self.assertIn("#traffic-stream::-webkit-scrollbar-thumb {", stylesheet_source)
+        self.assertIn("scrollbar-width: thin;", stylesheet_source)
+        self.assertIn(
+            "scrollbar-color: color-mix(in srgb, var(--accent) 42%, var(--border)) transparent;",
+            stylesheet_source,
+        )
+
     def test_traffic_page_has_global_color_legend_for_interface_analysis(self) -> None:
         template_source = Path("app/templates/traffic.html").read_text(encoding="utf-8")
         stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")

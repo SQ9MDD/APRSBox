@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.3.dev - 2026-08-09
+- `GUI / actions and dialogs`: standardized save, send, and delete behavior across Interfaces, My Station, WX, Notifications, Objects, and Bulletins with shared confirmations, spinner dialogs, and result messages.
+- `Notifications / Packet Routing`: forms retain the edited block position, while the flow editor keeps actions in the current-steps column, sizes the workspace to its contents, and scrolls the filter and rule catalog independently.
+- `GUI / scrolling and map`: added subtle theme-aware scrollbars to the routing catalog, conversations, Traffic Monitor, and map scroller; clicking a station in the scroller now centers it on the map.
+- `APRS Device Identification`: opening Settings silently refreshes the database in the background when it has never been updated or the last successful update is over 30 days old; failed attempts use a 24-hour retry delay.
+- `Settings / ergonomics`: actions, map-source editing, and post-save reloads retain the active panel and scroll position instead of returning to the top of the page.
+
+## 1.10.2.dev - 2026-08-08
+- `Configuration backup v2`: expanded the exported configuration and added safe import without breaking runtime references; v1 files are not supported.
+
 ## 1.10 - 2026-08-06
 - `Stable release`: merged changes from versions `1.9.1.dev–1.9.8.dev`, covering APRS and weather alerts, a new Dashboard, expanded band conditions, streamlined APRS-IS and GUI, extended help, station filters, and safer application updates and system job handling.
 
