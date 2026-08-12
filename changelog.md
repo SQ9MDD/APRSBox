@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.5.dev - 13.08.2026
+- `Ustawienia / aktualizacja aplikacji`: natywne pytanie przeglądarki przed rozpoczęciem aktualizacji zastąpiono standardowym modalem APRSBox, zgodnym z pozostałymi potwierdzeniami oraz jasnym i ciemnym motywem; modal obsługuje anulowanie, klawisz Escape, kliknięcie tła i prawidłowe przywracanie fokusu.
+
+## 1.10.4.dev - 13.08.2026
+- `Mapa / Maidenhead QTH Locator`: dodano opcjonalną warstwę siatki lokatorów z zapamiętywanym przełącznikiem; poziom szczegółowości zmienia się z zoomem od pól 2-znakowych przez lokatory 4- i 6-znakowe do 8-znakowych pól rozszerzonych.
+- `Mapa / siatka QTH / czytelność`: etykiety są centrowane w rzeczywistych granicach pól projekcji Web Mercator, dynamicznie dopasowują rozmiar do kratki i mają osobne kontrastowe kolory, obwódki oraz linie dla jasnego i ciemnego motywu.
+- `Mapa / zawijanie świata`: długość geograficzna zapisanego widoku i poleceń centrowania jest normalizowana do zakresu `-180…180°`, a `worldCopyJump` zapobiega pozostawaniu na sąsiedniej kopii świata bez markerów, tras i zasięgów.
+
 ## 1.10.3.dev - 09.08.2026
 - `GUI / akcje i modale`: ujednolicono zapis, wysyłanie i usuwanie w Interfejsach, Mojej stacji, WX, Powiadomieniach, Obiektach i Biuletynach; akcje używają wspólnych potwierdzeń, modala ze spinnerem i komunikatu wyniku.
 - `Powiadomienia / Packet Routing`: formularze zachowują pozycję edytowanego bloku, a edytor flow ma akcje w kolumnie bieżących kroków, wysokość dopasowaną do ich zawartości i niezależnie przewijany katalog filtrów oraz reguł.

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.5.dev - 2026-08-13
+- `Einstellungen / Anwendungsaktualisierung`: Die browsernative Bestätigungsabfrage vor einer Aktualisierung wurde durch den Standarddialog von APRSBox ersetzt, der auch bei anderen Aktionen und in beiden Farbthemen verwendet wird; Abbrechen, Escape, Klick auf den Hintergrund und die korrekte Fokuswiederherstellung werden unterstützt.
+
+## 1.10.4.dev - 2026-08-13
+- `Karte / Maidenhead-QTH-Locator`: Eine optionale Locator-Gitterebene mit gespeichertem Sichtbarkeitsschalter wurde ergänzt; die Detailstufe wechselt mit dem Zoom von 2-stelligen Feldern über 4- und 6-stellige Locator bis zu 8-stelligen erweiterten Quadraten.
+- `Karte / QTH-Gitter / Lesbarkeit`: Beschriftungen werden innerhalb der tatsächlichen Web-Mercator-Zellgrenzen zentriert, dynamisch an die Zellgröße angepasst und verwenden eigene kontrastreiche Farben, Konturen und Gitterlinien für helle und dunkle Themes.
+- `Karte / Weltumbruch`: Gespeicherte Ansichten und Zentrierbefehle normalisieren den Längengrad auf `-180…180°`; `worldCopyJump` verhindert, dass die Karte auf einer benachbarten Weltkopie ohne Stationsmarker, Tracks und Abdeckungskreise verbleibt.
+
 ## 1.10.3.dev - 2026-08-09
 - `GUI / Aktionen und Dialoge`: Speichern, Senden und Löschen wurden in Schnittstellen, Meine Station, WX, Benachrichtigungen, Objekten und Bulletins mit gemeinsamen Bestätigungen, Spinner-Dialogen und Ergebnismeldungen vereinheitlicht.
 - `Benachrichtigungen / Packet Routing`: Formulare behalten die Position des bearbeiteten Blocks bei; im Flow-Editor liegen die Aktionen in der Spalte der aktuellen Schritte, der Arbeitsbereich passt sich deren Inhalt an und der Filter- und Regelkatalog scrollt unabhängig.

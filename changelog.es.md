@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.5.dev - 2026-08-13
+- `Ajustes / actualización de la aplicación`: se sustituyó la confirmación nativa del navegador mostrada antes de actualizar por el diálogo estándar de APRSBox usado en las demás acciones y en ambos temas de color; permite cancelar, usar Escape, pulsar el fondo y restaurar correctamente el foco.
+
+## 1.10.4.dev - 2026-08-13
+- `Mapa / localizador QTH Maidenhead`: se añadió una capa opcional de cuadrícula de localizadores con un interruptor de visibilidad persistente; el detalle cambia con el zoom desde campos de 2 caracteres, pasando por localizadores de 4 y 6 caracteres, hasta cuadrados extendidos de 8 caracteres.
+- `Mapa / cuadrícula QTH / legibilidad`: las etiquetas se centran dentro de los límites reales de cada celda en la proyección Web Mercator, ajustan dinámicamente su tamaño y usan colores, contornos y líneas de cuadrícula específicos y contrastados para los temas claro y oscuro.
+- `Mapa / repetición del mundo`: las vistas guardadas y las órdenes de centrado normalizan la longitud al intervalo `-180…180°`, mientras que `worldCopyJump` evita permanecer en una copia adyacente del mundo sin marcadores, recorridos ni círculos de cobertura.
+
 ## 1.10.3.dev - 2026-08-09
 - `GUI / acciones y diálogos`: se unificaron el guardado, el envío y la eliminación en Interfaces, Mi estación, WX, Notificaciones, Objetos y Boletines mediante confirmaciones, diálogos con indicador de progreso y mensajes de resultado comunes.
 - `Notificaciones / Packet Routing`: los formularios conservan la posición del bloque editado; el editor de flujos mantiene las acciones en la columna de pasos actuales, ajusta el área de trabajo a su contenido y desplaza de forma independiente el catálogo de filtros y reglas.
