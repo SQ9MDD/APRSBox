@@ -202,6 +202,41 @@
     transition: opacity var(--transition-fast);
 }
 
+.map-canvas .leaflet-pane.maidenhead-grid-pane {
+    pointer-events: none;
+}
+
+.maidenhead-grid-label-icon {
+    background: transparent;
+    border: 0;
+    pointer-events: none;
+}
+
+.maidenhead-grid-label-icon span {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform: translate(-50%, -50%);
+    color: #6b7280;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 1.7rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.06em;
+    opacity: 0.2;
+    text-align: center;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.maidenhead-grid-label-field span {
+    font-size: 2.4rem;
+}
+
+.maidenhead-grid-label-subsquare span {
+    font-size: 1.25rem;
+}
+
 .map-alerts-overlay[hidden] {
     display: none;
 }

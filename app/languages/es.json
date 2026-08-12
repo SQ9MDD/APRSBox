@@ -670,6 +670,8 @@
   "QSY": "qsy",
   "Map controls": "Controles del mapa",
   "Reset view": "Restablecer vista",
+  "Show Maidenhead grid": "Mostrar cuadrícula Maidenhead",
+  "Hide Maidenhead grid": "Ocultar cuadrícula Maidenhead",
   "Mask opacity": "Opacidad de la máscara",
   "Coverage fill opacity": "Opacidad de relleno de cobertura",
   "Coverage outline opacity": "Opacidad del contorno de cobertura",

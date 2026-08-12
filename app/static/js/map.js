@@ -43,6 +43,8 @@
     const alertsOverlayClose = document.getElementById("map-alerts-overlay-close");
     const toggleRulerButton = document.getElementById("map-toggle-ruler");
     const toggleRulerIcon = document.getElementById("map-toggle-ruler-icon");
+    const toggleMaidenheadGridButton = document.getElementById("map-toggle-maidenhead-grid");
+    const toggleMaidenheadGridIcon = document.getElementById("map-toggle-maidenhead-grid-icon");
     const maskOpacitySelect = document.getElementById("map-mask-opacity");
     const coverageFillOpacitySelect = document.getElementById("map-coverage-fill-opacity");
     const coverageOutlineOpacitySelect = document.getElementById("map-coverage-outline-opacity");
@@ -82,6 +84,8 @@
         severityLevel: root.dataset.i18nSeverityLevel || "Severity level",
         showRuler: root.dataset.i18nShowRuler || "Show ruler",
         hideRuler: root.dataset.i18nHideRuler || "Hide ruler",
+        showMaidenheadGrid: root.dataset.i18nShowMaidenheadGrid || "Show Maidenhead grid",
+        hideMaidenheadGrid: root.dataset.i18nHideMaidenheadGrid || "Hide Maidenhead grid",
         tileProviderUnavailable: root.dataset.i18nTileProviderUnavailable || "Tile provider unavailable",
         tileProviderRecovered: root.dataset.i18nTileProviderRecovered || "Tile provider recovered",
         show: root.dataset.i18nShow || "Show",
@@ -91,6 +95,7 @@
     const trackLayerGroup = window.L.layerGroup();
     const markerLayerGroup = window.L.layerGroup();
     const rulerLayer = window.L.layerGroup();
+    const maidenheadGridLayer = window.L.layerGroup();
     let alertAreaLayer = null;
     const mapViewStorageKey = "aprsbox-map-view";
     const mapTracksVisibleStorageKey = "aprsbox-map-tracks-visible";
@@ -98,6 +103,7 @@
     const mapHiddenAlertIdsStorageKey = "aprsbox-map-hidden-alert-ids";
     const mapAlertsOverlayOpenStorageKey = "aprsbox-map-alerts-overlay-open";
     const mapRulerVisibleStorageKey = "aprsbox-map-ruler-visible";
+    const mapMaidenheadGridVisibleStorageKey = "aprsbox-map-maidenhead-grid-visible";
     const mapCoverageOutlineOpacityStorageKey = "aprsbox-map-coverage-outline-opacity";
     const mapStationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
@@ -119,6 +125,7 @@
     let coverageVisible = true;
     let alertsOverlayOpen = resolveAlertsOverlayOpen();
     let rulerVisible = true;
+    let maidenheadGridVisible = true;
     let coverageFillOpacity = 0.05;
     let coverageOutlineOpacity = 1;
     let latestStations = [];
@@ -701,6 +708,10 @@
     const alertAreasPane = map.createPane(alertAreasPaneName);
     alertAreasPane.style.zIndex = "350";
     alertAreasPane.style.pointerEvents = "none";
+    const maidenheadGridPaneName = "maidenhead-grid-pane";
+    const maidenheadGridPane = map.createPane(maidenheadGridPaneName);
+    maidenheadGridPane.style.zIndex = "325";
+    maidenheadGridPane.style.pointerEvents = "none";
     alertAreaLayer = window.L.geoJSON(null, {
         pane: alertAreasPaneName,
         interactive: false,
@@ -727,6 +738,7 @@
     trackLayerGroup.addTo(map);
     markerLayerGroup.addTo(map);
     rulerLayer.addTo(map);
+    maidenheadGridLayer.addTo(map);
 
     if (tileSourceOutput) {
         tileSourceOutput.textContent = tileSourceName;
@@ -959,6 +971,137 @@
             const label = rulerVisible ? i18n.hideRuler : i18n.showRuler;
             toggleRulerButton.setAttribute("title", label);
             toggleRulerButton.setAttribute("aria-label", label);
+        }
+    }
+
+    function resolveMaidenheadGridVisible() {
+        const storedValue = String(window.localStorage.getItem(mapMaidenheadGridVisibleStorageKey) || "").trim();
+        if (storedValue === "0" || storedValue.toLowerCase() === "false") {
+            return false;
+        }
+        if (storedValue === "1" || storedValue.toLowerCase() === "true") {
+            return true;
+        }
+        return true;
+    }
+
+    function maidenheadGridSpecForZoom(zoom) {
+        if (zoom <= 5) {
+            return { longitudeStep: 20, latitudeStep: 10, precision: 2, sizeClass: "field" };
+        }
+        if (zoom <= 9) {
+            return { longitudeStep: 2, latitudeStep: 1, precision: 4, sizeClass: "square" };
+        }
+        return { longitudeStep: 1 / 12, latitudeStep: 1 / 24, precision: 6, sizeClass: "subsquare" };
+    }
+
+    function positiveModulo(value, divisor) {
+        return ((value % divisor) + divisor) % divisor;
+    }
+
+    function maidenheadLocatorForCell(longitudeIndex, latitudeIndex, precision) {
+        const cellsPerAxis = precision === 2 ? 18 : (precision === 4 ? 180 : 4320);
+        const normalizedLongitudeIndex = positiveModulo(longitudeIndex, cellsPerAxis);
+        const normalizedLatitudeIndex = Math.max(0, Math.min(cellsPerAxis - 1, latitudeIndex));
+        const fieldDivisor = precision === 2 ? 1 : (precision === 4 ? 10 : 240);
+        const fieldLongitude = Math.floor(normalizedLongitudeIndex / fieldDivisor);
+        const fieldLatitude = Math.floor(normalizedLatitudeIndex / fieldDivisor);
+        let locator = String.fromCharCode(65 + fieldLongitude) + String.fromCharCode(65 + fieldLatitude);
+        if (precision >= 4) {
+            const squareDivisor = precision === 4 ? 1 : 24;
+            locator += String(Math.floor(normalizedLongitudeIndex / squareDivisor) % 10);
+            locator += String(Math.floor(normalizedLatitudeIndex / squareDivisor) % 10);
+        }
+        if (precision === 6) {
+            locator += String.fromCharCode(65 + (normalizedLongitudeIndex % 24));
+            locator += String.fromCharCode(65 + (normalizedLatitudeIndex % 24));
+        }
+        return locator;
+    }
+
+    function renderMaidenheadGrid() {
+        maidenheadGridLayer.clearLayers();
+        if (!maidenheadGridVisible || !map.hasLayer(maidenheadGridLayer)) {
+            return;
+        }
+        const spec = maidenheadGridSpecForZoom(map.getZoom());
+        const bounds = map.getBounds();
+        const south = Math.max(-90, bounds.getSouth());
+        const north = Math.min(90, bounds.getNorth());
+        const west = bounds.getWest();
+        const east = bounds.getEast();
+        const firstLongitudeIndex = Math.floor((west + 180) / spec.longitudeStep);
+        const lastLongitudeIndex = Math.ceil((east + 180) / spec.longitudeStep) - 1;
+        const firstLatitudeIndex = Math.max(0, Math.floor((south + 90) / spec.latitudeStep));
+        const lastLatitudeIndex = Math.min(
+            Math.round(180 / spec.latitudeStep) - 1,
+            Math.ceil((north + 90) / spec.latitudeStep) - 1
+        );
+        const gridSouth = -90 + (firstLatitudeIndex * spec.latitudeStep);
+        const gridNorth = -90 + ((lastLatitudeIndex + 1) * spec.latitudeStep);
+        const lineOptions = {
+            pane: maidenheadGridPaneName,
+            interactive: false,
+            color: "#6b7280",
+            opacity: 0.34,
+            weight: spec.precision === 2 ? 1.5 : 1,
+        };
+
+        for (let longitudeIndex = firstLongitudeIndex; longitudeIndex <= lastLongitudeIndex + 1; longitudeIndex += 1) {
+            const longitude = -180 + (longitudeIndex * spec.longitudeStep);
+            maidenheadGridLayer.addLayer(window.L.polyline(
+                [[gridSouth, longitude], [gridNorth, longitude]],
+                lineOptions
+            ));
+        }
+        for (let latitudeIndex = firstLatitudeIndex; latitudeIndex <= lastLatitudeIndex + 1; latitudeIndex += 1) {
+            const latitude = -90 + (latitudeIndex * spec.latitudeStep);
+            const gridWest = -180 + (firstLongitudeIndex * spec.longitudeStep);
+            const gridEast = -180 + ((lastLongitudeIndex + 1) * spec.longitudeStep);
+            maidenheadGridLayer.addLayer(window.L.polyline(
+                [[latitude, gridWest], [latitude, gridEast]],
+                lineOptions
+            ));
+        }
+        for (let latitudeIndex = firstLatitudeIndex; latitudeIndex <= lastLatitudeIndex; latitudeIndex += 1) {
+            const latitude = -90 + ((latitudeIndex + 0.5) * spec.latitudeStep);
+            for (let longitudeIndex = firstLongitudeIndex; longitudeIndex <= lastLongitudeIndex; longitudeIndex += 1) {
+                const longitude = -180 + ((longitudeIndex + 0.5) * spec.longitudeStep);
+                const locator = maidenheadLocatorForCell(longitudeIndex, latitudeIndex, spec.precision);
+                maidenheadGridLayer.addLayer(window.L.marker([latitude, longitude], {
+                    pane: maidenheadGridPaneName,
+                    interactive: false,
+                    keyboard: false,
+                    icon: window.L.divIcon({
+                        className: `maidenhead-grid-label-icon maidenhead-grid-label-${spec.sizeClass}`,
+                        html: `<span>${locator}</span>`,
+                        iconSize: [0, 0],
+                        iconAnchor: [0, 0],
+                    }),
+                }));
+            }
+        }
+    }
+
+    function applyMaidenheadGridToggleState(visible) {
+        maidenheadGridVisible = Boolean(visible);
+        window.localStorage.setItem(mapMaidenheadGridVisibleStorageKey, maidenheadGridVisible ? "1" : "0");
+        if (maidenheadGridVisible) {
+            if (!map.hasLayer(maidenheadGridLayer)) {
+                maidenheadGridLayer.addTo(map);
+            }
+            renderMaidenheadGrid();
+        } else if (map.hasLayer(maidenheadGridLayer)) {
+            map.removeLayer(maidenheadGridLayer);
+        }
+        if (toggleMaidenheadGridIcon) {
+            toggleMaidenheadGridIcon.setAttribute("src", `${staticRoot}icons/${maidenheadGridVisible ? "grid.svg" : "grid-off.svg"}`);
+        }
+        if (toggleMaidenheadGridButton) {
+            const label = maidenheadGridVisible ? i18n.hideMaidenheadGrid : i18n.showMaidenheadGrid;
+            toggleMaidenheadGridButton.setAttribute("title", label);
+            toggleMaidenheadGridButton.setAttribute("aria-label", label);
+            toggleMaidenheadGridButton.setAttribute("aria-pressed", maidenheadGridVisible ? "true" : "false");
         }
     }
 
@@ -1646,6 +1789,12 @@
     if (toggleRulerButton) {
         toggleRulerButton.addEventListener("click", function () {
             applyRulerToggleState(!rulerVisible);
+        });
+    }
+    applyMaidenheadGridToggleState(resolveMaidenheadGridVisible());
+    if (toggleMaidenheadGridButton) {
+        toggleMaidenheadGridButton.addEventListener("click", function () {
+            applyMaidenheadGridToggleState(!maidenheadGridVisible);
         });
     }
 
@@ -2475,11 +2624,13 @@
 
     map.on("moveend zoomend", function () {
         anchorRulerToFrameIfIdle();
+        renderMaidenheadGrid();
         syncStatus();
         persistView();
     });
     map.on("resize", function () {
         anchorRulerToFrameIfIdle();
+        renderMaidenheadGrid();
         syncStatus();
     });
     map.whenReady(function () {
