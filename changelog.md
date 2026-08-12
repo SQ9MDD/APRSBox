@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.6 - 13.08.2026
+- `Wydanie stabilne`: scalono zmiany z wersji `1.10.2.dev–1.10.5.dev`, obejmujące bezpieczniejszą kopię konfiguracji v2, ujednolicone akcje i modale GUI, poprawki ergonomii oraz przewijania, automatyczne odświeżanie APRS Device Identification, warstwę siatki Maidenhead/QTH z adaptacyjną dokładnością i obsługą obu motywów, naprawę zawijania świata na mapie oraz standardowy modal potwierdzenia aktualizacji aplikacji.
+
 ## 1.10.5.dev - 13.08.2026
 - `Ustawienia / aktualizacja aplikacji`: natywne pytanie przeglądarki przed rozpoczęciem aktualizacji zastąpiono standardowym modalem APRSBox, zgodnym z pozostałymi potwierdzeniami oraz jasnym i ciemnym motywem; modal obsługuje anulowanie, klawisz Escape, kliknięcie tła i prawidłowe przywracanie fokusu.
 

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.6 - 2026-08-13
+- `Versión estable`: se integraron los cambios de las versiones `1.10.2.dev–1.10.5.dev`, que incluyen la copia de configuración v2 más segura, acciones y diálogos de GUI unificados, mejoras de desplazamiento y usabilidad, actualización automática de APRS Device Identification, la cuadrícula Maidenhead/QTH adaptada al tema y con precisión variable, la corrección de la repetición mundial del mapa y el diálogo estándar de confirmación de actualización de la aplicación.
+
 ## 1.10.5.dev - 2026-08-13
 - `Ajustes / actualización de la aplicación`: se sustituyó la confirmación nativa del navegador mostrada antes de actualizar por el diálogo estándar de APRSBox usado en las demás acciones y en ambos temas de color; permite cancelar, usar Escape, pulsar el fondo y restaurar correctamente el foco.
 

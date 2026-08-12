@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.6 - 2026-08-13
+- `Stable release`: merged changes from versions `1.10.2.dev–1.10.5.dev`, including safer configuration backup v2, standardized GUI actions and dialogs, scrolling and usability improvements, automatic APRS Device Identification refresh, the theme-aware Maidenhead/QTH grid with adaptive precision, corrected map world wrapping, and the standard application-update confirmation dialog.
+
 ## 1.10.5.dev - 2026-08-13
 - `Settings / application update`: replaced the browser-native confirmation prompt shown before an update with the standard APRSBox dialog used by other actions and both color themes; it supports cancellation, Escape, backdrop clicks, and correct focus restoration.
 

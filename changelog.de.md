@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.6 - 2026-08-13
+- `Stabile Version`: Die Änderungen aus `1.10.2.dev–1.10.5.dev` wurden zusammengeführt, darunter die sicherere Konfigurationssicherung v2, vereinheitlichte GUI-Aktionen und Dialoge, Verbesserungen bei Scrollen und Bedienbarkeit, die automatische Aktualisierung von APRS Device Identification, das themeabhängige Maidenhead/QTH-Gitter mit adaptiver Genauigkeit, die korrigierte Weltwiederholung der Karte und der Standarddialog zur Bestätigung einer Anwendungsaktualisierung.
+
 ## 1.10.5.dev - 2026-08-13
 - `Einstellungen / Anwendungsaktualisierung`: Die browsernative Bestätigungsabfrage vor einer Aktualisierung wurde durch den Standarddialog von APRSBox ersetzt, der auch bei anderen Aktionen und in beiden Farbthemen verwendet wird; Abbrechen, Escape, Klick auf den Hintergrund und die korrekte Fokuswiederherstellung werden unterstützt.
 
