@@ -710,7 +710,9 @@
     alertAreasPane.style.pointerEvents = "none";
     const maidenheadGridPaneName = "maidenhead-grid-pane";
     const maidenheadGridPane = map.createPane(maidenheadGridPaneName);
-    maidenheadGridPane.style.zIndex = "325";
+    // Keep the locator grid above Leaflet's overlay pane (coverage, tracks and
+    // other vector layers), but below shadows, station markers and popups.
+    maidenheadGridPane.style.zIndex = "450";
     maidenheadGridPane.style.pointerEvents = "none";
     alertAreaLayer = window.L.geoJSON(null, {
         pane: alertAreasPaneName,

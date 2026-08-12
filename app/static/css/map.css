@@ -203,6 +203,7 @@
 }
 
 .map-canvas .leaflet-pane.maidenhead-grid-pane {
+    z-index: 450;
     pointer-events: none;
 }
 
