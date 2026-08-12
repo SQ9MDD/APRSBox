@@ -198,12 +198,12 @@
             </form>
             {% if can_manage_updates and not is_container_mode %}
             <form
+                id="application-update-form"
                 method="post"
                 action="{{ request.scope.root_path }}/settings/update-application"
                 class="form-stack"
                 data-settings-action-id="update-application"
                 data-settings-action-group="update-controls"
-                onsubmit="return confirm({{ t('Start application update now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
@@ -738,6 +738,27 @@
         {% endif %}
     </div>
 </section>
+
+{% if can_manage_updates and not is_container_mode %}
+<div class="settings-progress-backdrop" id="application-update-confirm-modal" hidden>
+    <div
+        class="settings-progress-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-update-confirm-title"
+        aria-describedby="application-update-confirm-question"
+    >
+        <div class="settings-progress-header">
+            <h3 class="settings-progress-title" id="application-update-confirm-title">{{ t("Are you sure?") }}</h3>
+        </div>
+        <p class="settings-progress-message" id="application-update-confirm-question">{{ t("Start application update now?") }}</p>
+        <div class="settings-progress-actions">
+            <button type="button" class="button button-secondary" data-close-application-update-confirm>{{ t("Cancel") }}</button>
+            <button type="button" class="button" id="application-update-confirm-accept">{{ t("Update application") }}</button>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 {% include "partials/help_modal.html" %}
 {% endblock %}
@@ -1707,6 +1728,63 @@
         }
 
         resumeActiveJob();
+    })();
+    (() => {
+        const form = document.getElementById("application-update-form");
+        const modal = document.getElementById("application-update-confirm-modal");
+        const acceptButton = document.getElementById("application-update-confirm-accept");
+        const closeButtons = modal
+            ? modal.querySelectorAll("[data-close-application-update-confirm]")
+            : [];
+        let returnFocus = null;
+
+        if (!(form instanceof HTMLFormElement) || !(modal instanceof HTMLElement)) return;
+
+        const closeModal = ({ restoreFocus = true } = {}) => {
+            modal.hidden = true;
+            document.body.classList.remove("modal-open");
+            if (restoreFocus && returnFocus instanceof HTMLElement) {
+                returnFocus.focus();
+            }
+            returnFocus = null;
+        };
+
+        const openModal = () => {
+            returnFocus = document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : form.querySelector("button[type='submit']");
+            modal.hidden = false;
+            document.body.classList.add("modal-open");
+            acceptButton?.focus();
+        };
+
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            openModal();
+        });
+
+        closeButtons.forEach((button) => button.addEventListener("click", () => closeModal()));
+        modal.addEventListener("click", (event) => {
+            if (event.target === modal) closeModal();
+        });
+        modal.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                closeModal();
+            }
+        });
+        acceptButton?.addEventListener("click", () => {
+            closeModal({ restoreFocus: false });
+            window.aprsboxSubmitSettingsAction(form, {
+                actionId: 'update-application',
+                group: 'update-controls',
+                message: {{ t("Update started. Please wait...")|tojson }},
+                busyLabel: {{ t("Starting update...")|tojson }},
+                mode: 'job',
+                lockTimeoutMs: 1200000,
+                reloadOnSuccess: true,
+            });
+        });
     })();
 </script>
 <script>
