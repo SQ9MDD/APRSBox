@@ -994,7 +994,10 @@
         if (zoom <= 10) {
             return { longitudeStep: 2, latitudeStep: 1, precision: 4, sizeClass: "square" };
         }
-        return { longitudeStep: 1 / 12, latitudeStep: 1 / 24, precision: 6, sizeClass: "subsquare" };
+        if (zoom <= 14) {
+            return { longitudeStep: 1 / 12, latitudeStep: 1 / 24, precision: 6, sizeClass: "subsquare" };
+        }
+        return { longitudeStep: 1 / 120, latitudeStep: 1 / 240, precision: 8, sizeClass: "extended-square" };
     }
 
     function positiveModulo(value, divisor) {
@@ -1002,21 +1005,30 @@
     }
 
     function maidenheadLocatorForCell(longitudeIndex, latitudeIndex, precision) {
-        const cellsPerAxis = precision === 2 ? 18 : (precision === 4 ? 180 : 4320);
+        const cellsPerAxis = precision === 2
+            ? 18
+            : (precision === 4 ? 180 : (precision === 6 ? 4320 : 43200));
         const normalizedLongitudeIndex = positiveModulo(longitudeIndex, cellsPerAxis);
         const normalizedLatitudeIndex = Math.max(0, Math.min(cellsPerAxis - 1, latitudeIndex));
-        const fieldDivisor = precision === 2 ? 1 : (precision === 4 ? 10 : 240);
+        const fieldDivisor = precision === 2
+            ? 1
+            : (precision === 4 ? 10 : (precision === 6 ? 240 : 2400));
         const fieldLongitude = Math.floor(normalizedLongitudeIndex / fieldDivisor);
         const fieldLatitude = Math.floor(normalizedLatitudeIndex / fieldDivisor);
         let locator = String.fromCharCode(65 + fieldLongitude) + String.fromCharCode(65 + fieldLatitude);
         if (precision >= 4) {
-            const squareDivisor = precision === 4 ? 1 : 24;
+            const squareDivisor = precision === 4 ? 1 : (precision === 6 ? 24 : 240);
             locator += String(Math.floor(normalizedLongitudeIndex / squareDivisor) % 10);
             locator += String(Math.floor(normalizedLatitudeIndex / squareDivisor) % 10);
         }
-        if (precision === 6) {
-            locator += String.fromCharCode(65 + (normalizedLongitudeIndex % 24));
-            locator += String.fromCharCode(65 + (normalizedLatitudeIndex % 24));
+        if (precision >= 6) {
+            const subsquareDivisor = precision === 6 ? 1 : 10;
+            locator += String.fromCharCode(65 + (Math.floor(normalizedLongitudeIndex / subsquareDivisor) % 24));
+            locator += String.fromCharCode(65 + (Math.floor(normalizedLatitudeIndex / subsquareDivisor) % 24));
+        }
+        if (precision === 8) {
+            locator += String(normalizedLongitudeIndex % 10);
+            locator += String(normalizedLatitudeIndex % 10);
         }
         return locator;
     }
@@ -1066,7 +1078,9 @@
             map.getZoom()
         );
         const cellPixelWidth = Math.abs(projectedRight.x - projectedLeft.x);
-        const maximumLabelFontSize = spec.precision === 2 ? 54 : (spec.precision === 4 ? 38 : 30);
+        const maximumLabelFontSize = spec.precision === 2
+            ? 54
+            : (spec.precision === 4 ? 38 : (spec.precision === 6 ? 30 : 24));
         const widthLimitedLabelFontSize = cellPixelWidth / (spec.precision * 0.72);
 
         for (let longitudeIndex = firstLongitudeIndex; longitudeIndex <= lastLongitudeIndex + 1; longitudeIndex += 1) {
