@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.10.6 - 2026-08-13
+- `Stable release`: merged changes from versions `1.10.2.dev–1.10.5.dev`, including safer configuration backup v2, standardized GUI actions and dialogs, scrolling and usability improvements, automatic APRS Device Identification refresh, the theme-aware Maidenhead/QTH grid with adaptive precision, corrected map world wrapping, and the standard application-update confirmation dialog.
+
+## 1.10.5.dev - 2026-08-13
+- `Settings / application update`: replaced the browser-native confirmation prompt shown before an update with the standard APRSBox dialog used by other actions and both color themes; it supports cancellation, Escape, backdrop clicks, and correct focus restoration.
+
+## 1.10.4.dev - 2026-08-13
+- `Map / Maidenhead QTH Locator`: added an optional locator-grid layer with a persisted visibility toggle; detail changes with zoom from 2-character fields through 4- and 6-character locators to 8-character extended squares.
+- `Map / QTH grid / readability`: labels are centered within the actual Web Mercator cell boundaries, dynamically sized to fit each cell, and use dedicated high-contrast colors, halos, and grid lines for light and dark themes.
+- `Map / world wrapping`: stored views and centering commands normalize longitude to `-180…180°`, while `worldCopyJump` prevents the map from remaining on an adjacent world copy without station markers, tracks, and coverage circles.
+
 ## 1.10.3.dev - 2026-08-09
 - `GUI / actions and dialogs`: standardized save, send, and delete behavior across Interfaces, My Station, WX, Notifications, Objects, and Bulletins with shared confirmations, spinner dialogs, and result messages.
 - `Notifications / Packet Routing`: forms retain the edited block position, while the flow editor keeps actions in the current-steps column, sizes the workspace to its contents, and scrolls the filter and rule catalog independently.
