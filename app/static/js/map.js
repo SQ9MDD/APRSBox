@@ -991,7 +991,7 @@
         if (zoom <= 5) {
             return { longitudeStep: 20, latitudeStep: 10, precision: 2, sizeClass: "field" };
         }
-        if (zoom <= 9) {
+        if (zoom <= 10) {
             return { longitudeStep: 2, latitudeStep: 1, precision: 4, sizeClass: "square" };
         }
         return { longitudeStep: 1 / 12, latitudeStep: 1 / 24, precision: 6, sizeClass: "subsquare" };
@@ -1041,12 +1041,16 @@
         );
         const gridSouth = -90 + (firstLatitudeIndex * spec.latitudeStep);
         const gridNorth = -90 + ((lastLatitudeIndex + 1) * spec.latitudeStep);
+        const themeStyles = window.getComputedStyle(document.documentElement);
+        const configuredLineOpacity = Number.parseFloat(
+            themeStyles.getPropertyValue("--maidenhead-grid-line-opacity") || ""
+        );
         const lineOptions = {
             pane: maidenheadGridPaneName,
             interactive: false,
-            color: "#6b7280",
-            opacity: 0.58,
-            weight: spec.precision === 2 ? 1.6 : 1.2,
+            color: themeStyles.getPropertyValue("--maidenhead-grid-line-color").trim() || "#374151",
+            opacity: Number.isFinite(configuredLineOpacity) ? configuredLineOpacity : 0.7,
+            weight: spec.precision === 2 ? 1.8 : 1.35,
         };
         const mapCenter = map.getCenter();
         const cellCenterLatitude = Math.max(
@@ -1061,22 +1065,9 @@
             [cellCenterLatitude, mapCenter.lng + (spec.longitudeStep / 2)],
             map.getZoom()
         );
-        const projectedTop = map.project(
-            [cellCenterLatitude + (spec.latitudeStep / 2), mapCenter.lng],
-            map.getZoom()
-        );
-        const projectedBottom = map.project(
-            [cellCenterLatitude - (spec.latitudeStep / 2), mapCenter.lng],
-            map.getZoom()
-        );
         const cellPixelWidth = Math.abs(projectedRight.x - projectedLeft.x);
-        const cellPixelHeight = Math.abs(projectedBottom.y - projectedTop.y);
-        const maximumLabelFontSize = spec.precision === 2 ? 44 : (spec.precision === 4 ? 30 : 24);
-        const labelFontSize = Math.max(9, Math.min(
-            maximumLabelFontSize,
-            cellPixelHeight * 0.34,
-            cellPixelWidth / (spec.precision * 0.68)
-        ));
+        const maximumLabelFontSize = spec.precision === 2 ? 54 : (spec.precision === 4 ? 38 : 30);
+        const widthLimitedLabelFontSize = cellPixelWidth / (spec.precision * 0.72);
 
         for (let longitudeIndex = firstLongitudeIndex; longitudeIndex <= lastLongitudeIndex + 1; longitudeIndex += 1) {
             const longitude = -180 + (longitudeIndex * spec.longitudeStep);
@@ -1095,7 +1086,17 @@
             ));
         }
         for (let latitudeIndex = firstLatitudeIndex; latitudeIndex <= lastLatitudeIndex; latitudeIndex += 1) {
-            const latitude = -90 + ((latitudeIndex + 0.5) * spec.latitudeStep);
+            const cellSouth = -90 + (latitudeIndex * spec.latitudeStep);
+            const cellNorth = cellSouth + spec.latitudeStep;
+            const latitude = (cellSouth + cellNorth) / 2;
+            const projectedTop = map.project([cellNorth, mapCenter.lng], map.getZoom());
+            const projectedBottom = map.project([cellSouth, mapCenter.lng], map.getZoom());
+            const cellPixelHeight = Math.abs(projectedBottom.y - projectedTop.y);
+            const labelFontSize = Math.max(6, Math.min(
+                maximumLabelFontSize,
+                cellPixelHeight * 0.42,
+                widthLimitedLabelFontSize
+            ));
             for (let longitudeIndex = firstLongitudeIndex; longitudeIndex <= lastLongitudeIndex; longitudeIndex += 1) {
                 const longitude = -180 + ((longitudeIndex + 0.5) * spec.longitudeStep);
                 const locator = maidenheadLocatorForCell(longitudeIndex, latitudeIndex, spec.precision);
@@ -1833,6 +1834,7 @@
         for (const mutation of mutations) {
             if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
                 applyMaskOpacity(resolveDefaultMaskOpacity());
+                renderMaidenheadGrid();
                 applyLatestMapData({ forceRender: true });
                 break;
             }
