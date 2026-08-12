@@ -1102,10 +1102,13 @@
         for (let latitudeIndex = firstLatitudeIndex; latitudeIndex <= lastLatitudeIndex; latitudeIndex += 1) {
             const cellSouth = -90 + (latitudeIndex * spec.latitudeStep);
             const cellNorth = cellSouth + spec.latitudeStep;
-            const latitude = (cellSouth + cellNorth) / 2;
             const projectedTop = map.project([cellNorth, mapCenter.lng], map.getZoom());
             const projectedBottom = map.project([cellSouth, mapCenter.lng], map.getZoom());
             const cellPixelHeight = Math.abs(projectedBottom.y - projectedTop.y);
+            const latitude = map.unproject(
+                window.L.point(projectedTop.x, (projectedTop.y + projectedBottom.y) / 2),
+                map.getZoom()
+            ).lat;
             const labelFontSize = Math.max(6, Math.min(
                 maximumLabelFontSize,
                 cellPixelHeight * 0.42,
