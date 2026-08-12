@@ -595,6 +595,14 @@
         renderAlertPanel();
     }
 
+    function normalizeMapLongitude(longitude) {
+        const numericLongitude = Number(longitude);
+        if (!Number.isFinite(numericLongitude)) {
+            return 0;
+        }
+        return positiveModulo(numericLongitude + 180, 360) - 180;
+    }
+
     function resolveInitialView() {
         try {
             const raw = window.localStorage.getItem(mapViewStorageKey);
@@ -620,7 +628,7 @@
                     window.localStorage.removeItem(mapViewStorageKey);
                     return defaultView;
                 }
-                return { latitude, longitude, zoom };
+                return { latitude, longitude: normalizeMapLongitude(longitude), zoom };
             }
         } catch (_error) {
         }
@@ -633,12 +641,16 @@
         center: [initialView.latitude, initialView.longitude],
         zoom: initialView.zoom,
         zoomControl: true,
+        worldCopyJump: true,
     });
     window.aprsboxCenterMapOn = function (latitude, longitude) {
         if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
             return;
         }
-        map.setView([Number(latitude), Number(longitude)], Math.max(map.getZoom(), 15));
+        map.setView(
+            [Number(latitude), normalizeMapLongitude(longitude)],
+            Math.max(map.getZoom(), 15)
+        );
     };
     const mapMaskPaneName = "map-mask-pane";
     let mapMaskPane = null;
@@ -1744,8 +1756,9 @@
 
     function syncStatus() {
         const center = map.getCenter();
+        const normalizedCenterLongitude = normalizeMapLongitude(center.lng);
         if (centerOutput) {
-            centerOutput.textContent = `${formatCoordinate(center.lat)}, ${formatCoordinate(center.lng)}`;
+            centerOutput.textContent = `${formatCoordinate(center.lat)}, ${formatCoordinate(normalizedCenterLongitude)}`;
         }
         if (zoomOutput) {
             zoomOutput.textContent = String(map.getZoom());
@@ -1753,7 +1766,7 @@
         root.dispatchEvent(new window.CustomEvent(mapViewRefreshEventName, {
             detail: {
                 center_latitude: center.lat,
-                center_longitude: center.lng,
+                center_longitude: normalizedCenterLongitude,
                 visible_radius_km: visibleMapRadiusKm(),
                 zoom: map.getZoom(),
             },
@@ -1764,7 +1777,7 @@
         const center = map.getCenter();
         window.localStorage.setItem(mapViewStorageKey, JSON.stringify({
             latitude: center.lat,
-            longitude: center.lng,
+            longitude: normalizeMapLongitude(center.lng),
             zoom: map.getZoom(),
         }));
     }
