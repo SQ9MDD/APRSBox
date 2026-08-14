@@ -1093,7 +1093,7 @@
         const maximumLabelFontSize = spec.precision === 2
             ? 54
             : (spec.precision === 4
-                ? 38
+                ? (map.getZoom() === 6 ? 20 : 38)
                 : (spec.precision === 6 ? (map.getZoom() === 11 ? 18 : 30) : 24));
         const widthLimitedLabelFontSize = cellPixelWidth / (spec.precision * 0.72);
 
