@@ -66,11 +66,11 @@ from app.services.content import (
     get_section_row,
     get_section_rows,
     get_related_ssids,
-    get_visible_station_snapshots,
     recent_station_outbound_jobs,
     recent_object_outbound_jobs,
     recent_bulletin_outbound_jobs,
     get_station_detail,
+    get_visible_station_snapshots,
     get_station_settings,
     recent_event_logs,
     safe_update_station_settings,
@@ -211,7 +211,7 @@ from app.services.map_service import (
     get_station_detail_track_payload,
     normalize_coverage_fill_opacity_percent,
 )
-from app.services.map_station_state import read_map_station_rf_snapshots
+from app.services.map_station_state import read_map_station_rf_snapshots, read_map_station_state
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
 from app.services.outbound import enqueue_beacon_job, enqueue_message_job, enqueue_object_job, enqueue_status_job
 from app.services.system import (
@@ -411,8 +411,19 @@ def _section_edit_redirect(request: Request, slug: str, record_id: int) -> Redir
     )
 
 
-def _station_detail_context(callsign: str, unit_system: str, *, root_path: str = "") -> dict | None:
-    snapshots = get_visible_station_snapshots()
+def _station_detail_context(
+    callsign: str,
+    unit_system: str,
+    *,
+    root_path: str = "",
+    station_settings: dict | None = None,
+    use_projected_state: bool = True,
+) -> dict | None:
+    snapshots = (
+        read_map_station_state(station_settings=station_settings)["snapshots"]
+        if use_projected_state
+        else get_visible_station_snapshots()
+    )
     detail = get_station_detail(callsign, unit_system=unit_system, snapshots=snapshots)
     if detail is None:
         return None
@@ -1136,6 +1147,7 @@ def station_detail_page(
         callsign,
         station_settings.get("default_units", "metric"),
         root_path=request.scope.get("root_path", ""),
+        station_settings=station_settings,
     )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
@@ -1169,6 +1181,7 @@ def station_detail_message(
         callsign,
         station_settings.get("default_units", "metric"),
         root_path=request.scope.get("root_path", ""),
+        station_settings=station_settings,
     )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
@@ -1203,6 +1216,7 @@ def station_detail_snapshot(
         callsign,
         station_settings.get("default_units", "metric"),
         root_path=request.scope.get("root_path", ""),
+        station_settings=station_settings,
     )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
@@ -3984,6 +3998,7 @@ def alert_detail_page(
             related_label or str(alert.get("source_callsign") or ""),
             station_settings.get("default_units", "metric"),
             root_path=root_path,
+            use_projected_state=False,
         )
         if station_context is not None:
             station_map_config = dict(station_context["station_map_config"])
