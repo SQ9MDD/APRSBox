@@ -61,7 +61,7 @@ STATION_TX_INTERNAL_MODE_SETTING_KEY = "station.tx.internal_mode"
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
-_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?)?$")
+_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{1,5})(?:}(?P<reply_ack>[0-9A-Z]{1,5})?)?)?$")
 SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSD", "?DX", "?APRSV", "?VER")
 APRS_SERVICE_DESTINATIONS = (
     "ANSRVR",
@@ -1091,8 +1091,8 @@ def process_incoming_tnc2_message(
                 automatic_response_internal_tx_only=automatic_response_internal_tx_only,
             )
         return
-    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
-    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
+    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,5})(?:}(?P<reply_ack>[0-9A-Z]{1,5})?)?", text_field, flags=re.IGNORECASE)
+    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,5})(?:}(?P<reply_ack>[0-9A-Z]{1,5})?)?", text_field, flags=re.IGNORECASE)
     if ack_match:
         message_number = _normalize_message_number(ack_match.group("number"))
         if not message_number:
@@ -1418,14 +1418,13 @@ def store_incoming_message(
             """
             SELECT id
             FROM aprs_messages
-            WHERE conversation_id = ?
-              AND direction = ?
+            WHERE direction = ?
               AND sender = ?
               AND message_number = ?
             ORDER BY id DESC
             LIMIT 1
             """,
-            (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, message_number),
+            (MESSAGE_DIRECTION_RX, sender, message_number),
         )
     if existing is None and not duplicate_unnumbered:
         with get_connection() as connection:
@@ -1684,7 +1683,7 @@ def _normalize_ack_number(value: str | None) -> str | None:
     normalized = str(value or "").strip().upper()
     if not normalized:
         return None
-    if not re.fullmatch(r"[0-9A-Z]{1,2}", normalized):
+    if not re.fullmatch(r"[0-9A-Z]{1,5}", normalized):
         return None
     return normalized
 
