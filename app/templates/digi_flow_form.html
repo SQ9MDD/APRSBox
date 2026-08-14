@@ -119,6 +119,18 @@
                 </div>
             </section>
         </form>
+        <div class="settings-progress-backdrop" id="digi-flow-save-progress" hidden>
+            <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
+                <div class="settings-progress-header">
+                    <span class="settings-progress-spinner" aria-hidden="true"></span>
+                    <h3 class="settings-progress-title">{{ t("Please wait") }}</h3>
+                </div>
+                <p class="settings-progress-message">{{ t("Saving...") }}</p>
+                <div class="settings-progress-actions" hidden>
+                    <button type="button" class="button button-secondary settings-progress-close">{{ t("OK") }}</button>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
 
@@ -2077,6 +2089,94 @@
             toggleButton.textContent = frozen ? i18n.release : i18n.freeze;
             if (!frozen) {
                 refreshExecutions();
+            }
+        });
+    })();
+</script>
+<script>
+    (() => {
+        const form = document.getElementById("digi-flow-form");
+        const progressModal = document.getElementById("digi-flow-save-progress");
+        const progressMessage = progressModal?.querySelector(".settings-progress-message");
+        const progressActions = progressModal?.querySelector(".settings-progress-actions");
+        const progressClose = progressModal?.querySelector(".settings-progress-close");
+        const savingMessage = {{ t("Saving...")|tojson }};
+        const failedMessage = {{ t("Operation failed.")|tojson }};
+
+        if (!(form instanceof HTMLFormElement) || !progressModal) return;
+
+        const submitControls = Array.from(form.querySelectorAll("button[type='submit'], input[type='submit']"));
+        const setBusy = (busy) => {
+            form.toggleAttribute("aria-busy", busy);
+            submitControls.forEach((control) => {
+                control.disabled = busy;
+            });
+        };
+
+        const showProgress = (message, finished = false) => {
+            if (progressMessage) progressMessage.textContent = String(message || savingMessage);
+            if (progressActions) progressActions.hidden = !finished;
+            progressModal.hidden = false;
+        };
+
+        const hideProgress = () => {
+            progressModal.hidden = true;
+        };
+
+        progressClose?.addEventListener("click", hideProgress);
+        progressModal.addEventListener("click", (event) => {
+            if (event.target === progressModal && progressActions && !progressActions.hidden) hideProgress();
+        });
+
+        form.addEventListener("submit", (event) => {
+            if (event.defaultPrevented) return;
+            event.preventDefault();
+            setBusy(true);
+            showProgress(savingMessage);
+            const startedAt = Date.now();
+
+            void window.fetch(form.action, {
+                method: "POST",
+                body: new FormData(form),
+                credentials: "same-origin",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Accept": "application/json",
+                },
+            }).then(async (response) => {
+                let payload = null;
+                try {
+                    payload = await response.json();
+                } catch (_error) {
+                    payload = null;
+                }
+                const remaining = Math.max(0, 500 - (Date.now() - startedAt));
+                if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+                if (!response.ok || !payload || payload.ok !== true) {
+                    const detail = payload && (payload.error || payload.detail)
+                        ? ` ${payload.error || payload.detail}`
+                        : ` HTTP ${response.status}`;
+                    throw new Error(detail.trim());
+                }
+
+                setBusy(false);
+                showProgress(payload.message, true);
+                if (payload.reload) {
+                    window.setTimeout(() => {
+                        if (payload.redirect) window.location.assign(payload.redirect);
+                        else window.location.reload();
+                    }, 1200);
+                }
+            }).catch((error) => {
+                setBusy(false);
+                const detail = error && error.message ? ` ${error.message}` : "";
+                showProgress(`${failedMessage}${detail}`, true);
+            });
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !progressModal.hidden && progressActions && !progressActions.hidden) {
+                hideProgress();
             }
         });
     })();

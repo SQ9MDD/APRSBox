@@ -2305,19 +2305,39 @@ async def digi_flow_create(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     form = await request.form()
     try:
         payload = _parse_digi_flow_form_payload(form)
     except ValueError as exc:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(str(exc))},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _digi_flow_editor_context(request, current_user, form_data=build_digi_flow_editor_payload(), flash=str(exc))
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     flow_id, error = safe_create_digi_flow(payload)
     if error:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error)},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _digi_flow_editor_context(request, current_user, form_data=payload, flash=error)
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     assert flow_id is not None
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Packet Routing flow created."),
+                "reload": True,
+                "redirect": _path(request, f"/digi-flows/{flow_id}"),
+            }
+        )
     flow = get_digi_flow(flow_id)
     context = _digi_flow_editor_context(
         request,
@@ -2337,6 +2357,7 @@ async def digi_flow_update(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     if get_digi_flow(flow_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DIGI Flow not found")
 
@@ -2344,14 +2365,33 @@ async def digi_flow_update(
     try:
         payload = _parse_digi_flow_form_payload(form)
     except ValueError as exc:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(str(exc))},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _digi_flow_editor_context(request, current_user, flow_id=flow_id, form_data=build_digi_flow_editor_payload(), flash=str(exc))
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     error = safe_update_digi_flow(flow_id, payload)
     if error:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error)},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _digi_flow_editor_context(request, current_user, flow_id=flow_id, form_data=payload, flash=error)
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Packet Routing flow updated."),
+                "reload": True,
+                "redirect": _path(request, f"/digi-flows/{flow_id}"),
+            }
+        )
     flow = get_digi_flow(flow_id)
     context = _digi_flow_editor_context(
         request,
