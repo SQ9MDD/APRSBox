@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.7.dev - 14.08.2026
+- `Mapa / backend stacji`: dodano trwałą projekcję `map_station_state`, aktualizowaną podczas odbioru i nadawania ramek APRS oraz odtwarzaną z historii; endpointy mapy nie rekonstruują już stanu przez ponowne parsowanie `traffic_frames` (zmierzony TTFB `stations-lite` spadł z ok. `3,4 s` do ok. `63 ms`).
+- `Stacje / odświeżanie`: mapa i lista stacji czytają gotową projekcję, a polling według rewizji pobiera tylko zmienione rekordy i informacje o usunięciach; podsumowanie RF również nie skanuje historii.
+- `Pulpit / wydajność`: stan ostatnio słyszanych stacji i początkowy wykres korzystają z istniejących projekcji, KPI ruchu są liczone jednym zapytaniem, a lista słyszanych stacji nie jest ponownie parsowana z `traffic_frames`, gdy dostępny jest bufor godzinowy.
+
 ## 1.10.6 - 13.08.2026
 - `Wydanie stabilne`: scalono zmiany z wersji `1.10.2.dev–1.10.5.dev`, obejmujące bezpieczniejszą kopię konfiguracji v2, ujednolicone akcje i modale GUI, poprawki ergonomii oraz przewijania, automatyczne odświeżanie APRS Device Identification, warstwę siatki Maidenhead/QTH z adaptacyjną dokładnością i obsługą obu motywów, naprawę zawijania świata na mapie oraz standardowy modal potwierdzenia aktualizacji aplikacji.
 

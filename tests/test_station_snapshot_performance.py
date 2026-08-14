@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.db import execute, init_db
+from app.routers.pages import _station_detail_context
 from app.services.content import (
     get_heard_station_snapshots,
     get_recent_station_packets,
@@ -86,6 +87,27 @@ class StationSnapshotPerformanceTests(unittest.TestCase):
         self.assertEqual(detail["display_callsign"], "SP8ABC-9")
         self.assertEqual(len(related), 1)
         self.assertEqual(related[0]["display_callsign"], "SP8ABC-9")
+
+    def test_station_detail_context_reads_current_state_from_projection(self) -> None:
+        snapshots = [sample_snapshot()]
+        with (
+            patch("app.routers.pages.read_map_station_state", return_value={"snapshots": snapshots}) as state_mock,
+            patch("app.services.content.get_visible_station_snapshots", side_effect=AssertionError("raw rebuild")),
+            patch("app.routers.pages.get_station_detail_track_payload", return_value={"points": []}),
+            patch("app.routers.pages.get_station_detail_map_config", return_value={}),
+            patch("app.routers.pages.get_recent_station_packets", return_value=[]),
+        ):
+            context = _station_detail_context(
+                "SP8ABC-9",
+                "metric",
+                station_settings={"default_units": "metric"},
+                use_projected_state=True,
+            )
+
+        self.assertIsNotNone(context)
+        assert context is not None
+        self.assertEqual(context["station"]["display_callsign"], "SP8ABC-9")
+        state_mock.assert_called_once_with(station_settings={"default_units": "metric"})
 
     def test_station_detail_fields_include_status_even_when_empty(self) -> None:
         detail = get_station_detail("SP8ABC-9", snapshots=[sample_snapshot()])

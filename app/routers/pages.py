@@ -61,17 +61,16 @@ from app.services.content import (
     get_aprs_symbol_icon_path,
     get_aprs_symbol_set,
     get_recent_station_packets,
-    heard_stations,
+    projected_station_list,
     has_enabled_modem_interface,
     get_section_row,
     get_section_rows,
     get_related_ssids,
-    get_rf_heard_station_snapshots,
-    get_visible_station_snapshots,
     recent_station_outbound_jobs,
     recent_object_outbound_jobs,
     recent_bulletin_outbound_jobs,
     get_station_detail,
+    get_visible_station_snapshots,
     get_station_settings,
     recent_event_logs,
     safe_update_station_settings,
@@ -212,6 +211,7 @@ from app.services.map_service import (
     get_station_detail_track_payload,
     normalize_coverage_fill_opacity_percent,
 )
+from app.services.map_station_state import read_map_station_rf_snapshots, read_map_station_state
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
 from app.services.outbound import enqueue_beacon_job, enqueue_message_job, enqueue_object_job, enqueue_status_job
 from app.services.system import (
@@ -411,8 +411,19 @@ def _section_edit_redirect(request: Request, slug: str, record_id: int) -> Redir
     )
 
 
-def _station_detail_context(callsign: str, unit_system: str, *, root_path: str = "") -> dict | None:
-    snapshots = get_visible_station_snapshots()
+def _station_detail_context(
+    callsign: str,
+    unit_system: str,
+    *,
+    root_path: str = "",
+    station_settings: dict | None = None,
+    use_projected_state: bool = True,
+) -> dict | None:
+    snapshots = (
+        read_map_station_state(station_settings=station_settings)["snapshots"]
+        if use_projected_state
+        else get_visible_station_snapshots()
+    )
     detail = get_station_detail(callsign, unit_system=unit_system, snapshots=snapshots)
     if detail is None:
         return None
@@ -1106,14 +1117,19 @@ def stations_page(
 ) -> object:
     templates = request.app.state.templates
     station_settings = get_station_settings()
-    stations = heard_stations(unit_system=station_settings.get("default_units", "metric"))
+    station_state = projected_station_list(
+        unit_system=station_settings.get("default_units", "metric"),
+        station_settings=station_settings,
+    )
+    stations = station_state["stations"]
     context = build_template_context(
         request,
         page_title="Stations",
         current_user=current_user,
         active_nav="stations",
         stations=stations,
-        station_summary=station_summary(get_rf_heard_station_snapshots()),
+        stations_revision=station_state["revision"],
+        station_summary=station_summary(read_map_station_rf_snapshots()),
         default_units=station_settings.get("default_units", "metric"),
     )
     return templates.TemplateResponse("stations.html", context)
@@ -1131,6 +1147,7 @@ def station_detail_page(
         callsign,
         station_settings.get("default_units", "metric"),
         root_path=request.scope.get("root_path", ""),
+        station_settings=station_settings,
     )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
@@ -1164,6 +1181,7 @@ def station_detail_message(
         callsign,
         station_settings.get("default_units", "metric"),
         root_path=request.scope.get("root_path", ""),
+        station_settings=station_settings,
     )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
@@ -1198,6 +1216,7 @@ def station_detail_snapshot(
         callsign,
         station_settings.get("default_units", "metric"),
         root_path=request.scope.get("root_path", ""),
+        station_settings=station_settings,
     )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
@@ -1206,14 +1225,22 @@ def station_detail_snapshot(
 
 @router.get("/api/stations")
 def stations_snapshot(
+    since_revision: int | None = None,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     station_settings = get_station_settings()
-    stations = heard_stations(unit_system=station_settings.get("default_units", "metric"))
+    station_state = projected_station_list(
+        unit_system=station_settings.get("default_units", "metric"),
+        since_revision=since_revision,
+        station_settings=station_settings,
+    )
     return JSONResponse(
         {
-            "stations": stations,
-            "summary": station_summary(get_rf_heard_station_snapshots()),
+            "revision": station_state["revision"],
+            "full_snapshot": station_state["full_snapshot"],
+            "removed_station_keys": station_state["removed_station_keys"],
+            "stations": station_state["stations"],
+            "summary": station_summary(read_map_station_rf_snapshots()),
             "default_units": station_settings.get("default_units", "metric"),
         }
     )
@@ -2837,9 +2864,10 @@ def map_page(
 
 @router.get("/api/map/stations-lite")
 def map_stations_lite(
+    since_revision: int | None = None,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
-    return JSONResponse(get_map_station_markers_payload())
+    return JSONResponse(get_map_station_markers_payload(since_revision=since_revision))
 
 
 @router.get("/api/map/alert-areas")
@@ -3970,6 +3998,7 @@ def alert_detail_page(
             related_label or str(alert.get("source_callsign") or ""),
             station_settings.get("default_units", "metric"),
             root_path=root_path,
+            use_projected_state=False,
         )
         if station_context is not None:
             station_map_config = dict(station_context["station_map_config"])

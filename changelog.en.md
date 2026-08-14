@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.7.dev - 2026-08-14
+- `Map / station backend`: added the durable `map_station_state` projection, updated while APRS frames are received or transmitted and rebuildable from history; map endpoints no longer reconstruct state by reparsing `traffic_frames` (measured `stations-lite` TTFB dropped from about `3.4 s` to about `63 ms`).
+- `Stations / refresh`: the map and station list read the prepared projection, while revision-based polling fetches only changed records and removals; the RF summary no longer scans history either.
+- `Dashboard / performance`: recently heard stations and the initial chart now reuse existing projections, traffic KPIs use one query, and heard-station keys are no longer reparsed from `traffic_frames` when the hourly buffer is available.
+
 ## 1.10.6 - 2026-08-13
 - `Stable release`: merged changes from versions `1.10.2.dev–1.10.5.dev`, including safer configuration backup v2, standardized GUI actions and dialogs, scrolling and usability improvements, automatic APRS Device Identification refresh, the theme-aware Maidenhead/QTH grid with adaptive precision, corrected map world wrapping, and the standard application-update confirmation dialog.
 

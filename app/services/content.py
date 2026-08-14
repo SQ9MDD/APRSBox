@@ -128,6 +128,20 @@ def _aprs_symbol_icon_path_for_set(symbol: str, symbol_set: str) -> str | None:
     return None
 
 
+def _aprs_symbol_icon_path_for_resolved_set(symbol: str, symbol_set: str) -> str:
+    alternate_set = APRS_SYMBOL_SET_LEGACY if symbol_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN
+    for candidate_set in (symbol_set, alternate_set):
+        candidate = _aprs_symbol_icon_path_for_set(symbol, candidate_set)
+        if candidate is not None:
+            return candidate
+    for candidate_set in (symbol_set, alternate_set):
+        icon_dir, extension = _aprs_symbol_icon_set_parts(candidate_set)
+        candidate = settings.static_dir / "icons" / icon_dir / f"x.{extension}"
+        if candidate.exists():
+            return f"icons/{icon_dir}/x.{extension}"
+    return "icons/verG/x.gif"
+
+
 def get_aprs_symbol_icon_fallback_path() -> str:
     current_set = get_aprs_symbol_set()
     for symbol_set in (current_set, APRS_SYMBOL_SET_LEGACY if current_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN):
@@ -1555,32 +1569,15 @@ def _format_monitor_timestamp(timestamp: str | None) -> str:
 def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     cutoff_utc = datetime.now(timezone.utc) - timedelta(hours=DASHBOARD_KPI_WINDOW_HOURS)
     cutoff_iso = cutoff_utc.isoformat()
-    total_frames_row = fetch_one(
+    traffic_row = fetch_one(
         f"""
-        SELECT COUNT(*) AS total
+        SELECT
+            COUNT(*) AS total_frames,
+            COALESCE(SUM(CASE WHEN format = 'TNC2' THEN 1 ELSE 0 END), 0) AS decoded_frames,
+            COUNT(DISTINCT CASE WHEN COALESCE(source, '') <> '' THEN source END) AS unique_sources
         FROM traffic_frames
         WHERE {STATISTICS_TRAFFIC_SQL_PREDICATE}
-          AND julianday(created_at) >= julianday(?)
-        """,
-        (cutoff_iso,),
-    )
-    decoded_frames_row = fetch_one(
-        f"""
-        SELECT COUNT(*) AS total
-        FROM traffic_frames
-        WHERE format = 'TNC2'
-          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
-          AND julianday(created_at) >= julianday(?)
-        """,
-        (cutoff_iso,),
-    )
-    unique_sources_row = fetch_one(
-        f"""
-        SELECT COUNT(DISTINCT source) AS total
-        FROM traffic_frames
-        WHERE COALESCE(source, '') <> ''
-          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
-          AND julianday(created_at) >= julianday(?)
+          AND created_at >= ?
         """,
         (cutoff_iso,),
     )
@@ -1594,9 +1591,9 @@ def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = 
             heard_stations += 1
 
     return {
-        "received_frames": total_frames_row["total"] if total_frames_row else 0,
-        "decoded_aprs": decoded_frames_row["total"] if decoded_frames_row else 0,
-        "unique_sources": unique_sources_row["total"] if unique_sources_row else 0,
+        "received_frames": traffic_row["total_frames"] if traffic_row else 0,
+        "decoded_aprs": traffic_row["decoded_frames"] if traffic_row else 0,
+        "unique_sources": traffic_row["unique_sources"] if traffic_row else 0,
         "heard_stations": heard_stations,
         "window_hours": DASHBOARD_KPI_WINDOW_HOURS,
     }
@@ -1703,6 +1700,39 @@ def dashboard_activity_series(
         "labels": labels,
         "series": series,
         "totals": {key: int(sum(values)) for key, values in series.items()},
+    }
+
+
+def _dashboard_activity_series_from_aggregated(activity: dict[str, Any]) -> dict[str, Any]:
+    """Adapt the persisted radio-activity projection to the legacy dashboard chart contract."""
+    labels = list(activity.get("labels") or [])
+    source_series = dict(activity.get("series") or {})
+    point_count = len(labels)
+
+    def values(key: str) -> list[int]:
+        raw_values = list(source_series.get(key) or [])
+        return [int(raw_values[index] or 0) if index < len(raw_values) else 0 for index in range(point_count)]
+
+    rx_values = values("rx_total")
+    tx_values = values("tx_total")
+    series = {
+        "total": [rx_values[index] + tx_values[index] for index in range(point_count)],
+        "mobile": values("mobile_total"),
+        "message": values("messages_total"),
+        "query": values("queries_total"),
+        "rx": rx_values,
+        "tx": tx_values,
+        "repeated_tx": values("digipeated_total"),
+    }
+    bucket_minutes = max(1, int(activity.get("output_bucket_minutes") or DASHBOARD_ACTIVITY_BUCKET_MINUTES))
+    return {
+        "bucket_minutes": bucket_minutes,
+        "window_minutes": int(activity.get("range_minutes") or bucket_minutes * point_count),
+        "window_start_utc": str(activity.get("window_start_utc") or ""),
+        "window_end_utc": str(activity.get("window_end_utc") or ""),
+        "labels": labels,
+        "series": series,
+        "totals": {key: int(sum(series_values)) for key, series_values in series.items()},
     }
 
 
@@ -1841,10 +1871,14 @@ def dashboard_home_data(
     dashboard_activity: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from app.services.aprsis import get_aprsis_runtime_status, has_enabled_aprsis_target_flow
+    from app.services.map_station_state import read_map_station_rf_snapshots
     from app.services.wx import get_wx_config
 
     station_settings = get_station_settings()
-    heard_snapshots = get_rf_heard_station_snapshots(limit=500)
+    heard_snapshots = prepare_station_snapshots_for_display(
+        read_map_station_rf_snapshots(),
+        station_settings=station_settings,
+    )
     traffic = dashboard_traffic_summary(heard_snapshots=heard_snapshots)
     interfaces = get_configured_modem_interfaces()
     enabled_interfaces = [item for item in interfaces if item.get("enabled")]
@@ -2291,7 +2325,11 @@ def dashboard_home_data(
         "hero": hero,
         "hero_summary": hero_summary,
         "stats": stats,
-        "activity_chart": dashboard_activity_series(),
+        "activity_chart": (
+            _dashboard_activity_series_from_aggregated(dashboard_activity)
+            if dashboard_activity is not None
+            else dashboard_activity_series()
+        ),
         "checks": checks,
         "next_steps": next_steps,
         "beacon_ready": beacon_ready,
@@ -2306,6 +2344,32 @@ def dashboard_home_data(
 
 def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
     snapshots = get_visible_station_snapshots(limit=limit)
+    return _station_list_rows(snapshots, unit_system=unit_system)
+
+
+def projected_station_list(
+    limit: int = 500,
+    unit_system: str = "metric",
+    *,
+    since_revision: int | None = None,
+    station_settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from app.services.map_station_state import read_map_station_state
+
+    state = read_map_station_state(
+        since_revision=since_revision,
+        station_settings=station_settings,
+    )
+    snapshots = list(state["snapshots"])[: max(1, int(limit or 0))]
+    return {
+        "revision": state["revision"],
+        "full_snapshot": state["full_snapshot"],
+        "removed_station_keys": state["removed_station_keys"],
+        "stations": _station_list_rows(snapshots, unit_system=unit_system),
+    }
+
+
+def _station_list_rows(snapshots: list[dict[str, Any]], *, unit_system: str) -> list[dict[str, Any]]:
     stations: list[dict[str, Any]] = []
     for snapshot in snapshots:
         stations.append(
@@ -2320,8 +2384,8 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
                 "last_seen_any_at": snapshot.get("last_seen_any_at"),
                 "last_heard_rf_at": snapshot.get("last_heard_rf_at"),
                 "last_seen_aprsis_at": snapshot.get("last_seen_aprsis_at"),
-                "activity_label": snapshot.get("activity_label", _t("Last heard")),
-                "activity_age_label": snapshot.get("activity_age_label", _t("Last heard age")),
+                "activity_label": snapshot.get("activity_label") or "Last heard",
+                "activity_age_label": snapshot.get("activity_age_label") or "Last heard age",
                 "last_heard_at": snapshot["last_heard_at"],
                 "last_heard_label": snapshot["last_heard_label"],
                 "last_heard_date": snapshot["last_heard_date"],
@@ -2751,6 +2815,7 @@ def _build_station_snapshots_from_rows(
     *,
     origin: str,
     limit: int,
+    materialize_display: bool = True,
 ) -> list[dict[str, Any]]:
     stations: dict[str, dict[str, Any]] = {}
     station_key_index: dict[str, str] = {}
@@ -2809,6 +2874,7 @@ def _build_station_snapshots_from_rows(
                 _normalize_interface_id(row.get("interface_id")),
                 source_kind=row_source_kind,
                 origin=origin,
+                materialize_display=materialize_display,
             )
             station_key_index[station_key_folded] = station_key
 
@@ -2841,7 +2907,8 @@ def _build_station_snapshots_from_rows(
             station["frame_type_label"] = aprs_data.get("frame_type_label", "")
         if not station["symbol"] and aprs_data.get("symbol"):
             station["symbol"] = aprs_data["symbol"]
-            station["symbol_icon"] = _aprs_symbol_icon_path(aprs_data["symbol"])
+            if materialize_display:
+                station["symbol_icon"] = _aprs_symbol_icon_path(aprs_data["symbol"])
             symbol_table, symbol_code = _split_symbol(aprs_data["symbol"])
             station["symbol_table"] = symbol_table
             station["symbol_code"] = symbol_code
@@ -2956,12 +3023,17 @@ def _new_station_snapshot(
     *,
     source_kind: str,
     origin: str,
+    materialize_display: bool = True,
 ) -> dict[str, Any]:
     heard_date, heard_relative = _format_last_heard_parts(created_at)
     base_callsign, ssid = _split_ssid(name)
     normalized_kind = normalize_source_kind(source_kind)
     resolved_origin = APRSIS_SOURCE_KIND if origin == "heard" and normalized_kind == APRSIS_SOURCE_KIND else origin
-    activity_label, activity_age_label = _station_snapshot_activity_labels(resolved_origin)
+    activity_label, activity_age_label = (
+        _station_snapshot_activity_labels(resolved_origin)
+        if materialize_display
+        else ("", "")
+    )
     is_rf_heard = origin == "heard" and normalized_kind == RF_SOURCE_KIND
     is_aprsis_seen = origin == "heard" and normalized_kind == APRSIS_SOURCE_KIND
     return {
@@ -2998,7 +3070,7 @@ def _new_station_snapshot(
         "symbol": "",
         "symbol_table": "",
         "symbol_code": "",
-        "symbol_icon": get_aprs_symbol_icon_fallback_path(),
+        "symbol_icon": get_aprs_symbol_icon_fallback_path() if materialize_display else "",
         "comment": "",
         "status_text": "",
         "data_raw": {},
@@ -3019,6 +3091,47 @@ def _station_snapshot_activity_labels(origin: str) -> tuple[str, str]:
     if origin == APRSIS_SOURCE_KIND:
         return _t("Last seen via APRS-IS"), _t("Last APRS-IS activity age")
     return _t("Last heard"), _t("Last heard age")
+
+
+def prepare_station_snapshots_for_display(
+    snapshots: list[dict[str, Any]],
+    *,
+    station_settings: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Refresh request-time fields without per-station settings lookups."""
+    translator = get_translator(get_app_language())
+    symbol_set = get_aprs_symbol_set()
+    resolved_station_settings = station_settings if station_settings is not None else get_station_settings()
+    reference_latitude = _parse_coordinate(resolved_station_settings.get("latitude"))
+    reference_longitude = _parse_coordinate(resolved_station_settings.get("longitude"))
+    result: list[dict[str, Any]] = []
+    for stored in snapshots:
+        snapshot = dict(stored)
+        created_at = str(snapshot.get("last_heard_at") or "")
+        heard_date, heard_relative = _format_last_heard_parts(created_at)
+        snapshot["last_heard_age_s"] = _last_heard_age_seconds(created_at)
+        snapshot["last_heard_label"] = _format_last_heard(created_at)
+        snapshot["last_heard_date"] = heard_date
+        snapshot["last_heard_relative"] = heard_relative
+        origin = str(snapshot.get("origin") or "heard")
+        if origin == "local_tx":
+            labels = (translator("Last local TX"), translator("Last local TX age"))
+        elif origin == APRSIS_SOURCE_KIND:
+            labels = (translator("Last seen via APRS-IS"), translator("Last APRS-IS activity age"))
+        else:
+            labels = (translator("Last heard"), translator("Last heard age"))
+        snapshot["activity_label"], snapshot["activity_age_label"] = labels
+        snapshot["symbol_icon"] = _aprs_symbol_icon_path_for_resolved_set(
+            str(snapshot.get("symbol") or ""), symbol_set
+        )
+        snapshot["distance_km"] = _distance_km_between_points(
+            reference_latitude,
+            reference_longitude,
+            _parse_coordinate(snapshot.get("latitude")),
+            _parse_coordinate(snapshot.get("longitude")),
+        )
+        result.append(snapshot)
+    return result
 
 
 def _record_station_source_observation(

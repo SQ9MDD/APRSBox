@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import execute, fetch_one, init_db
 from app.services.content import dashboard_home_data, dashboard_traffic_summary, update_station_settings
@@ -145,6 +146,46 @@ class DashboardHomeTests(unittest.TestCase):
 
             self.assertEqual(stats["Heard stations"]["value"], "17")
             self.assertEqual(stats["APRS frames"]["value"], "1234")
+
+    def test_dashboard_reuses_station_and_activity_projections(self) -> None:
+        with temporary_database():
+            activity = {
+                "range_minutes": 60,
+                "output_bucket_minutes": 5,
+                "window_start_utc": "2026-01-01T00:00:00+00:00",
+                "window_end_utc": "2026-01-01T01:00:00+00:00",
+                "labels": ["00:00", "00:05"],
+                "series": {
+                    "rx_total": [3, 4],
+                    "tx_total": [1, 2],
+                    "digipeated_total": [0, 1],
+                    "mobile_total": [1, 0],
+                    "messages_total": [0, 1],
+                    "queries_total": [0, 0],
+                },
+                "kpis": {"heard_stations": 1, "aprs_frames": 7},
+            }
+            snapshot = {
+                "display_callsign": "SP5ABC-1",
+                "last_heard_at": "2026-01-01T00:05:00+00:00",
+                "last_heard_rf_at": "2026-01-01T00:05:00+00:00",
+                "origin": "heard",
+                "entity_class": "fixed",
+                "frame_type": "P",
+                "symbol": "/>",
+            }
+            with (
+                patch("app.services.map_station_state.read_map_station_rf_snapshots", return_value=[snapshot]),
+                patch("app.services.content.get_rf_heard_station_snapshots", side_effect=AssertionError("raw rebuild")),
+                patch("app.services.content.dashboard_activity_series", side_effect=AssertionError("raw chart")),
+            ):
+                view = dashboard_home_data(dashboard_activity=activity)
+
+            chart = view["activity_chart"]
+            self.assertEqual(chart["series"]["total"], [4, 6])
+            self.assertEqual(chart["series"]["repeated_tx"], [0, 1])
+            self.assertEqual(chart["totals"]["rx"], 7)
+            self.assertEqual(view["last_rf_activity"][0]["value"], "SP5ABC-1")
 
     def test_dashboard_exposes_compact_station_readiness_lists(self) -> None:
         with temporary_database():

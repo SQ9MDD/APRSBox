@@ -22,6 +22,7 @@ from app.services.content import (
     parse_tnc2_frame,
 )
 from app.services.traffic_source import RF_SOURCE_KIND
+from app.services.map_station_state import read_map_station_state
 
 DEFAULT_STATION_ZOOM = 10
 DETAIL_STATION_ZOOM = 14
@@ -792,13 +793,16 @@ def _build_map_station_detail_rows(
     return stations
 
 
-def get_map_station_markers_payload() -> dict[str, Any]:
-    snapshots = get_visible_station_snapshots()
-    revision = _map_station_revision()
+def get_map_station_markers_payload(*, since_revision: int | None = None) -> dict[str, Any]:
+    state = read_map_station_state(since_revision=since_revision)
+    snapshots = state["snapshots"]
+    revision = state["revision"]
     stations = _build_map_station_marker_rows(snapshots)
     interfaces = _build_map_interfaces(stations, [])
     return {
         "revision": revision,
+        "full_snapshot": state["full_snapshot"],
+        "removed_station_keys": state["removed_station_keys"],
         "station_count": len(stations),
         "stations": stations,
         "interfaces": interfaces,
@@ -816,8 +820,9 @@ def get_map_alert_areas_payload() -> dict[str, Any]:
 def get_map_station_details_payload() -> dict[str, Any]:
     station_settings = get_station_settings()
     unit_system = str(station_settings.get("default_units") or "metric")
-    snapshots = get_visible_station_snapshots()
-    revision = _map_station_revision()
+    state = read_map_station_state()
+    snapshots = state["snapshots"]
+    revision = state["revision"]
     stations = _build_map_station_detail_rows(snapshots, unit_system=unit_system)
     return {
         "revision": revision,
@@ -828,8 +833,9 @@ def get_map_station_details_payload() -> dict[str, Any]:
 
 
 def get_map_mobile_tracks_payload() -> dict[str, Any]:
-    snapshots = get_visible_station_snapshots()
-    revision = _map_station_revision()
+    state = read_map_station_state()
+    snapshots = state["snapshots"]
+    revision = state["revision"]
     stations = _build_map_station_marker_rows(snapshots)
     mobile_tracks = _build_mobile_station_tracks(stations)
     return {
@@ -843,8 +849,9 @@ def get_map_mobile_tracks_payload() -> dict[str, Any]:
 def get_map_station_payload() -> dict[str, Any]:
     station_settings = get_station_settings()
     unit_system = str(station_settings.get("default_units") or "metric")
-    snapshots = get_visible_station_snapshots()
-    revision = _map_station_revision()
+    state = read_map_station_state()
+    snapshots = state["snapshots"]
+    revision = state["revision"]
     stations = _build_map_station_detail_rows(snapshots, unit_system=unit_system)
     mobile_tracks = _build_mobile_station_tracks(stations)
     return {
