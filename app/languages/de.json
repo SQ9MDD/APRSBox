@@ -1990,5 +1990,17 @@
   "Flash flood": "Flash flood",
   "Ice": "Ice",
   "Coastal hazard": "Coastal hazard",
-  "Avalanche": "Avalanche"
+  "Avalanche": "Avalanche",
+  "Configure": "Konfigurieren",
+  "ready": "bereit",
+  "APRS-IS connection": "APRS-IS-Verbindung",
+  "Local TX → APRS-IS": "Lokales TX → APRS-IS",
+  "Radio interfaces": "Funkschnittstellen",
+  "Beacon defined": "Bake definiert",
+  "{active} / {total} active": "{active} / {total} aktiv",
+  "Interface → APRS-IS": "Schnittstelle → APRS-IS",
+  "APRS-IS → interface": "APRS-IS → Schnittstelle",
+  "Interface → interface": "Schnittstelle → Schnittstelle",
+  "No radio interfaces configured.": "Keine Funkschnittstellen konfiguriert.",
+  "Receive-only interface": "Nur-Empfang-Schnittstelle"
 }

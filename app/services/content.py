@@ -36,7 +36,13 @@ from app.services.beacon_pathing import (
     BEACON_INTERVAL_MODE_PROPORTIONAL,
     normalize_beacon_interval_mode,
 )
-from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, TX_CAPABLE_MODEM_TYPES, mask_mqtt_url, parse_mqtt_url
+from app.services.mqtt_url import (
+    OPENWEBRX_MQTT_MODEM_TYPE,
+    RX_CAPABLE_MODEM_TYPES,
+    TX_CAPABLE_MODEM_TYPES,
+    mask_mqtt_url,
+    parse_mqtt_url,
+)
 from app.services.aprs_device_identification import (
     get_aprs_device_identification_database,
     lookup_aprs_device_identification,
@@ -1918,7 +1924,13 @@ def dashboard_home_data(
     wx_callsign = str(wx_config.get("full_callsign") or "").strip().upper()
     digi_routine_enabled = has_enabled_digi_rf_to_rf_flow()
     igate_enabled = has_enabled_aprsis_target_flow()
-    aprsis_runtime = get_aprsis_runtime_status() if igate_enabled else {}
+    aprsis_interfaces = [
+        item
+        for item in interfaces
+        if str(item.get("modem_type") or "").strip().upper() == APRSIS_MODEM_TYPE
+    ]
+    enabled_aprsis_interfaces = [item for item in aprsis_interfaces if item.get("enabled")]
+    aprsis_runtime = get_aprsis_runtime_status() if enabled_aprsis_interfaces else {}
     aprsis_runtime_status = str((aprsis_runtime or {}).get("status") or "").strip().lower()
     location_configured = bool(station_settings.get("latitude")) and bool(station_settings.get("longitude"))
 
@@ -2184,6 +2196,152 @@ def dashboard_home_data(
         },
     ]
 
+    enabled_flow_rows = [dict(row) for row in fetch_all(
+        """
+        SELECT id, source_kind, source_ref, target_kind, target_ref
+        FROM digi_flows
+        WHERE enabled = 1
+        """
+    )]
+    radio_interfaces = [
+        item
+        for item in interfaces
+        if str(item.get("modem_type") or "").strip().upper() in RX_CAPABLE_MODEM_TYPES
+    ]
+    active_radio_interfaces = [item for item in radio_interfaces if item.get("enabled")]
+    active_tx_interface_names = {
+        str(item.get("name") or "").strip()
+        for item in active_radio_interfaces
+        if str(item.get("modem_type") or "").strip().upper() in TX_CAPABLE_MODEM_TYPES
+        and str(item.get("name") or "").strip()
+    }
+    enabled_aprsis_interface_names = {
+        str(item.get("name") or "").strip()
+        for item in enabled_aprsis_interfaces
+        if str(item.get("name") or "").strip()
+    }
+
+    def has_flow(
+        *,
+        source_kind: str,
+        source_ref: str | None = None,
+        target_kind: str,
+        target_ref: str | None = None,
+    ) -> bool:
+        return any(
+            str(flow.get("source_kind") or "") == source_kind
+            and (source_ref is None or str(flow.get("source_ref") or "") == source_ref)
+            and str(flow.get("target_kind") or "") == target_kind
+            and (target_ref is None or str(flow.get("target_ref") or "") == target_ref)
+            for flow in enabled_flow_rows
+        )
+
+    local_tx_aprsis_ready = has_flow(
+        source_kind="receiver_local_tx",
+        source_ref="local_tx",
+        target_kind="tx_aprsis",
+    )
+    beacon_defined = bool(tx_enabled_flag and main_callsign and location_configured)
+    aprsis_connection_tone = "warn"
+    aprsis_connection_status = "Not configured"
+    if enabled_aprsis_interfaces:
+        if aprsis_runtime_status == "connected":
+            aprsis_connection_tone = "ok"
+            aprsis_connection_status = "Connected"
+        elif aprsis_runtime_status == "error":
+            aprsis_connection_tone = "error"
+            aprsis_connection_status = "Error"
+        elif aprsis_runtime_status == "connecting":
+            aprsis_connection_status = "Connecting"
+        else:
+            aprsis_connection_status = "Needs attention"
+
+    readiness_interfaces: list[dict[str, Any]] = []
+    for interface in radio_interfaces:
+        interface_name = str(interface.get("name") or "").strip()
+        is_active = bool(interface.get("enabled"))
+        is_tx_capable = str(interface.get("modem_type") or "").strip().upper() in TX_CAPABLE_MODEM_TYPES
+        to_aprsis = is_active and has_flow(
+            source_kind="receiver_rf",
+            source_ref=interface_name,
+            target_kind="tx_aprsis",
+        )
+        from_aprsis = is_active and is_tx_capable and any(
+            has_flow(
+                source_kind="receiver_aprsis",
+                source_ref=aprsis_name,
+                target_kind="tx_rf",
+                target_ref=interface_name,
+            )
+            for aprsis_name in enabled_aprsis_interface_names
+        )
+        rf_target_count = sum(
+            1
+            for target_name in active_tx_interface_names
+            if has_flow(
+                source_kind="receiver_rf",
+                source_ref=interface_name,
+                target_kind="tx_rf",
+                target_ref=target_name,
+            )
+        ) if is_active else 0
+        rf_target_total = len(active_tx_interface_names) if is_active else 0
+        readiness_interfaces.append(
+            {
+                "name": interface_name,
+                "enabled": is_active,
+                "tx_capable": is_tx_capable,
+                "to_aprsis": to_aprsis,
+                "from_aprsis": from_aprsis,
+                "rf_target_count": rf_target_count,
+                "rf_target_total": rf_target_total,
+                "rf_ready": bool(rf_target_total and rf_target_count == rf_target_total),
+            }
+        )
+
+    readiness_required_states = [
+        aprsis_connection_tone == "ok",
+        local_tx_aprsis_ready,
+        bool(active_radio_interfaces),
+        beacon_defined,
+    ]
+    for interface in readiness_interfaces:
+        if not interface["enabled"]:
+            continue
+        readiness_required_states.extend([bool(interface["to_aprsis"]), bool(interface["rf_ready"])])
+        if interface["tx_capable"]:
+            readiness_required_states.append(bool(interface["from_aprsis"]))
+    readiness_ready_count = sum(1 for state in readiness_required_states if state)
+    readiness_total_count = len(readiness_required_states)
+    readiness_tone = "ok" if readiness_ready_count == readiness_total_count else "warn"
+    if aprsis_connection_tone == "error":
+        readiness_tone = "error"
+    station_readiness = {
+        "tone": readiness_tone,
+        "ready_count": readiness_ready_count,
+        "total_count": readiness_total_count,
+        "overview": [
+            {"label": "APRS-IS connection", "status": aprsis_connection_status, "tone": aprsis_connection_tone},
+            {
+                "label": "Local TX → APRS-IS",
+                "status": "Configured" if local_tx_aprsis_ready else "Missing",
+                "tone": "ok" if local_tx_aprsis_ready else "warn",
+            },
+            {
+                "label": "Radio interfaces",
+                "status_key": "{active} / {total} active",
+                "status_params": {"active": len(active_radio_interfaces), "total": len(radio_interfaces)},
+                "tone": "ok" if active_radio_interfaces else "warn",
+            },
+            {
+                "label": "Beacon defined",
+                "status": "Configured" if beacon_defined else "Missing",
+                "tone": "ok" if beacon_defined else "warn",
+            },
+        ],
+        "interfaces": readiness_interfaces,
+    }
+
     checks = [
         {
             "label": "Runtime readiness",
@@ -2331,6 +2489,7 @@ def dashboard_home_data(
             else dashboard_activity_series()
         ),
         "checks": checks,
+        "station_readiness": station_readiness,
         "next_steps": next_steps,
         "beacon_ready": beacon_ready,
         "station_callsign": main_callsign or "Not set",

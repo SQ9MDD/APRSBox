@@ -1990,5 +1990,17 @@
   "Flash flood": "Flash flood",
   "Ice": "Ice",
   "Coastal hazard": "Coastal hazard",
-  "Avalanche": "Avalanche"
+  "Avalanche": "Avalanche",
+  "Configure": "Configure",
+  "ready": "ready",
+  "APRS-IS connection": "APRS-IS connection",
+  "Local TX → APRS-IS": "Local TX → APRS-IS",
+  "Radio interfaces": "Radio interfaces",
+  "Beacon defined": "Beacon defined",
+  "{active} / {total} active": "{active} / {total} active",
+  "Interface → APRS-IS": "Interface → APRS-IS",
+  "APRS-IS → interface": "APRS-IS → interface",
+  "Interface → interface": "Interface → interface",
+  "No radio interfaces configured.": "No radio interfaces configured.",
+  "Receive-only interface": "Receive-only interface"
 }

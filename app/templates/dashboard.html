@@ -2,7 +2,6 @@
 
 {% block content %}
 {% set runtime_check = dashboard_home.checks[0] if dashboard_home.checks and dashboard_home.checks|length > 0 else none %}
-{% set service_check = dashboard_home.checks[2] if dashboard_home.checks and dashboard_home.checks|length > 2 else none %}
 {% set station = namespace(callsign="Not set", rx_tone="neutral", rx_value="Unknown", tx_tone="neutral", tx_value="Unknown", aprsis_tone="neutral", aprsis_value="Not configured") %}
 {% for item in dashboard_home.hero_summary %}
     {% if item.label == "Callsign" %}
@@ -248,6 +247,81 @@
                 {% endif %}
             </div>
         </section>
+        <section class="panel dashboard-v2-readiness-panel dashboard-v2-readiness-panel-prominent">
+            <div class="panel-body">
+                <div class="panel-header">
+                    <div class="dashboard-v2-section-title">
+                        <span class="dashboard-v2-section-icon dashboard-v2-section-icon-{{ dashboard_home.station_readiness.tone }}" aria-hidden="true">
+                            <img src="{{ request.scope.root_path }}/static/icons/check-circle-outline.svg" alt="">
+                        </span>
+                        <div class="panel-header-copy">
+                            <h2>{{ t("Station Readiness") }}</h2>
+                            <span class="dashboard-v2-readiness-score dashboard-v2-state-{{ dashboard_home.station_readiness.tone }}">
+                                {{ dashboard_home.station_readiness.ready_count }} / {{ dashboard_home.station_readiness.total_count }} {{ t("ready") }}
+                            </span>
+                        </div>
+                    </div>
+                    {% if current_user.role in ("admin", "operator") %}
+                    <a class="dashboard-subtle-link" href="{{ request.scope.root_path }}/digi-flows">{{ t("Configure") }}</a>
+                    {% endif %}
+                </div>
+                <ul class="dashboard-v2-readiness-overview">
+                    {% for entry in dashboard_home.station_readiness.overview %}
+                    <li>
+                        <span class="dashboard-v2-check-label">{{ t(entry.label) }}</span>
+                        <span class="dashboard-v2-check-value dashboard-v2-state dashboard-v2-state-{{ entry.tone }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
+                            {% if entry.status_key %}
+                            {{ tf(entry.status_key, entry.status_params) }}
+                            {% else %}
+                            {{ t(entry.status) }}
+                            {% endif %}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <div class="dashboard-v2-readiness-matrix">
+                    <div class="dashboard-v2-readiness-matrix-head" aria-hidden="true">
+                        <span>{{ t("Interface") }}</span>
+                        <span>RF → IS</span>
+                        <span>IS → RF</span>
+                        <span>RF → RF</span>
+                    </div>
+                    {% for interface in dashboard_home.station_readiness.interfaces %}
+                    <div class="dashboard-v2-readiness-matrix-row{% if not interface.enabled %} is-disabled{% endif %}">
+                        <strong title="{{ interface.name }}">{{ interface.name }}</strong>
+                        {% if interface.enabled %}
+                        <span class="dashboard-v2-route-state dashboard-v2-state-{{ 'ok' if interface.to_aprsis else 'warn' }}" title="{{ t('Interface → APRS-IS') }}: {{ t('Configured') if interface.to_aprsis else t('Missing') }}" aria-label="{{ t('Interface → APRS-IS') }}: {{ t('Configured') if interface.to_aprsis else t('Missing') }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ 'ok' if interface.to_aprsis else 'warn' }}"></span>
+                            <span aria-hidden="true">{{ "✓" if interface.to_aprsis else "!" }}</span>
+                        </span>
+                        {% if interface.tx_capable %}
+                        <span class="dashboard-v2-route-state dashboard-v2-state-{{ 'ok' if interface.from_aprsis else 'warn' }}" title="{{ t('APRS-IS → interface') }}: {{ t('Configured') if interface.from_aprsis else t('Missing') }}" aria-label="{{ t('APRS-IS → interface') }}: {{ t('Configured') if interface.from_aprsis else t('Missing') }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ 'ok' if interface.from_aprsis else 'warn' }}"></span>
+                            <span aria-hidden="true">{{ "✓" if interface.from_aprsis else "!" }}</span>
+                        </span>
+                        {% else %}
+                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral" title="{{ t('Receive-only interface') }}">—</span>
+                        {% endif %}
+                        <span class="dashboard-v2-route-state dashboard-v2-state-{{ 'ok' if interface.rf_ready else 'warn' }}" title="{{ t('Interface → interface') }}: {{ interface.rf_target_count }} / {{ interface.rf_target_total }}" aria-label="{{ t('Interface → interface') }}: {{ interface.rf_target_count }} / {{ interface.rf_target_total }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ 'ok' if interface.rf_ready else 'warn' }}"></span>
+                            {{ interface.rf_target_count }} / {{ interface.rf_target_total }}
+                        </span>
+                        {% else %}
+                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral">{{ t("Disabled") }}</span>
+                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral">—</span>
+                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral">—</span>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="notice">{{ t("No radio interfaces configured.") }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+    </section>
+
+    <section class="dashboard-v2-bottom-grid">
         <section class="panel dashboard-v2-events-panel">
             <div class="panel-body">
                 <div class="panel-header">
@@ -272,58 +346,6 @@
                 {% else %}
                 <div class="notice">{{ t("No important events yet.") }}</div>
                 {% endif %}
-            </div>
-        </section>
-    </section>
-
-    <section class="dashboard-v2-bottom-grid">
-        <section class="panel dashboard-v2-readiness-panel">
-            <div class="panel-body">
-                <div class="panel-header">
-                    <div class="dashboard-v2-section-title">
-                        <span class="dashboard-v2-section-icon dashboard-v2-section-icon-success" aria-hidden="true">
-                            <img src="{{ request.scope.root_path }}/static/icons/check-circle-outline.svg" alt="">
-                        </span>
-                        <div class="panel-header-copy">
-                            <h2>{{ t("Station Readiness") }}</h2>
-                        </div>
-                    </div>
-                </div>
-                <ul class="dashboard-v2-readiness-list">
-                    {% for entry in (runtime_check.entries if runtime_check and runtime_check.entries else []) %}
-                        {% if entry.name in ["RF RX freshness", "RF TX freshness", "APRS-IS/iGate uplink", "TX queue", "Schedulers", "Database"] %}
-                            {% set check_label = entry.name %}
-                            {% if entry.name == "RF RX freshness" %}
-                                {% set check_label = "RF RX" %}
-                            {% elif entry.name == "RF TX freshness" %}
-                                {% set check_label = "RF TX" %}
-                            {% endif %}
-                    <li>
-                        <span class="dashboard-v2-check-label">{{ t(check_label) }}</span>
-                        <span class="dashboard-v2-check-value dashboard-v2-state dashboard-v2-state-{{ entry.tone }}">
-                            <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
-                            {% if entry.status_key %}
-                            {{ tf(entry.status_key, entry.status_params) }}
-                            {% else %}
-                            {{ t(entry.status) }}
-                            {% endif %}
-                        </span>
-                    </li>
-                        {% endif %}
-                    {% endfor %}
-                    {% for entry in (service_check.entries if service_check and service_check.entries else []) %}
-                        {% if entry.name in ["Beacon enabled", "WX enabled", "Digi routine"] %}
-                            {% set check_label = entry.name %}
-                    <li>
-                        <span class="dashboard-v2-check-label">{{ t(check_label) }}</span>
-                        <span class="dashboard-v2-check-value dashboard-v2-state dashboard-v2-state-{{ entry.tone }}">
-                            <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
-                            {{ t(entry.status) }}
-                        </span>
-                    </li>
-                        {% endif %}
-                    {% endfor %}
-                </ul>
             </div>
         </section>
         <section class="panel dashboard-v2-summary-panel">

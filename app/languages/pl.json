@@ -2046,5 +2046,17 @@
   "Flash flood": "Powódź błyskawiczna",
   "Ice": "Oblodzenie",
   "Coastal hazard": "Zagrożenie przybrzeżne",
-  "Avalanche": "Lawina"
+  "Avalanche": "Lawina",
+  "Configure": "Konfiguruj",
+  "ready": "gotowe",
+  "APRS-IS connection": "Połączenie APRS-IS",
+  "Local TX → APRS-IS": "Local TX → APRS-IS",
+  "Radio interfaces": "Interfejsy radiowe",
+  "Beacon defined": "Bikon zdefiniowany",
+  "{active} / {total} active": "{active} / {total} aktywne",
+  "Interface → APRS-IS": "Interfejs → APRS-IS",
+  "APRS-IS → interface": "APRS-IS → interfejs",
+  "Interface → interface": "Interfejs → interfejs",
+  "No radio interfaces configured.": "Brak skonfigurowanych interfejsów radiowych.",
+  "Receive-only interface": "Interfejs tylko odbiorczy"
 }

@@ -26,16 +26,16 @@ def temporary_database() -> Path:
                 os.environ["APRSBOX_DB_PATH"] = previous
 
 
-def insert_modem(*, name: str, enabled: int = 1, tx_blocked: int = 0) -> int:
+def insert_modem(*, name: str, enabled: int = 1, tx_blocked: int = 0, modem_type: str = "TCP") -> int:
     execute(
         """
         INSERT INTO modems(
             name, modem_type, band, device_path, baud_rate, enabled, tx_blocked,
             expose_port_enabled, expose_bind_address, expose_port, expose_whitelist, notes, created_at, updated_at
         )
-        VALUES (?, 'TCP', '2m', '127.0.0.1:8001', NULL, ?, ?, 0, '0.0.0.0', 8002, '', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+        VALUES (?, ?, '2m', '127.0.0.1:8001', NULL, ?, ?, 0, '0.0.0.0', 8002, '', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
         """,
-        (name, enabled, tx_blocked),
+        (name, modem_type, enabled, tx_blocked),
     )
     row = fetch_one("SELECT id FROM modems WHERE name = ?", (name,))
     assert row is not None
@@ -49,15 +49,16 @@ def insert_digi_flow(
     target_kind: str,
     target_ref: str,
     enabled: int = 1,
+    source_kind: str = "receiver_rf",
 ) -> None:
     execute(
         """
         INSERT INTO digi_flows(
             name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at
         )
-        VALUES (?, '', 'receiver_rf', ?, ?, ?, ?, 0, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+        VALUES (?, '', ?, ?, ?, ?, ?, 0, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
         """,
-        (name, source_ref, target_kind, target_ref, enabled),
+        (name, source_kind, source_ref, target_kind, target_ref, enabled),
     )
 
 
@@ -222,6 +223,47 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertEqual(runtime_entries["TX queue"]["status_key"], "Idle")
             self.assertEqual(runtime_entries["TX queue"]["status_params"], {})
 
+    def test_dashboard_station_readiness_exposes_flow_matrix_per_radio_interface(self) -> None:
+        with temporary_database():
+            main_id = insert_modem(name="Main TNC")
+            insert_modem(name="Backup TNC")
+            insert_modem(name="APRS-IS", modem_type="APRSIS")
+            update_station_settings(station_payload(main_id))
+
+            insert_digi_flow(
+                name="Local TX uplink",
+                source_kind="receiver_local_tx",
+                source_ref="local_tx",
+                target_kind="tx_aprsis",
+                target_ref="aprsis",
+            )
+            insert_digi_flow(name="Main uplink", source_ref="Main TNC", target_kind="tx_aprsis", target_ref="aprsis")
+            insert_digi_flow(name="Main repeat", source_ref="Main TNC", target_kind="tx_rf", target_ref="Main TNC")
+            insert_digi_flow(name="Main crossband", source_ref="Main TNC", target_kind="tx_rf", target_ref="Backup TNC")
+            insert_digi_flow(
+                name="APRS-IS to main",
+                source_kind="receiver_aprsis",
+                source_ref="APRS-IS",
+                target_kind="tx_rf",
+                target_ref="Main TNC",
+            )
+
+            readiness = dashboard_home_data()["station_readiness"]
+            overview = {entry["label"]: entry for entry in readiness["overview"]}
+            interfaces = {entry["name"]: entry for entry in readiness["interfaces"]}
+
+            self.assertEqual(overview["Local TX → APRS-IS"]["tone"], "ok")
+            self.assertEqual(overview["Radio interfaces"]["status_params"], {"active": 2, "total": 2})
+            self.assertEqual(overview["Beacon defined"]["tone"], "ok")
+            self.assertTrue(interfaces["Main TNC"]["to_aprsis"])
+            self.assertTrue(interfaces["Main TNC"]["from_aprsis"])
+            self.assertEqual(interfaces["Main TNC"]["rf_target_count"], 2)
+            self.assertEqual(interfaces["Main TNC"]["rf_target_total"], 2)
+            self.assertTrue(interfaces["Main TNC"]["rf_ready"])
+            self.assertFalse(interfaces["Backup TNC"]["to_aprsis"])
+            self.assertFalse(interfaces["Backup TNC"]["from_aprsis"])
+            self.assertFalse(interfaces["Backup TNC"]["rf_ready"])
+
     def test_dashboard_template_uses_visual_first_pack(self) -> None:
         template = Path("app/templates/dashboard.html").read_text(encoding="utf-8")
         stylesheet = Path("app/static/css/style.css").read_text(encoding="utf-8")
@@ -240,6 +282,8 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertNotIn("Current estimate for", template)
         self.assertNotIn("dashboard-v2-band-meter-current", template)
         self.assertIn("dashboard-v2-event-marker", template)
+        self.assertIn("dashboard-v2-readiness-matrix", template)
+        self.assertLess(template.index("dashboard-v2-readiness-panel-prominent"), template.index("dashboard-v2-events-panel"))
         self.assertIn("Open detailed statistics", template)
         self.assertIn("point: { radius: 0", template)
         self.assertNotIn("dashboard_home.hero.title", template)
