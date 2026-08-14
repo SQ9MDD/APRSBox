@@ -128,6 +128,20 @@ def _aprs_symbol_icon_path_for_set(symbol: str, symbol_set: str) -> str | None:
     return None
 
 
+def _aprs_symbol_icon_path_for_resolved_set(symbol: str, symbol_set: str) -> str:
+    alternate_set = APRS_SYMBOL_SET_LEGACY if symbol_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN
+    for candidate_set in (symbol_set, alternate_set):
+        candidate = _aprs_symbol_icon_path_for_set(symbol, candidate_set)
+        if candidate is not None:
+            return candidate
+    for candidate_set in (symbol_set, alternate_set):
+        icon_dir, extension = _aprs_symbol_icon_set_parts(candidate_set)
+        candidate = settings.static_dir / "icons" / icon_dir / f"x.{extension}"
+        if candidate.exists():
+            return f"icons/{icon_dir}/x.{extension}"
+    return "icons/verG/x.gif"
+
+
 def get_aprs_symbol_icon_fallback_path() -> str:
     current_set = get_aprs_symbol_set()
     for symbol_set in (current_set, APRS_SYMBOL_SET_LEGACY if current_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN):
@@ -2751,6 +2765,7 @@ def _build_station_snapshots_from_rows(
     *,
     origin: str,
     limit: int,
+    materialize_display: bool = True,
 ) -> list[dict[str, Any]]:
     stations: dict[str, dict[str, Any]] = {}
     station_key_index: dict[str, str] = {}
@@ -2809,6 +2824,7 @@ def _build_station_snapshots_from_rows(
                 _normalize_interface_id(row.get("interface_id")),
                 source_kind=row_source_kind,
                 origin=origin,
+                materialize_display=materialize_display,
             )
             station_key_index[station_key_folded] = station_key
 
@@ -2841,7 +2857,8 @@ def _build_station_snapshots_from_rows(
             station["frame_type_label"] = aprs_data.get("frame_type_label", "")
         if not station["symbol"] and aprs_data.get("symbol"):
             station["symbol"] = aprs_data["symbol"]
-            station["symbol_icon"] = _aprs_symbol_icon_path(aprs_data["symbol"])
+            if materialize_display:
+                station["symbol_icon"] = _aprs_symbol_icon_path(aprs_data["symbol"])
             symbol_table, symbol_code = _split_symbol(aprs_data["symbol"])
             station["symbol_table"] = symbol_table
             station["symbol_code"] = symbol_code
@@ -2956,12 +2973,17 @@ def _new_station_snapshot(
     *,
     source_kind: str,
     origin: str,
+    materialize_display: bool = True,
 ) -> dict[str, Any]:
     heard_date, heard_relative = _format_last_heard_parts(created_at)
     base_callsign, ssid = _split_ssid(name)
     normalized_kind = normalize_source_kind(source_kind)
     resolved_origin = APRSIS_SOURCE_KIND if origin == "heard" and normalized_kind == APRSIS_SOURCE_KIND else origin
-    activity_label, activity_age_label = _station_snapshot_activity_labels(resolved_origin)
+    activity_label, activity_age_label = (
+        _station_snapshot_activity_labels(resolved_origin)
+        if materialize_display
+        else ("", "")
+    )
     is_rf_heard = origin == "heard" and normalized_kind == RF_SOURCE_KIND
     is_aprsis_seen = origin == "heard" and normalized_kind == APRSIS_SOURCE_KIND
     return {
@@ -2998,7 +3020,7 @@ def _new_station_snapshot(
         "symbol": "",
         "symbol_table": "",
         "symbol_code": "",
-        "symbol_icon": get_aprs_symbol_icon_fallback_path(),
+        "symbol_icon": get_aprs_symbol_icon_fallback_path() if materialize_display else "",
         "comment": "",
         "status_text": "",
         "data_raw": {},
@@ -3019,6 +3041,43 @@ def _station_snapshot_activity_labels(origin: str) -> tuple[str, str]:
     if origin == APRSIS_SOURCE_KIND:
         return _t("Last seen via APRS-IS"), _t("Last APRS-IS activity age")
     return _t("Last heard"), _t("Last heard age")
+
+
+def prepare_station_snapshots_for_display(snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Refresh request-time fields without per-station settings lookups."""
+    translator = get_translator(get_app_language())
+    symbol_set = get_aprs_symbol_set()
+    station_settings = get_station_settings()
+    reference_latitude = _parse_coordinate(station_settings.get("latitude"))
+    reference_longitude = _parse_coordinate(station_settings.get("longitude"))
+    result: list[dict[str, Any]] = []
+    for stored in snapshots:
+        snapshot = dict(stored)
+        created_at = str(snapshot.get("last_heard_at") or "")
+        heard_date, heard_relative = _format_last_heard_parts(created_at)
+        snapshot["last_heard_age_s"] = _last_heard_age_seconds(created_at)
+        snapshot["last_heard_label"] = _format_last_heard(created_at)
+        snapshot["last_heard_date"] = heard_date
+        snapshot["last_heard_relative"] = heard_relative
+        origin = str(snapshot.get("origin") or "heard")
+        if origin == "local_tx":
+            labels = (translator("Last local TX"), translator("Last local TX age"))
+        elif origin == APRSIS_SOURCE_KIND:
+            labels = (translator("Last seen via APRS-IS"), translator("Last APRS-IS activity age"))
+        else:
+            labels = (translator("Last heard"), translator("Last heard age"))
+        snapshot["activity_label"], snapshot["activity_age_label"] = labels
+        snapshot["symbol_icon"] = _aprs_symbol_icon_path_for_resolved_set(
+            str(snapshot.get("symbol") or ""), symbol_set
+        )
+        snapshot["distance_km"] = _distance_km_between_points(
+            reference_latitude,
+            reference_longitude,
+            _parse_coordinate(snapshot.get("latitude")),
+            _parse_coordinate(snapshot.get("longitude")),
+        )
+        result.append(snapshot)
+    return result
 
 
 def _record_station_source_observation(

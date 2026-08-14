@@ -2648,7 +2648,10 @@
 
     async function refreshStations() {
         try {
-            const response = await fetch(stationsEndpoint, {
+            const requestUrl = latestStationRevision
+                ? `${stationsEndpoint}${stationsEndpoint.includes("?") ? "&" : "?"}since_revision=${encodeURIComponent(latestStationRevision)}`
+                : stationsEndpoint;
+            const response = await fetch(requestUrl, {
                 headers: { Accept: "application/json" },
             });
             if (!response.ok) {
@@ -2657,13 +2660,28 @@
             const payload = await response.json();
             const stations = payload.stations || [];
             const interfaces = payload.interfaces || [];
+            const fullSnapshot = payload.full_snapshot !== false;
+            const removedStationKeys = new Set(payload.removed_station_keys || []);
             const payloadRevision = normalizeRevision(payload.revision);
             const revisionChanged = payloadRevision !== latestStationRevision;
-            latestStations = (latestStationDetailsRevision === payloadRevision)
-                ? mergeStationDetails(stations, latestStations)
-                : mergeStationSupplementalData(stations, latestStations);
+            if (fullSnapshot) {
+                latestStations = (latestStationDetailsRevision === payloadRevision)
+                    ? mergeStationDetails(stations, latestStations)
+                    : mergeStationSupplementalData(stations, latestStations);
+            } else {
+                const nextByKey = new Map(
+                    latestStations.map((station) => [stationIdentityKey(station), station])
+                );
+                for (const key of removedStationKeys) {
+                    nextByKey.delete(String(key));
+                }
+                for (const station of mergeStationSupplementalData(stations, latestStations)) {
+                    nextByKey.set(stationIdentityKey(station), station);
+                }
+                latestStations = Array.from(nextByKey.values());
+            }
             latestStationRevision = payloadRevision;
-            latestInterfaces = revisionChanged
+            latestInterfaces = (revisionChanged && fullSnapshot)
                 ? (Array.isArray(interfaces) ? interfaces : [])
                 : mergeInterfaces(Array.isArray(interfaces) ? interfaces : [], latestInterfaces);
             if (revisionChanged) {

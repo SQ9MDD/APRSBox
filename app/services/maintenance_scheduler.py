@@ -12,9 +12,11 @@ from app.db import (
     prune_outbound_jobs_batch,
     prune_traffic_frames_batch,
     set_app_setting,
+    traffic_retention_cutoff,
 )
 from app.services.igate_messaging import prune_igate_runtime_state
 from app.services.alerts import expire_aprs_alerts
+from app.services.map_station_state import expire_map_station_state
 
 
 LAST_EVENT_LOG_PRUNE_DATE_KEY = "scheduler.maintenance.event_logs.last_pruned_date"
@@ -78,6 +80,7 @@ class MaintenanceSchedulerService:
                 log_event("WARNING", "maintenance", f"Automatic event log pruning failed: {message}")
         try:
             prune_traffic_frames_batch(limit=TRAFFIC_FRAME_PRUNE_BATCH_SIZE)
+            expire_map_station_state(cutoff=traffic_retention_cutoff())
         except Exception as exc:
             message = str(exc).strip() or exc.__class__.__name__
             log_event("WARNING", "maintenance", f"Automatic traffic frame pruning failed: {message}")

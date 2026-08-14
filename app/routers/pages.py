@@ -2837,9 +2837,10 @@ def map_page(
 
 @router.get("/api/map/stations-lite")
 def map_stations_lite(
+    since_revision: int | None = None,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
-    return JSONResponse(get_map_station_markers_payload())
+    return JSONResponse(get_map_station_markers_payload(since_revision=since_revision))
 
 
 @router.get("/api/map/alert-areas")
