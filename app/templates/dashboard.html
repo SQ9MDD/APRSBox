@@ -270,7 +270,7 @@
                     <li>
                         <span class="dashboard-v2-check-label">{{ t(entry.label) }}</span>
                         <span class="dashboard-v2-check-value dashboard-v2-state dashboard-v2-state-{{ entry.tone }}">
-                            <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
+                            <span class="dashboard-v2-status-icon dashboard-v2-status-icon-{{ entry.tone }}" aria-hidden="true"></span>
                             {% if entry.status_key %}
                             {{ tf(entry.status_key, entry.status_params) }}
                             {% else %}
@@ -292,25 +292,28 @@
                         <strong title="{{ interface.name }}">{{ interface.name }}</strong>
                         {% if interface.enabled %}
                         <span class="dashboard-v2-route-state dashboard-v2-state-{{ 'ok' if interface.to_aprsis else 'warn' }}" title="{{ t('Interface → APRS-IS') }}: {{ t('Configured') if interface.to_aprsis else t('Missing') }}" aria-label="{{ t('Interface → APRS-IS') }}: {{ t('Configured') if interface.to_aprsis else t('Missing') }}">
-                            <span class="dashboard-indicator dashboard-indicator-{{ 'ok' if interface.to_aprsis else 'warn' }}"></span>
-                            <span aria-hidden="true">{{ "✓" if interface.to_aprsis else "!" }}</span>
+                            <span class="dashboard-v2-status-icon dashboard-v2-status-icon-{{ 'ok' if interface.to_aprsis else 'warn' }}" aria-hidden="true"></span>
                         </span>
                         {% if interface.tx_capable %}
                         <span class="dashboard-v2-route-state dashboard-v2-state-{{ 'ok' if interface.from_aprsis else 'warn' }}" title="{{ t('APRS-IS → interface') }}: {{ t('Configured') if interface.from_aprsis else t('Missing') }}" aria-label="{{ t('APRS-IS → interface') }}: {{ t('Configured') if interface.from_aprsis else t('Missing') }}">
-                            <span class="dashboard-indicator dashboard-indicator-{{ 'ok' if interface.from_aprsis else 'warn' }}"></span>
-                            <span aria-hidden="true">{{ "✓" if interface.from_aprsis else "!" }}</span>
+                            <span class="dashboard-v2-status-icon dashboard-v2-status-icon-{{ 'ok' if interface.from_aprsis else 'warn' }}" aria-hidden="true"></span>
                         </span>
                         {% else %}
-                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral" title="{{ t('Receive-only interface') }}">—</span>
+                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral" title="{{ t('Receive-only interface') }}">
+                            <span class="dashboard-v2-status-icon dashboard-v2-status-icon-neutral" aria-hidden="true"></span>
+                        </span>
                         {% endif %}
                         <span class="dashboard-v2-route-state dashboard-v2-state-{{ 'ok' if interface.rf_ready else 'warn' }}" title="{{ t('Interface → interface') }}: {{ interface.rf_target_count }} / {{ interface.rf_target_total }}" aria-label="{{ t('Interface → interface') }}: {{ interface.rf_target_count }} / {{ interface.rf_target_total }}">
-                            <span class="dashboard-indicator dashboard-indicator-{{ 'ok' if interface.rf_ready else 'warn' }}"></span>
+                            <span class="dashboard-v2-status-icon dashboard-v2-status-icon-{{ 'ok' if interface.rf_ready else 'warn' }}" aria-hidden="true"></span>
                             {{ interface.rf_target_count }} / {{ interface.rf_target_total }}
                         </span>
                         {% else %}
-                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral">{{ t("Disabled") }}</span>
-                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral">—</span>
-                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral">—</span>
+                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral">
+                            <span class="dashboard-v2-status-icon dashboard-v2-status-icon-neutral" aria-hidden="true"></span>
+                            {{ t("Disabled") }}
+                        </span>
+                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral"><span class="dashboard-v2-status-icon dashboard-v2-status-icon-neutral" aria-hidden="true"></span></span>
+                        <span class="dashboard-v2-route-state dashboard-v2-state-neutral"><span class="dashboard-v2-status-icon dashboard-v2-status-icon-neutral" aria-hidden="true"></span></span>
                         {% endif %}
                     </div>
                     {% else %}
@@ -321,78 +324,6 @@
         </section>
     </section>
 
-    <section class="dashboard-v2-bottom-grid">
-        <section class="panel dashboard-v2-events-panel">
-            <div class="panel-body">
-                <div class="panel-header">
-                    <div class="panel-header-copy">
-                        <h2>{{ t("Recent important events") }}</h2>
-                    </div>
-                    {% if current_user.role in ("admin", "operator") %}
-                    <a class="dashboard-subtle-link" href="{{ request.scope.root_path }}/logs">{{ t("More") }}</a>
-                    {% endif %}
-                </div>
-                {% if dashboard_home.recent_events %}
-                <ul class="dashboard-v2-event-feed">
-                    {% for event in (dashboard_home.recent_events or [])[:5] %}
-                    <li class="dashboard-v2-event-item dashboard-v2-event-item-{{ event.tone }}">
-                        <span class="dashboard-v2-event-marker" aria-hidden="true"></span>
-                        <time class="dashboard-v2-event-time">{{ event.timestamp }}</time>
-                        <span class="dashboard-v2-event-message">{{ t(event.message) }}</span>
-                        <span class="dashboard-v2-event-level dashboard-v2-event-level-{{ event.tone }}">{{ t(event.level) }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <div class="notice">{{ t("No important events yet.") }}</div>
-                {% endif %}
-            </div>
-        </section>
-        <section class="panel dashboard-v2-summary-panel">
-            <div class="panel-body">
-                <section class="dashboard-v2-summary-block">
-                    <h3>{{ t("Interfaces") }}</h3>
-                    {% if dashboard_home.interface_entries %}
-                    <ul class="dashboard-v2-compact-list">
-                        {% for entry in dashboard_home.interface_entries %}
-                        <li>
-                            <span class="dashboard-v2-check-label">{{ t(entry.name) }}</span>
-                            <span class="dashboard-v2-check-value dashboard-v2-state dashboard-v2-state-{{ entry.tone }}">
-                                <span class="dashboard-indicator dashboard-indicator-{{ entry.tone }}"></span>
-                                {{ t(entry.status) }}
-                            </span>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% else %}
-                    <div class="notice">{{ t("No interfaces configured.") }}</div>
-                    {% endif %}
-                </section>
-                <section class="dashboard-v2-summary-block">
-                    <h3>{{ t("Last RF activity") }}</h3>
-                    {% if dashboard_home.last_rf_activity %}
-                    <ul class="dashboard-v2-compact-list">
-                        {% for item in dashboard_home.last_rf_activity %}
-                            {% if item.name in ["Last heard station", "Last mobile station", "Last object/item", "Last own TX"] %}
-                        <li>
-                            <span class="dashboard-v2-check-label">{{ t(item.name) }}</span>
-                            <span class="dashboard-v2-check-value">
-                                {{ t(item.value) }}
-                                {% if item.note %}
-                                <span class="dashboard-v2-inline-note">{{ t(item.note) }}</span>
-                                {% endif %}
-                            </span>
-                        </li>
-                            {% endif %}
-                        {% endfor %}
-                    </ul>
-                    {% else %}
-                    <div class="notice">{{ t("No RF activity yet.") }}</div>
-                    {% endif %}
-                </section>
-            </div>
-        </section>
-    </section>
 </div>
 {% endblock %}
 {% block extra_scripts %}

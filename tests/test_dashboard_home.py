@@ -223,6 +223,17 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertEqual(runtime_entries["TX queue"]["status_key"], "Idle")
             self.assertEqual(runtime_entries["TX queue"]["status_params"], {})
 
+            readiness_overview = {
+                entry["label"]: entry for entry in view["station_readiness"]["overview"]
+            }
+            self.assertEqual(readiness_overview["Radio interfaces"]["tone"], "partial")
+
+            execute("UPDATE modems SET enabled = 0")
+            no_active_overview = {
+                entry["label"]: entry for entry in dashboard_home_data()["station_readiness"]["overview"]
+            }
+            self.assertEqual(no_active_overview["Radio interfaces"]["tone"], "error")
+
     def test_dashboard_station_readiness_exposes_flow_matrix_per_radio_interface(self) -> None:
         with temporary_database():
             main_id = insert_modem(name="Main TNC")
@@ -254,6 +265,7 @@ class DashboardHomeTests(unittest.TestCase):
 
             self.assertEqual(overview["Local TX → APRS-IS"]["tone"], "ok")
             self.assertEqual(overview["Radio interfaces"]["status_params"], {"active": 2, "total": 2})
+            self.assertEqual(overview["Radio interfaces"]["tone"], "ok")
             self.assertEqual(overview["Beacon defined"]["tone"], "ok")
             self.assertTrue(interfaces["Main TNC"]["to_aprsis"])
             self.assertTrue(interfaces["Main TNC"]["from_aprsis"])
@@ -281,9 +293,11 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertNotIn("dashboard_home.band_updated_at", template)
         self.assertNotIn("Current estimate for", template)
         self.assertNotIn("dashboard-v2-band-meter-current", template)
-        self.assertIn("dashboard-v2-event-marker", template)
         self.assertIn("dashboard-v2-readiness-matrix", template)
-        self.assertLess(template.index("dashboard-v2-readiness-panel-prominent"), template.index("dashboard-v2-events-panel"))
+        self.assertNotIn("dashboard-v2-events-panel", template)
+        self.assertNotIn("dashboard-v2-summary-panel", template)
+        self.assertNotIn("Recent important events", template)
+        self.assertIn("height: calc(100dvh - 1.78rem)", stylesheet)
         self.assertIn("Open detailed statistics", template)
         self.assertIn("point: { radius: 0", template)
         self.assertNotIn("dashboard_home.hero.title", template)

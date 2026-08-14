@@ -2316,6 +2316,12 @@ def dashboard_home_data(
     readiness_tone = "ok" if readiness_ready_count == readiness_total_count else "warn"
     if aprsis_connection_tone == "error":
         readiness_tone = "error"
+    if len(active_radio_interfaces) == len(radio_interfaces) and radio_interfaces:
+        radio_interfaces_tone = "ok"
+    elif active_radio_interfaces:
+        radio_interfaces_tone = "partial"
+    else:
+        radio_interfaces_tone = "error"
     station_readiness = {
         "tone": readiness_tone,
         "ready_count": readiness_ready_count,
@@ -2331,7 +2337,7 @@ def dashboard_home_data(
                 "label": "Radio interfaces",
                 "status_key": "{active} / {total} active",
                 "status_params": {"active": len(active_radio_interfaces), "total": len(radio_interfaces)},
-                "tone": "ok" if active_radio_interfaces else "warn",
+                "tone": radio_interfaces_tone,
             },
             {
                 "label": "Beacon defined",
@@ -2496,7 +2502,6 @@ def dashboard_home_data(
         "interface_summary": interface_summary,
         "interface_entries": interface_entries,
         "last_rf_activity": last_rf_activity,
-        "recent_events": _dashboard_recent_important_events(limit=6),
         "band_summary": band_summary,
     }
 
