@@ -2320,6 +2320,32 @@ def dashboard_home_data(
 
 def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict[str, Any]]:
     snapshots = get_visible_station_snapshots(limit=limit)
+    return _station_list_rows(snapshots, unit_system=unit_system)
+
+
+def projected_station_list(
+    limit: int = 500,
+    unit_system: str = "metric",
+    *,
+    since_revision: int | None = None,
+    station_settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from app.services.map_station_state import read_map_station_state
+
+    state = read_map_station_state(
+        since_revision=since_revision,
+        station_settings=station_settings,
+    )
+    snapshots = list(state["snapshots"])[: max(1, int(limit or 0))]
+    return {
+        "revision": state["revision"],
+        "full_snapshot": state["full_snapshot"],
+        "removed_station_keys": state["removed_station_keys"],
+        "stations": _station_list_rows(snapshots, unit_system=unit_system),
+    }
+
+
+def _station_list_rows(snapshots: list[dict[str, Any]], *, unit_system: str) -> list[dict[str, Any]]:
     stations: list[dict[str, Any]] = []
     for snapshot in snapshots:
         stations.append(
@@ -2334,8 +2360,8 @@ def visible_stations(limit: int = 500, unit_system: str = "metric") -> list[dict
                 "last_seen_any_at": snapshot.get("last_seen_any_at"),
                 "last_heard_rf_at": snapshot.get("last_heard_rf_at"),
                 "last_seen_aprsis_at": snapshot.get("last_seen_aprsis_at"),
-                "activity_label": snapshot.get("activity_label", _t("Last heard")),
-                "activity_age_label": snapshot.get("activity_age_label", _t("Last heard age")),
+                "activity_label": snapshot.get("activity_label") or "Last heard",
+                "activity_age_label": snapshot.get("activity_age_label") or "Last heard age",
                 "last_heard_at": snapshot["last_heard_at"],
                 "last_heard_label": snapshot["last_heard_label"],
                 "last_heard_date": snapshot["last_heard_date"],
@@ -3043,13 +3069,17 @@ def _station_snapshot_activity_labels(origin: str) -> tuple[str, str]:
     return _t("Last heard"), _t("Last heard age")
 
 
-def prepare_station_snapshots_for_display(snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def prepare_station_snapshots_for_display(
+    snapshots: list[dict[str, Any]],
+    *,
+    station_settings: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """Refresh request-time fields without per-station settings lookups."""
     translator = get_translator(get_app_language())
     symbol_set = get_aprs_symbol_set()
-    station_settings = get_station_settings()
-    reference_latitude = _parse_coordinate(station_settings.get("latitude"))
-    reference_longitude = _parse_coordinate(station_settings.get("longitude"))
+    resolved_station_settings = station_settings if station_settings is not None else get_station_settings()
+    reference_latitude = _parse_coordinate(resolved_station_settings.get("latitude"))
+    reference_longitude = _parse_coordinate(resolved_station_settings.get("longitude"))
     result: list[dict[str, Any]] = []
     for stored in snapshots:
         snapshot = dict(stored)

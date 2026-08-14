@@ -7,8 +7,13 @@ from unittest.mock import patch
 
 from app.db import execute, fetch_one, init_db, reset_runtime_operational_data
 from app.services import content
+from app.services.content import projected_station_list, station_summary
 from app.services.map_service import get_map_station_markers_payload
-from app.services.map_station_state import expire_map_station_state, rebuild_map_station_state
+from app.services.map_station_state import (
+    expire_map_station_state,
+    read_map_station_rf_snapshots,
+    rebuild_map_station_state,
+)
 from app.services.outbound import persist_outbound_frame
 from app.services.traffic import process_normalized_tnc2_rx
 
@@ -59,6 +64,19 @@ class MapStationStateTests(unittest.TestCase):
                 payload = get_map_station_markers_payload()
             self.assertEqual([row["display_callsign"] for row in payload["stations"]], ["SP8ABC-9"])
 
+    def test_station_list_and_summary_read_projection_without_parsing_history(self) -> None:
+        with temporary_database():
+            rebuild_map_station_state(force=True)
+            process_normalized_tnc2_rx(
+                "SP8ABC-9>APRS:!5222.00N/02100.00E>Test",
+                source="RF", source_kind="rf", timestamp="2026-01-01T00:00:00+00:00",
+            )
+            with patch("app.services.content.parse_tnc2_frame", side_effect=AssertionError("history parsed")):
+                stations = projected_station_list()["stations"]
+                summary = station_summary(read_map_station_rf_snapshots())
+            self.assertEqual([row["display_callsign"] for row in stations], ["SP8ABC-9"])
+            self.assertEqual(summary["total"], 1)
+
     def test_delta_contains_only_changed_station(self) -> None:
         with temporary_database():
             rebuild_map_station_state(force=True)
@@ -75,6 +93,12 @@ class MapStationStateTests(unittest.TestCase):
             self.assertFalse(payload["full_snapshot"])
             self.assertEqual([row["display_callsign"] for row in payload["stations"]], ["SP8BBB"])
             self.assertEqual(payload["removed_station_keys"], [])
+            station_list = projected_station_list(since_revision=revision)
+            self.assertFalse(station_list["full_snapshot"])
+            self.assertEqual(
+                [row["display_callsign"] for row in station_list["stations"]],
+                ["SP8BBB"],
+            )
 
     def test_killed_object_is_returned_as_delta_tombstone(self) -> None:
         with temporary_database():

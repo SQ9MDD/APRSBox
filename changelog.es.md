@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.7.dev - 2026-08-14
+- `Mapa / backend de estaciones`: se añadió la proyección persistente `map_station_state`, actualizada al recibir o transmitir tramas APRS y reconstruible desde el historial; los endpoints del mapa ya no reconstruyen el estado volviendo a analizar `traffic_frames` (el TTFB medido de `stations-lite` bajó de unos `3,4 s` a unos `63 ms`).
+- `Estaciones / actualización`: el mapa y la lista de estaciones leen la proyección preparada, mientras que el sondeo por revisión obtiene solo los registros modificados y las eliminaciones; el resumen RF tampoco recorre ya el historial.
+
 ## 1.10.6 - 2026-08-13
 - `Versión estable`: se integraron los cambios de las versiones `1.10.2.dev–1.10.5.dev`, que incluyen la copia de configuración v2 más segura, acciones y diálogos de GUI unificados, mejoras de desplazamiento y usabilidad, actualización automática de APRS Device Identification, la cuadrícula Maidenhead/QTH adaptada al tema y con precisión variable, la corrección de la repetición mundial del mapa y el diálogo estándar de confirmación de actualización de la aplicación.
 

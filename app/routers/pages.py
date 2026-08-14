@@ -61,12 +61,11 @@ from app.services.content import (
     get_aprs_symbol_icon_path,
     get_aprs_symbol_set,
     get_recent_station_packets,
-    heard_stations,
+    projected_station_list,
     has_enabled_modem_interface,
     get_section_row,
     get_section_rows,
     get_related_ssids,
-    get_rf_heard_station_snapshots,
     get_visible_station_snapshots,
     recent_station_outbound_jobs,
     recent_object_outbound_jobs,
@@ -212,6 +211,7 @@ from app.services.map_service import (
     get_station_detail_track_payload,
     normalize_coverage_fill_opacity_percent,
 )
+from app.services.map_station_state import read_map_station_rf_snapshots
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
 from app.services.outbound import enqueue_beacon_job, enqueue_message_job, enqueue_object_job, enqueue_status_job
 from app.services.system import (
@@ -1106,14 +1106,19 @@ def stations_page(
 ) -> object:
     templates = request.app.state.templates
     station_settings = get_station_settings()
-    stations = heard_stations(unit_system=station_settings.get("default_units", "metric"))
+    station_state = projected_station_list(
+        unit_system=station_settings.get("default_units", "metric"),
+        station_settings=station_settings,
+    )
+    stations = station_state["stations"]
     context = build_template_context(
         request,
         page_title="Stations",
         current_user=current_user,
         active_nav="stations",
         stations=stations,
-        station_summary=station_summary(get_rf_heard_station_snapshots()),
+        stations_revision=station_state["revision"],
+        station_summary=station_summary(read_map_station_rf_snapshots()),
         default_units=station_settings.get("default_units", "metric"),
     )
     return templates.TemplateResponse("stations.html", context)
@@ -1206,14 +1211,22 @@ def station_detail_snapshot(
 
 @router.get("/api/stations")
 def stations_snapshot(
+    since_revision: int | None = None,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     station_settings = get_station_settings()
-    stations = heard_stations(unit_system=station_settings.get("default_units", "metric"))
+    station_state = projected_station_list(
+        unit_system=station_settings.get("default_units", "metric"),
+        since_revision=since_revision,
+        station_settings=station_settings,
+    )
     return JSONResponse(
         {
-            "stations": stations,
-            "summary": station_summary(get_rf_heard_station_snapshots()),
+            "revision": station_state["revision"],
+            "full_snapshot": station_state["full_snapshot"],
+            "removed_station_keys": station_state["removed_station_keys"],
+            "stations": station_state["stations"],
+            "summary": station_summary(read_map_station_rf_snapshots()),
             "default_units": station_settings.get("default_units", "metric"),
         }
     )

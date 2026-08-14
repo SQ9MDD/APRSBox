@@ -352,7 +352,11 @@ def expire_map_station_state(*, cutoff: str) -> int:
         return len(updates)
 
 
-def read_map_station_state(*, since_revision: int | None = None) -> dict[str, Any]:
+def read_map_station_state(
+    *,
+    since_revision: int | None = None,
+    station_settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     ensure_map_station_state()
     with get_connection() as connection:
         meta = connection.execute(
@@ -385,6 +389,25 @@ def read_map_station_state(*, since_revision: int | None = None) -> dict[str, An
     return {
         "revision": revision,
         "full_snapshot": full_snapshot,
-        "snapshots": content.prepare_station_snapshots_for_display([item for item in snapshots if item is not None]),
+        "snapshots": content.prepare_station_snapshots_for_display(
+            [item for item in snapshots if item is not None],
+            station_settings=station_settings,
+        ),
         "removed_station_keys": [str(row["station_key"]) for row in rows if int(row["is_deleted"] or 0)],
     }
+
+
+def read_map_station_rf_snapshots() -> list[dict[str, Any]]:
+    ensure_map_station_state()
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT rf_snapshot_json
+            FROM map_station_state
+            WHERE is_deleted = 0 AND rf_snapshot_json IS NOT NULL
+            ORDER BY last_heard_at DESC, station_key
+            LIMIT ?
+            """,
+            (MAP_STATION_LIMIT,),
+        ).fetchall()
+    return [snapshot for row in rows if (snapshot := _json_load(row["rf_snapshot_json"])) is not None]
