@@ -2311,21 +2311,17 @@ def dashboard_home_data(
         readiness_required_states.extend([bool(interface["to_aprsis"]), bool(interface["rf_ready"])])
         if interface["tx_capable"]:
             readiness_required_states.append(bool(interface["from_aprsis"]))
-    readiness_ready_count = sum(1 for state in readiness_required_states if state)
-    readiness_total_count = len(readiness_required_states)
-    readiness_tone = "ok" if readiness_ready_count == readiness_total_count else "warn"
-    if aprsis_connection_tone == "error":
-        readiness_tone = "error"
     if len(active_radio_interfaces) == len(radio_interfaces) and radio_interfaces:
         radio_interfaces_tone = "ok"
     elif active_radio_interfaces:
         radio_interfaces_tone = "partial"
     else:
         radio_interfaces_tone = "error"
+    readiness_tone = "ok" if all(readiness_required_states) and radio_interfaces_tone == "ok" else "warn"
+    if aprsis_connection_tone == "error" or radio_interfaces_tone == "error":
+        readiness_tone = "error"
     station_readiness = {
         "tone": readiness_tone,
-        "ready_count": readiness_ready_count,
-        "total_count": readiness_total_count,
         "overview": [
             {"label": "APRS-IS connection", "status": aprsis_connection_status, "tone": aprsis_connection_tone},
             {

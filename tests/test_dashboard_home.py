@@ -294,6 +294,8 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertNotIn("Current estimate for", template)
         self.assertNotIn("dashboard-v2-band-meter-current", template)
         self.assertIn("dashboard-v2-readiness-matrix", template)
+        self.assertNotIn("dashboard-v2-readiness-score", template)
+        self.assertNotIn("station_readiness.ready_count", template)
         self.assertNotIn("dashboard-v2-events-panel", template)
         self.assertNotIn("dashboard-v2-summary-panel", template)
         self.assertNotIn("Recent important events", template)

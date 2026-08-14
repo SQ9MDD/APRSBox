@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.8.dev - 14.08.2026
+- `Pulpit / gotowość stacji`: przebudowano ocenę wokół połączenia APRS-IS, flow `Local TX → APRS-IS`, zdefiniowanego beaconu oraz kompletności kierunków `RF → APRS-IS`, `APRS-IS → RF` i `RF → RF` dla aktywnych interfejsów; stany są prezentowane ikonami, a liczba aktywnych interfejsów ma kolor zielony dla kompletu, ciemnożółty dla części i czerwony dla zera.
+- `Pulpit / układ`: kafelek gotowości przeniesiono do widocznej części obok wykresu, usunięto kafelki ostatnich ważnych zdarzeń oraz powtórzonego podsumowania interfejsów i aktywności RF, a pozostałą zawartość dopasowano do bieżącego okna; usunięto również mylący łączny licznik gotowości, który pomijał wyłączone interfejsy.
+
 ## 1.10.7.dev - 14.08.2026
 - `Mapa / backend stacji`: dodano trwałą projekcję `map_station_state`, aktualizowaną podczas odbioru i nadawania ramek APRS oraz odtwarzaną z historii; endpointy mapy nie rekonstruują już stanu przez ponowne parsowanie `traffic_frames` (zmierzony TTFB `stations-lite` spadł z ok. `3,4 s` do ok. `63 ms`).
 - `Stacje / odświeżanie`: mapa i lista stacji czytają gotową projekcję, a polling według rewizji pobiera tylko zmienione rekordy i informacje o usunięciach; podsumowanie RF również nie skanuje historii.

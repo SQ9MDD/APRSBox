@@ -256,9 +256,6 @@
                         </span>
                         <div class="panel-header-copy">
                             <h2>{{ t("Station Readiness") }}</h2>
-                            <span class="dashboard-v2-readiness-score dashboard-v2-state-{{ dashboard_home.station_readiness.tone }}">
-                                {{ dashboard_home.station_readiness.ready_count }} / {{ dashboard_home.station_readiness.total_count }} {{ t("ready") }}
-                            </span>
                         </div>
                     </div>
                     {% if current_user.role in ("admin", "operator") %}

@@ -2923,13 +2923,6 @@ body {
     align-content: start;
 }
 
-.dashboard-v2-readiness-score {
-    display: block;
-    margin-top: 0.08rem;
-    font-size: 0.72rem;
-    font-weight: 650;
-}
-
 .dashboard-v2-readiness-overview {
     list-style: none;
     margin: 0;
