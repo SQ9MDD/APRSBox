@@ -1,12 +1,18 @@
 # Changelog
 
+## 1.10.10.dev - 2026-08-14
+- `Packet Routing / save`: enabling and disabling rules and saving in the editor now use the standard APRSBox dialog with a spinner, result message, and inline error handling without a page reload; after a successful save, the user returns to the appropriate list or edited rule.
+- `GUI / help`: every help button now uses an icon enlarged by 50% with a consistent blue accent on the icon, border, and background, making help controls immediately recognizable across all views and color palettes.
+- `Map / QTH grid`: reduced four-character locator label size at zoom level `6` to keep labels from dominating or overlapping in the dense grid view.
+
+## 1.10.9.dev - 2026-08-14
+- `APRS messages / compatibility`: incoming messages, `ack` acknowledgements, and `rej` rejections now accept alphanumeric identifiers from 1 to 5 characters long; a retransmitted numbered message from the same sender is not duplicated even if its conversation assignment changes, while it is still acknowledged again.
+
 ## 1.10.8.dev - 2026-08-14
 - `Dashboard / station readiness`: rebuilt the assessment around the APRS-IS connection, the `Local TX → APRS-IS` flow, a defined beacon, and complete `RF → APRS-IS`, `APRS-IS → RF`, and `RF → RF` directions for active interfaces; states now use icons, while active-interface availability is green when complete, dark yellow when partial, and red at zero.
 - `Dashboard / layout`: moved Station Readiness into the prominent area beside the chart, removed the recent-important-events card and the duplicated interfaces/RF-activity summary, and fitted the remaining content to the current viewport; the misleading aggregate readiness counter that excluded disabled interfaces was also removed.
 - `Dashboard / configuration help`: replaced the readiness card's configuration link with the standard help icon embedded in the card and added an approachable four-language guide through `Interfaces → My Station → Packet Routing`, including the difference between the station's own `Local TX → APRS-IS` flow and the uplink of frames received over RF. Dashboard auto-refresh pauses while help is open and restarts with a full 30-second delay after it closes.
 - `Settings / version check`: `Check version` now fetches the GitHub `VERSION` file directly over HTTPS, so it also works in the Docker image where the `git` executable is not installed; the existing Git mechanism remains as a fallback for other sources. Version comparison no longer offers to “update” a newer development build to an older stable release.
-- `Packet Routing / save`: enabling and disabling rules and saving in the editor now use the standard APRSBox dialog with a spinner, result message, and inline error handling without a page reload; after a successful save, the user returns to the appropriate list or edited rule.
-- `GUI / help`: every help button now uses an icon enlarged by 50% with a consistent blue accent on the icon, border, and background, making help controls immediately recognizable across all views and color palettes.
 
 ## 1.10.7.dev - 2026-08-14
 - `Map / station backend`: added the durable `map_station_state` projection, updated while APRS frames are received or transmitted and rebuildable from history; map endpoints no longer reconstruct state by reparsing `traffic_frames` (measured `stations-lite` TTFB dropped from about `3.4 s` to about `63 ms`).

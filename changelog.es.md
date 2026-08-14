@@ -1,12 +1,18 @@
 # Changelog
 
+## 1.10.10.dev - 2026-08-14
+- `Packet Routing / guardado`: activar y desactivar reglas, así como guardar desde el editor, utiliza ahora el diálogo estándar de APRSBox con indicador de progreso, mensaje de resultado y gestión de errores sin recargar la página; tras guardar correctamente, el usuario vuelve a la lista correspondiente o a la regla editada.
+- `GUI / ayuda`: todos los botones de ayuda usan ahora un icono ampliado un 50 % con un acento azul uniforme en el icono, el borde y el fondo, lo que permite reconocer inmediatamente los controles de ayuda en todas las vistas y paletas de colores.
+- `Mapa / cuadrícula QTH`: se redujo el tamaño de las etiquetas de localizadores de cuatro caracteres en el nivel de zoom `6` para evitar que dominen o se solapen en la vista densa de la cuadrícula.
+
+## 1.10.9.dev - 2026-08-14
+- `Mensajes APRS / compatibilidad`: los mensajes entrantes, las confirmaciones `ack` y los rechazos `rej` admiten ahora identificadores alfanuméricos de 1 a 5 caracteres; un mensaje numerado retransmitido por el mismo remitente no se duplica aunque cambie su asignación de conversación, pero sigue recibiendo una nueva confirmación.
+
 ## 1.10.8.dev - 2026-08-14
 - `Panel / preparación de la estación`: la evaluación ahora se basa en la conexión APRS-IS, el flujo `Local TX → APRS-IS`, una baliza definida y las rutas completas `RF → APRS-IS`, `APRS-IS → RF` y `RF → RF` para las interfaces activas; los estados usan iconos y la disponibilidad de interfaces activas se muestra en verde cuando está completa, amarillo oscuro cuando es parcial y rojo cuando es cero.
 - `Panel / diseño`: se movió Preparación de la estación a la zona destacada junto al gráfico, se eliminaron la tarjeta de eventos importantes recientes y el resumen duplicado de interfaces/actividad RF, y el contenido restante se ajustó a la ventana actual; también se eliminó el contador global engañoso que omitía las interfaces desactivadas.
 - `Panel / ayuda de configuración`: se sustituyó el enlace de configuración de la tarjeta por el icono de ayuda estándar integrado en la propia tarjeta y se añadió una guía accesible en cuatro idiomas con la secuencia `Interfaces → Mi estación → Packet Routing`, incluida la diferencia entre el flujo propio `Local TX → APRS-IS` y el uplink de tramas recibidas por RF. La actualización automática se pausa mientras la ayuda está abierta y vuelve a contar 30 segundos completos al cerrarla.
 - `Ajustes / comprobación de versión`: `Comprobar versión` obtiene ahora el archivo `VERSION` de GitHub directamente mediante HTTPS, por lo que también funciona en la imagen Docker, donde no está instalado el programa `git`; para otras fuentes se conserva el mecanismo Git anterior como alternativa. La comparación ya no propone «actualizar» una compilación de desarrollo más reciente a una versión estable anterior.
-- `Packet Routing / guardado`: activar y desactivar reglas, así como guardar desde el editor, utiliza ahora el diálogo estándar de APRSBox con indicador de progreso, mensaje de resultado y gestión de errores sin recargar la página; tras guardar correctamente, el usuario vuelve a la lista correspondiente o a la regla editada.
-- `GUI / ayuda`: todos los botones de ayuda usan ahora un icono ampliado un 50 % con un acento azul uniforme en el icono, el borde y el fondo, lo que permite reconocer inmediatamente los controles de ayuda en todas las vistas y paletas de colores.
 
 ## 1.10.7.dev - 2026-08-14
 - `Mapa / backend de estaciones`: se añadió la proyección persistente `map_station_state`, actualizada al recibir o transmitir tramas APRS y reconstruible desde el historial; los endpoints del mapa ya no reconstruyen el estado volviendo a analizar `traffic_frames` (el TTFB medido de `stations-lite` bajó de unos `3,4 s` a unos `63 ms`).

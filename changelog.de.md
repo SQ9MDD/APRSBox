@@ -1,12 +1,18 @@
 # Changelog
 
+## 1.10.10.dev - 2026-08-14
+- `Packet Routing / Speichern`: Das Aktivieren und Deaktivieren von Regeln sowie das Speichern im Editor verwenden jetzt den APRSBox-Standarddialog mit Spinner, Ergebnismeldung und Fehlerbehandlung ohne Neuladen der Seite; nach erfolgreichem Speichern kehrt der Benutzer zur passenden Liste oder zur bearbeiteten Regel zurück.
+- `GUI / Hilfe`: Alle Hilfeschaltflächen verwenden jetzt ein um 50 % vergrößertes Symbol mit einem einheitlichen blauen Akzent für Symbol, Rahmen und Hintergrund, sodass Hilfeelemente in allen Ansichten und Farbpaletten sofort erkennbar sind.
+- `Karte / QTH-Gitter`: Die Beschriftungen vierstelliger Locator-Felder wurden bei Zoomstufe `6` verkleinert, damit sie in der dichten Gitteransicht nicht dominieren oder sich überlagern.
+
+## 1.10.9.dev - 2026-08-14
+- `APRS-Nachrichten / Kompatibilität`: Eingehende Nachrichten sowie `ack`-Bestätigungen und `rej`-Ablehnungen akzeptieren jetzt alphanumerische Kennungen mit 1 bis 5 Zeichen; eine erneut übertragene nummerierte Nachricht desselben Absenders wird auch bei geänderter Konversationszuordnung nicht dupliziert, aber weiterhin erneut bestätigt.
+
 ## 1.10.8.dev - 2026-08-14
 - `Dashboard / Stationsbereitschaft`: Die Bewertung basiert jetzt auf der APRS-IS-Verbindung, dem Flow `Local TX → APRS-IS`, einer definierten Bake sowie vollständigen Richtungen `RF → APRS-IS`, `APRS-IS → RF` und `RF → RF` für aktive Schnittstellen; Zustände werden mit Symbolen dargestellt, während aktive Schnittstellen bei Vollständigkeit grün, bei teilweiser Aktivität dunkelgelb und bei null rot markiert sind.
 - `Dashboard / Layout`: Die Stationsbereitschaft wurde in den hervorgehobenen Bereich neben dem Diagramm verschoben; die Karte der letzten wichtigen Ereignisse sowie die doppelte Zusammenfassung von Schnittstellen und RF-Aktivität wurden entfernt und der verbleibende Inhalt an das aktuelle Fenster angepasst. Der irreführende Gesamtzähler, der deaktivierte Schnittstellen ausließ, wurde ebenfalls entfernt.
 - `Dashboard / Konfigurationshilfe`: Der Konfigurationslink der Bereitschaftskarte wurde durch das in die Karte eingebettete Standardsymbol für Hilfe ersetzt. Eine verständliche Anleitung in vier Sprachen führt durch `Schnittstellen → Meine Station → Packet Routing` und erklärt den Unterschied zwischen dem eigenen Flow `Local TX → APRS-IS` und dem Uplink von über RF empfangenen Frames. Die automatische Aktualisierung pausiert bei geöffneter Hilfe und startet nach dem Schließen wieder mit vollen 30 Sekunden.
 - `Einstellungen / Versionsprüfung`: `Version prüfen` lädt die GitHub-Datei `VERSION` jetzt direkt über HTTPS. Dadurch funktioniert die Prüfung auch im Docker-Image, in dem das Programm `git` nicht installiert ist; für andere Quellen bleibt der bisherige Git-Mechanismus als Fallback erhalten. Der Vergleich bietet eine neuere Entwicklungsversion nicht mehr als „Update“ auf eine ältere stabile Version an.
-- `Packet Routing / Speichern`: Das Aktivieren und Deaktivieren von Regeln sowie das Speichern im Editor verwenden jetzt den APRSBox-Standarddialog mit Spinner, Ergebnismeldung und Fehlerbehandlung ohne Neuladen der Seite; nach erfolgreichem Speichern kehrt der Benutzer zur passenden Liste oder zur bearbeiteten Regel zurück.
-- `GUI / Hilfe`: Alle Hilfeschaltflächen verwenden jetzt ein um 50 % vergrößertes Symbol mit einem einheitlichen blauen Akzent für Symbol, Rahmen und Hintergrund, sodass Hilfeelemente in allen Ansichten und Farbpaletten sofort erkennbar sind.
 
 ## 1.10.7.dev - 2026-08-14
 - `Karte / Stations-Backend`: Die dauerhafte Projektion `map_station_state` wurde ergänzt; sie wird beim Empfang und Senden von APRS-Frames aktualisiert und kann aus dem Verlauf neu aufgebaut werden. Kartenendpunkte rekonstruieren den Zustand nicht mehr durch erneutes Parsen von `traffic_frames` (die gemessene TTFB von `stations-lite` sank von etwa `3,4 s` auf etwa `63 ms`).

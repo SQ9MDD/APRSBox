@@ -1,12 +1,18 @@
 # Changelog
 
+## 1.10.10.dev - 14.08.2026
+- `Packet Routing / zapis`: włączanie i wyłączanie reguł oraz zapis w edytorze używają teraz standardowego modala APRSBox ze spinnerem, komunikatem wyniku i obsługą błędów bez przeładowania strony; po udanym zapisie użytkownik wraca do właściwej listy lub edytowanej reguły.
+- `GUI / pomoc`: wszystkie przyciski pomocy mają ikonę powiększoną o 50% oraz stały niebieski akcent ikony, obramowania i tła, dzięki czemu są jednoznacznie rozpoznawalne we wszystkich widokach i paletach kolorystycznych.
+- `Mapa / siatka QTH`: zmniejszono rozmiar etykiet czteroznakowych lokatorów przy powiększeniu `6`, aby ograniczyć ich dominowanie i nakładanie się w gęstym widoku siatki.
+
+## 1.10.9.dev - 14.08.2026
+- `Wiadomości APRS / zgodność`: odbiór wiadomości, potwierdzeń `ack` i odrzuceń `rej` obsługuje teraz alfanumeryczne identyfikatory o długości od 1 do 5 znaków; ponownie odebrana numerowana wiadomość od tego samego nadawcy nie tworzy duplikatu nawet po zmianie konwersacji, ale nadal otrzymuje ponowne potwierdzenie.
+
 ## 1.10.8.dev - 14.08.2026
 - `Pulpit / gotowość stacji`: przebudowano ocenę wokół połączenia APRS-IS, flow `Local TX → APRS-IS`, zdefiniowanego beaconu oraz kompletności kierunków `RF → APRS-IS`, `APRS-IS → RF` i `RF → RF` dla aktywnych interfejsów; stany są prezentowane ikonami, a liczba aktywnych interfejsów ma kolor zielony dla kompletu, ciemnożółty dla części i czerwony dla zera.
 - `Pulpit / układ`: kafelek gotowości przeniesiono do widocznej części obok wykresu, usunięto kafelki ostatnich ważnych zdarzeń oraz powtórzonego podsumowania interfejsów i aktywności RF, a pozostałą zawartość dopasowano do bieżącego okna; usunięto również mylący łączny licznik gotowości, który pomijał wyłączone interfejsy.
 - `Pulpit / pomoc konfiguracji`: link konfiguracji w kafelku gotowości zastąpiono standardową ikoną pomocy osadzoną w kafelku; dodano przystępny przewodnik w czterech językach, prowadzący przez `Interfejsy → Moja stacja → Packet Routing` oraz wyjaśniający różnicę między własnym flow `Local TX → APRS-IS` a uplinkiem ramek odebranych przez RF. Automatyczne odświeżanie pulpitu jest wstrzymywane podczas czytania pomocy i otrzymuje pełne 30 sekund po jej zamknięciu.
 - `Ustawienia / sprawdzanie wersji`: przycisk `Sprawdź wersję` pobiera teraz bezpośrednio plik `VERSION` z GitHub przez HTTPS, dzięki czemu działa również w obrazie Docker, w którym nie ma programu `git`; dla innych źródeł zachowano dotychczasowy mechanizm Git. Porównanie wersji nie proponuje już „aktualizacji” nowszej wersji developerskiej do starszego wydania stabilnego.
-- `Packet Routing / zapis`: włączanie i wyłączanie reguł oraz zapis w edytorze używają teraz standardowego modala APRSBox ze spinnerem, komunikatem wyniku i obsługą błędów bez przeładowania strony; po udanym zapisie użytkownik wraca do właściwej listy lub edytowanej reguły.
-- `GUI / pomoc`: wszystkie przyciski pomocy mają ikonę powiększoną o 50% oraz stały niebieski akcent ikony, obramowania i tła, dzięki czemu są jednoznacznie rozpoznawalne we wszystkich widokach i paletach kolorystycznych.
 
 ## 1.10.7.dev - 14.08.2026
 - `Mapa / backend stacji`: dodano trwałą projekcję `map_station_state`, aktualizowaną podczas odbioru i nadawania ramek APRS oraz odtwarzaną z historii; endpointy mapy nie rekonstruują już stanu przez ponowne parsowanie `traffic_frames` (zmierzony TTFB `stations-lite` spadł z ok. `3,4 s` do ok. `63 ms`).
