@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/css/help-viewer.css?v={{ app_version }}-modal-layer-1">
+{% endblock %}
+
 {% block content %}
 {% set runtime_check = dashboard_home.checks[0] if dashboard_home.checks and dashboard_home.checks|length > 0 else none %}
 {% set station = namespace(callsign="Not set", rx_tone="neutral", rx_value="Unknown", tx_tone="neutral", tx_value="Unknown", aprsis_tone="neutral", aprsis_value="Not configured") %}
@@ -258,9 +262,15 @@
                             <h2>{{ t("Station Readiness") }}</h2>
                         </div>
                     </div>
-                    {% if current_user.role in ("admin", "operator") %}
-                    <a class="dashboard-subtle-link" href="{{ request.scope.root_path }}/digi-flows">{{ t("Configure") }}</a>
-                    {% endif %}
+                    <button
+                        class="help-icon-button page-help-button"
+                        type="button"
+                        data-help-page="application/dashboard_readiness"
+                        title="{{ t('Help') }}"
+                        aria-label="{{ t('Help') }}"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+                    </button>
                 </div>
                 <ul class="dashboard-v2-readiness-overview">
                     {% for entry in dashboard_home.station_readiness.overview %}
@@ -322,9 +332,11 @@
     </section>
 
 </div>
+{% include "partials/help_modal.html" %}
 {% endblock %}
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/vendor/chart.umd.min.js?v={{ app_version }}"></script>
+<script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
 <script type="application/json" id="dashboard-activity-data">{{ dashboard_home.activity_chart|tojson }}</script>
 <script>
     (() => {

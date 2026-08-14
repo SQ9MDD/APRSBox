@@ -3,6 +3,7 @@
 ## 1.10.8.dev - 2026-08-14
 - `Panel / preparación de la estación`: la evaluación ahora se basa en la conexión APRS-IS, el flujo `Local TX → APRS-IS`, una baliza definida y las rutas completas `RF → APRS-IS`, `APRS-IS → RF` y `RF → RF` para las interfaces activas; los estados usan iconos y la disponibilidad de interfaces activas se muestra en verde cuando está completa, amarillo oscuro cuando es parcial y rojo cuando es cero.
 - `Panel / diseño`: se movió Preparación de la estación a la zona destacada junto al gráfico, se eliminaron la tarjeta de eventos importantes recientes y el resumen duplicado de interfaces/actividad RF, y el contenido restante se ajustó a la ventana actual; también se eliminó el contador global engañoso que omitía las interfaces desactivadas.
+- `Panel / ayuda de configuración`: se sustituyó el enlace de configuración de la tarjeta por el icono de ayuda estándar y se añadió una guía accesible en cuatro idiomas con la secuencia `Interfaces → Mi estación → Packet Routing`, incluida la diferencia entre el flujo propio `Local TX → APRS-IS` y el uplink de tramas recibidas por RF.
 
 ## 1.10.7.dev - 2026-08-14
 - `Mapa / backend de estaciones`: se añadió la proyección persistente `map_station_state`, actualizada al recibir o transmitir tramas APRS y reconstruible desde el historial; los endpoints del mapa ya no reconstruyen el estado volviendo a analizar `traffic_frames` (el TTFB medido de `stations-lite` bajó de unos `3,4 s` a unos `63 ms`).
