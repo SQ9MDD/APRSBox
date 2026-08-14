@@ -1,14 +1,17 @@
 .help-icon-button {
+    --help-icon-accent: #3b82f6;
     width: 2rem;
     min-width: 2rem;
     height: 2rem;
     min-height: 2rem;
     padding: 0;
-    border: 1px solid var(--border);
+    border: 1px solid color-mix(in srgb, var(--help-icon-accent) 58%, var(--border));
     border-radius: var(--radius-sm);
-    background: var(--panel-alt);
-    color: var(--text-muted);
-    box-shadow: var(--shadow-soft);
+    background: color-mix(in srgb, var(--help-icon-accent) 10%, var(--panel-alt));
+    color: var(--help-icon-accent);
+    box-shadow:
+        var(--shadow-soft),
+        0 0 0 1px color-mix(in srgb, var(--help-icon-accent) 12%, transparent);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -16,10 +19,20 @@
     transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 }
 
+.help-icon-button::before {
+    content: "";
+    width: 1.38rem;
+    height: 1.38rem;
+    flex: 0 0 1.38rem;
+    background: currentColor;
+    -webkit-mask: url("../icons/help-circle-outline.svg") center / contain no-repeat;
+    mask: url("../icons/help-circle-outline.svg") center / contain no-repeat;
+}
+
 .help-icon-button:hover {
-    background: var(--panel-emphasis);
-    border-color: var(--border-hover);
-    color: var(--text);
+    background: color-mix(in srgb, var(--help-icon-accent) 18%, var(--panel-emphasis));
+    border-color: color-mix(in srgb, var(--help-icon-accent) 82%, var(--border-hover));
+    color: #60a5fa;
     transform: translateY(-1px);
 }
 
@@ -29,9 +42,7 @@
 }
 
 .help-icon-button img {
-    width: 0.92rem;
-    height: 0.92rem;
-    filter: var(--icon-filter);
+    display: none;
 }
 
 .page-help-button {

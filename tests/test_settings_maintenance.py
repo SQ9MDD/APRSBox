@@ -282,6 +282,12 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('target="_blank" rel="noopener noreferrer"', help_viewer_source)
         self.assertIn("/^https?:\\/\\//i.test(rawHref)", help_viewer_source)
 
+        help_viewer_style = Path("app/static/css/help-viewer.css").read_text(encoding="utf-8")
+        self.assertIn("--help-icon-accent: #3b82f6;", help_viewer_style)
+        self.assertIn("width: 1.38rem;", help_viewer_style)
+        self.assertIn("height: 1.38rem;", help_viewer_style)
+        self.assertIn('mask: url("../icons/help-circle-outline.svg")', help_viewer_style)
+
     def test_alarm_help_links_to_localized_cawf_and_nws_warn_guides(self) -> None:
         languages = ("en", "de", "pl", "es", "tlh")
         guide_names = ("settings_alarms_cawf", "settings_alarms_nws_warn")
