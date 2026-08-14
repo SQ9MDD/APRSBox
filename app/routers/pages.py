@@ -2370,13 +2370,28 @@ def digi_flow_toggle(
     request: Request,
     _: UserIdentity = Depends(require_roles("admin", "operator")),
     enabled: int = Form(...),
-) -> RedirectResponse:
+) -> object:
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     try:
         set_digi_flow_enabled(flow_id, bool(enabled))
     except ValueError as exc:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(str(exc))},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         return RedirectResponse(
             url=_path(request, f"/digi-flows?flash={quote(str(exc))}&success=0"),
             status_code=status.HTTP_303_SEE_OTHER,
+        )
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Packet Routing flow status updated."),
+                "reload": True,
+                "redirect": _path(request, "/digi-flows"),
+            }
         )
     return RedirectResponse(
         url=_path(request, f"/digi-flows?flash={'Packet%20Routing%20flow%20status%20updated.'}&success=1"),
