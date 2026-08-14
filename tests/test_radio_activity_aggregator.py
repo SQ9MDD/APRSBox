@@ -381,6 +381,25 @@ class RadioActivityAggregatorTests(unittest.TestCase):
             self.assertLessEqual(int(payload_365d["points"]), 1200)
             self.assertEqual(len(payload_365d["labels"]), int(payload_365d["points"]))
 
+    def test_dashboard_heard_kpi_does_not_reparse_frames_when_hourly_state_exists(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            observed_at = now_utc - timedelta(minutes=10)
+            hour_start = observed_at.replace(minute=0).isoformat()
+            execute(
+                """
+                INSERT INTO traffic_device_station_device_hourly(
+                    bucket_start_utc, station_key, device_key, destination_key,
+                    device_label, recognized_flag, frame_count, last_seen_at
+                ) VALUES (?, 'SP5ABC-1', 'unknown', 'APRS', 'Unknown', 0, 1, ?)
+                """,
+                (hour_start, observed_at.isoformat()),
+            )
+            with patch("app.services.radio_activity.parse_tnc2_frame", side_effect=AssertionError("raw parse")):
+                payload = get_dashboard_radio_activity(range_value="24h")
+
+            self.assertEqual(int(payload["kpis"]["heard_stations"]), 1)
+
     def test_dashboard_api_returns_aggregated_series(self) -> None:
         if not FASTAPI_AVAILABLE:
             self.skipTest("fastapi is not installed in this environment")

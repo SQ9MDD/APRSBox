@@ -3,6 +3,7 @@
 ## 1.10.7.dev - 2026-08-14
 - `Karte / Stations-Backend`: Die dauerhafte Projektion `map_station_state` wurde ergänzt; sie wird beim Empfang und Senden von APRS-Frames aktualisiert und kann aus dem Verlauf neu aufgebaut werden. Kartenendpunkte rekonstruieren den Zustand nicht mehr durch erneutes Parsen von `traffic_frames` (die gemessene TTFB von `stations-lite` sank von etwa `3,4 s` auf etwa `63 ms`).
 - `Stationen / Aktualisierung`: Karte und Stationsliste lesen die vorbereitete Projektion; revisionsbasiertes Polling lädt nur geänderte Datensätze und Löschungen. Auch die RF-Zusammenfassung durchsucht den Verlauf nicht mehr.
+- `Dashboard / Leistung`: Zuletzt gehörte Stationen und das anfängliche Diagramm verwenden vorhandene Projektionen; Verkehrs-KPIs werden mit einer Abfrage berechnet und Stationsschlüssel bei verfügbarem Stundenpuffer nicht erneut aus `traffic_frames` geparst.
 
 ## 1.10.6 - 2026-08-13
 - `Stabile Version`: Die Änderungen aus `1.10.2.dev–1.10.5.dev` wurden zusammengeführt, darunter die sicherere Konfigurationssicherung v2, vereinheitlichte GUI-Aktionen und Dialoge, Verbesserungen bei Scrollen und Bedienbarkeit, die automatische Aktualisierung von APRS Device Identification, das themeabhängige Maidenhead/QTH-Gitter mit adaptiver Genauigkeit, die korrigierte Weltwiederholung der Karte und der Standarddialog zur Bestätigung einer Anwendungsaktualisierung.

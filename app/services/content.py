@@ -1569,32 +1569,15 @@ def _format_monitor_timestamp(timestamp: str | None) -> str:
 def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     cutoff_utc = datetime.now(timezone.utc) - timedelta(hours=DASHBOARD_KPI_WINDOW_HOURS)
     cutoff_iso = cutoff_utc.isoformat()
-    total_frames_row = fetch_one(
+    traffic_row = fetch_one(
         f"""
-        SELECT COUNT(*) AS total
+        SELECT
+            COUNT(*) AS total_frames,
+            COALESCE(SUM(CASE WHEN format = 'TNC2' THEN 1 ELSE 0 END), 0) AS decoded_frames,
+            COUNT(DISTINCT CASE WHEN COALESCE(source, '') <> '' THEN source END) AS unique_sources
         FROM traffic_frames
         WHERE {STATISTICS_TRAFFIC_SQL_PREDICATE}
-          AND julianday(created_at) >= julianday(?)
-        """,
-        (cutoff_iso,),
-    )
-    decoded_frames_row = fetch_one(
-        f"""
-        SELECT COUNT(*) AS total
-        FROM traffic_frames
-        WHERE format = 'TNC2'
-          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
-          AND julianday(created_at) >= julianday(?)
-        """,
-        (cutoff_iso,),
-    )
-    unique_sources_row = fetch_one(
-        f"""
-        SELECT COUNT(DISTINCT source) AS total
-        FROM traffic_frames
-        WHERE COALESCE(source, '') <> ''
-          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
-          AND julianday(created_at) >= julianday(?)
+          AND created_at >= ?
         """,
         (cutoff_iso,),
     )
@@ -1608,9 +1591,9 @@ def dashboard_traffic_summary(*, heard_snapshots: list[dict[str, Any]] | None = 
             heard_stations += 1
 
     return {
-        "received_frames": total_frames_row["total"] if total_frames_row else 0,
-        "decoded_aprs": decoded_frames_row["total"] if decoded_frames_row else 0,
-        "unique_sources": unique_sources_row["total"] if unique_sources_row else 0,
+        "received_frames": traffic_row["total_frames"] if traffic_row else 0,
+        "decoded_aprs": traffic_row["decoded_frames"] if traffic_row else 0,
+        "unique_sources": traffic_row["unique_sources"] if traffic_row else 0,
         "heard_stations": heard_stations,
         "window_hours": DASHBOARD_KPI_WINDOW_HOURS,
     }
@@ -1717,6 +1700,39 @@ def dashboard_activity_series(
         "labels": labels,
         "series": series,
         "totals": {key: int(sum(values)) for key, values in series.items()},
+    }
+
+
+def _dashboard_activity_series_from_aggregated(activity: dict[str, Any]) -> dict[str, Any]:
+    """Adapt the persisted radio-activity projection to the legacy dashboard chart contract."""
+    labels = list(activity.get("labels") or [])
+    source_series = dict(activity.get("series") or {})
+    point_count = len(labels)
+
+    def values(key: str) -> list[int]:
+        raw_values = list(source_series.get(key) or [])
+        return [int(raw_values[index] or 0) if index < len(raw_values) else 0 for index in range(point_count)]
+
+    rx_values = values("rx_total")
+    tx_values = values("tx_total")
+    series = {
+        "total": [rx_values[index] + tx_values[index] for index in range(point_count)],
+        "mobile": values("mobile_total"),
+        "message": values("messages_total"),
+        "query": values("queries_total"),
+        "rx": rx_values,
+        "tx": tx_values,
+        "repeated_tx": values("digipeated_total"),
+    }
+    bucket_minutes = max(1, int(activity.get("output_bucket_minutes") or DASHBOARD_ACTIVITY_BUCKET_MINUTES))
+    return {
+        "bucket_minutes": bucket_minutes,
+        "window_minutes": int(activity.get("range_minutes") or bucket_minutes * point_count),
+        "window_start_utc": str(activity.get("window_start_utc") or ""),
+        "window_end_utc": str(activity.get("window_end_utc") or ""),
+        "labels": labels,
+        "series": series,
+        "totals": {key: int(sum(series_values)) for key, series_values in series.items()},
     }
 
 
@@ -1855,10 +1871,14 @@ def dashboard_home_data(
     dashboard_activity: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from app.services.aprsis import get_aprsis_runtime_status, has_enabled_aprsis_target_flow
+    from app.services.map_station_state import read_map_station_rf_snapshots
     from app.services.wx import get_wx_config
 
     station_settings = get_station_settings()
-    heard_snapshots = get_rf_heard_station_snapshots(limit=500)
+    heard_snapshots = prepare_station_snapshots_for_display(
+        read_map_station_rf_snapshots(),
+        station_settings=station_settings,
+    )
     traffic = dashboard_traffic_summary(heard_snapshots=heard_snapshots)
     interfaces = get_configured_modem_interfaces()
     enabled_interfaces = [item for item in interfaces if item.get("enabled")]
@@ -2305,7 +2325,11 @@ def dashboard_home_data(
         "hero": hero,
         "hero_summary": hero_summary,
         "stats": stats,
-        "activity_chart": dashboard_activity_series(),
+        "activity_chart": (
+            _dashboard_activity_series_from_aggregated(dashboard_activity)
+            if dashboard_activity is not None
+            else dashboard_activity_series()
+        ),
         "checks": checks,
         "next_steps": next_steps,
         "beacon_ready": beacon_ready,

@@ -420,17 +420,20 @@ def _dashboard_heard_station_keys(
     window_end_utc: datetime,
 ) -> set[str]:
     station_keys: set[str] = set()
+    first_hour_start = window_start_utc.replace(minute=0, second=0, microsecond=0)
     hourly_rows = fetch_all(
         """
         SELECT DISTINCT station_key
         FROM traffic_device_station_device_hourly
-        WHERE last_seen_at >= ?
-          AND last_seen_at < ?
+        WHERE bucket_start_utc >= ?
           AND bucket_start_utc < ?
+          AND last_seen_at >= ?
+          AND last_seen_at < ?
         """,
         (
-            window_start_utc.isoformat(),
+            first_hour_start.isoformat(),
             window_end_utc.isoformat(),
+            window_start_utc.isoformat(),
             window_end_utc.isoformat(),
         ),
     )
@@ -438,6 +441,11 @@ def _dashboard_heard_station_keys(
         station_key = _normalize_station_key_for_devices(row["station_key"])
         if station_key:
             station_keys.add(station_key)
+
+    # The hourly buffer is updated synchronously for every statistics-eligible
+    # TNC2 frame. Keep the raw-history path only for databases predating it.
+    if hourly_rows:
+        return station_keys
 
     recent_frame_rows = fetch_all(
         f"""
