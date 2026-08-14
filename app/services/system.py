@@ -8,6 +8,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlsplit
+from urllib.request import Request, urlopen
 
 from app import get_version
 from app.config import settings
@@ -16,6 +19,7 @@ from app.db import get_app_setting, set_app_setting
 UPDATE_CHANNEL_SETTING_KEY = "gui_update_branch"
 UPDATE_LOG_FILE_NAME = "application-update.log"
 _UPDATE_CHANNEL_RE = re.compile(r"^[A-Za-z0-9._/-]{1,128}$")
+_GUI_VERSION_RE = re.compile(r"^v?(?P<numbers>\d+(?:\.\d+)*)(?P<suffix>.*)$", re.IGNORECASE)
 CONTAINER_SYSTEM_ACTIONS_DISABLED_MESSAGE = (
     "Docker installation detected. In-app system actions are disabled. "
     "Update APRSBox by pulling a newer Docker image and recreating the container with the same volumes. "
@@ -139,8 +143,96 @@ def list_update_channels() -> dict[str, Any]:
     }
 
 
+def _github_raw_version_url(repository_url: str, update_channel: str) -> str | None:
+    parsed = urlsplit(str(repository_url or "").strip())
+    if parsed.scheme not in {"http", "https"} or parsed.hostname not in {"github.com", "www.github.com"}:
+        return None
+    repository_path = parsed.path.strip("/")
+    if repository_path.endswith(".git"):
+        repository_path = repository_path[:-4]
+    path_parts = repository_path.split("/")
+    if len(path_parts) != 2 or not all(path_parts):
+        return None
+    owner, repository = (quote(part, safe="") for part in path_parts)
+    channel = quote(str(update_channel or "").strip(), safe="/")
+    if not channel:
+        return None
+    return f"https://raw.githubusercontent.com/{owner}/{repository}/{channel}/VERSION"
+
+
+def _read_github_version(repository_url: str, update_channel: str) -> tuple[str, str] | None:
+    version_url = _github_raw_version_url(repository_url, update_channel)
+    if version_url is None:
+        return None
+    request = Request(
+        version_url,
+        headers={
+            "Accept": "text/plain",
+            "User-Agent": "APRSBox-version-check",
+        },
+    )
+    with urlopen(request, timeout=15) as response:
+        remote_version = response.read(256).decode("utf-8", errors="replace").strip()
+    if not remote_version or "\n" in remote_version or "\r" in remote_version:
+        raise ValueError("Remote VERSION file is empty or invalid")
+    return remote_version, version_url
+
+
+def _compare_gui_versions(current_version: str, remote_version: str) -> int | None:
+    current_match = _GUI_VERSION_RE.fullmatch(str(current_version or "").strip())
+    remote_match = _GUI_VERSION_RE.fullmatch(str(remote_version or "").strip())
+    if current_match is None or remote_match is None:
+        return None
+
+    current_numbers = tuple(int(part) for part in current_match.group("numbers").split("."))
+    remote_numbers = tuple(int(part) for part in remote_match.group("numbers").split("."))
+    width = max(len(current_numbers), len(remote_numbers))
+    current_numbers += (0,) * (width - len(current_numbers))
+    remote_numbers += (0,) * (width - len(remote_numbers))
+    if current_numbers != remote_numbers:
+        return 1 if current_numbers > remote_numbers else -1
+
+    current_suffix = current_match.group("suffix").strip().lower()
+    remote_suffix = remote_match.group("suffix").strip().lower()
+    if current_suffix == remote_suffix:
+        return 0
+    if not current_suffix:
+        return 1
+    if not remote_suffix:
+        return -1
+    return 1 if current_suffix > remote_suffix else -1
+
+
+def _gui_version_result(*, remote_version: str, source: str, update_channel: str) -> dict[str, Any]:
+    current_version = current_gui_version()
+    comparison = _compare_gui_versions(current_version, remote_version)
+    up_to_date = current_version == remote_version if comparison is None else comparison >= 0
+    return {
+        "ok": True,
+        "current_version": current_version,
+        "latest_version": remote_version,
+        "up_to_date": up_to_date,
+        "source": source,
+        "channel": update_channel,
+    }
+
+
 def latest_gui_version() -> dict[str, Any]:
     update_channel = current_update_channel()
+    remote_version = ""
+    source = f"{settings.gui_update_url}@{update_channel}"
+    github_error = ""
+    try:
+        github_result = _read_github_version(settings.gui_update_url, update_channel)
+    except (HTTPError, URLError, OSError, UnicodeError, ValueError) as exc:
+        github_result = None
+        github_error = str(exc).strip()
+    if github_result is not None:
+        remote_version, source = github_result
+
+    if remote_version:
+        return _gui_version_result(remote_version=remote_version, source=source, update_channel=update_channel)
+
     with tempfile.TemporaryDirectory(prefix="aprsbox-version-check-") as temp_dir:
         checkout_dir = Path(temp_dir) / "repo"
         try:
@@ -161,7 +253,8 @@ def latest_gui_version() -> dict[str, Any]:
                 timeout=30,
             )
         except (OSError, subprocess.SubprocessError) as exc:
-            return {"ok": False, "error": f"Version check failed: {exc}"}
+            detail = github_error or str(exc)
+            return {"ok": False, "error": f"Version check failed: {detail}"}
 
         if result.returncode != 0:
             error = result.stderr.strip() or result.stdout.strip() or "git clone failed"
@@ -172,14 +265,11 @@ def latest_gui_version() -> dict[str, Any]:
             return {"ok": False, "error": "Remote VERSION file not found"}
 
         remote_version = version_file.read_text(encoding="utf-8").strip()
-        return {
-            "ok": True,
-            "current_version": current_gui_version(),
-            "latest_version": remote_version,
-            "up_to_date": remote_version == current_gui_version(),
-            "source": f"{settings.gui_update_url}@{update_channel}",
-            "channel": update_channel,
-        }
+        return _gui_version_result(
+            remote_version=remote_version,
+            source=f"{settings.gui_update_url}@{update_channel}",
+            update_channel=update_channel,
+        )
 
 
 def read_update_log(*, max_bytes: int = 65536) -> dict[str, Any]:

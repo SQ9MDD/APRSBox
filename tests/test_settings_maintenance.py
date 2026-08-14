@@ -1,5 +1,6 @@
 import contextlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -20,8 +21,11 @@ from app.db import (
 )
 from app.services.content import has_enabled_modem_interface
 from app.services.system import (
+    _compare_gui_versions,
+    _github_raw_version_url,
     _start_background_script,
     container_system_actions_disabled_message,
+    latest_gui_version,
     save_update_channel,
     start_application_update_job,
     start_host_poweroff_job,
@@ -59,6 +63,45 @@ def insert_modem(*, enabled: int) -> None:
 
 
 class SettingsMaintenanceTests(unittest.TestCase):
+    def test_version_comparison_does_not_offer_older_stable_release(self) -> None:
+        self.assertEqual(_compare_gui_versions("1.10.8.dev", "1.10.6"), 1)
+        self.assertEqual(_compare_gui_versions("1.10.8.dev", "1.10.8"), -1)
+        self.assertEqual(_compare_gui_versions("1.10.8", "1.10.8"), 0)
+
+    def test_version_check_reads_github_version_without_git(self) -> None:
+        with (
+            patch("app.services.system.current_update_channel", return_value="main"),
+            patch("app.services.system.current_gui_version", return_value="1.10.8.dev"),
+            patch("app.services.system.urlopen", return_value=io.BytesIO(b"1.10.9\n")) as urlopen_mock,
+            patch("app.services.system.subprocess.run") as subprocess_mock,
+        ):
+            result = latest_gui_version()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["current_version"], "1.10.8.dev")
+        self.assertEqual(result["latest_version"], "1.10.9")
+        self.assertEqual(result["channel"], "main")
+        self.assertFalse(result["up_to_date"])
+        self.assertIn("raw.githubusercontent.com", result["source"])
+        urlopen_mock.assert_called_once()
+        subprocess_mock.assert_not_called()
+
+    def test_version_check_marks_newer_installed_build_as_up_to_date(self) -> None:
+        with (
+            patch("app.services.system.current_update_channel", return_value="main"),
+            patch("app.services.system.current_gui_version", return_value="1.10.8.dev"),
+            patch("app.services.system.urlopen", return_value=io.BytesIO(b"1.10.6\n")),
+        ):
+            result = latest_gui_version()
+
+        self.assertTrue(result["up_to_date"])
+
+    def test_github_version_url_supports_channel_with_slash(self) -> None:
+        self.assertEqual(
+            _github_raw_version_url("https://github.com/SQ9MDD/APRSBox.git", "release/1.10"),
+            "https://raw.githubusercontent.com/SQ9MDD/APRSBox/release/1.10/VERSION",
+        )
+
     def test_enabled_tnc_helper_matches_modem_configuration(self) -> None:
         with temporary_database():
             self.assertFalse(has_enabled_modem_interface())
