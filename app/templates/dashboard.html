@@ -263,7 +263,7 @@
                         </div>
                     </div>
                     <button
-                        class="help-icon-button page-help-button"
+                        class="help-icon-button dashboard-v2-readiness-help-button"
                         type="button"
                         data-help-page="application/dashboard_readiness"
                         title="{{ t('Help') }}"
@@ -999,11 +999,37 @@
         });
         themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
         loadRangePayload(activeRange);
-        const dashboardRefreshTimer = window.setInterval(() => {
-            window.location.reload();
-        }, 30000);
+        const dashboardRefreshDelayMs = 30000;
+        const helpViewerModal = document.getElementById("help-viewer-modal");
+        let dashboardRefreshTimer = null;
+        const scheduleDashboardRefresh = () => {
+            if (dashboardRefreshTimer !== null) {
+                window.clearTimeout(dashboardRefreshTimer);
+            }
+            dashboardRefreshTimer = window.setTimeout(() => {
+                dashboardRefreshTimer = null;
+                if (helpViewerModal instanceof HTMLElement && !helpViewerModal.hidden) {
+                    return;
+                }
+                window.location.reload();
+            }, dashboardRefreshDelayMs);
+        };
+        if (helpViewerModal instanceof HTMLElement) {
+            const helpViewerObserver = new window.MutationObserver(() => {
+                if (helpViewerModal.hidden) {
+                    scheduleDashboardRefresh();
+                } else if (dashboardRefreshTimer !== null) {
+                    window.clearTimeout(dashboardRefreshTimer);
+                    dashboardRefreshTimer = null;
+                }
+            });
+            helpViewerObserver.observe(helpViewerModal, { attributes: true, attributeFilter: ["hidden"] });
+        }
+        scheduleDashboardRefresh();
         window.addEventListener("beforeunload", () => {
-            window.clearInterval(dashboardRefreshTimer);
+            if (dashboardRefreshTimer !== null) {
+                window.clearTimeout(dashboardRefreshTimer);
+            }
         });
     })();
 </script>
