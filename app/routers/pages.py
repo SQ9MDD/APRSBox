@@ -1938,6 +1938,7 @@ def settings_map_sources_save(
     notes: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "name": name.strip(),
         "url_template": url_template.strip(),
@@ -1951,6 +1952,11 @@ def settings_map_sources_save(
     }
     success, error, saved_id = safe_save_map_source(payload, source_id=record_id)
     if not success:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save map source.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _settings_page_context(
             request,
             current_user,
@@ -1961,6 +1967,15 @@ def settings_map_sources_save(
         )
         return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Map source saved."),
+                "reload": True,
+                "saved_id": saved_id,
+            }
+        )
     context = _settings_page_context(
         request,
         current_user,
@@ -1978,7 +1993,19 @@ def settings_map_sources_set_default(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_set_default_map_source(source_id)
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(
+                    "Default map source updated." if success else (error or "Failed to change default map source.")
+                ),
+                "reload": success,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _settings_page_context(
         request,
         current_user,
@@ -1997,7 +2024,19 @@ def settings_map_sources_move(
     direction: str = Form(...),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_move_map_source(source_id, direction)
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(
+                    "Map source order updated." if success else (error or "Failed to reorder map source.")
+                ),
+                "reload": success,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _settings_page_context(
         request,
         current_user,
@@ -2014,7 +2053,19 @@ def settings_map_sources_delete(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_delete_map_source(source_id)
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(
+                    "Map source deleted." if success else (error or "Failed to delete map source.")
+                ),
+                "reload": success,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _settings_page_context(
         request,
         current_user,
@@ -2031,7 +2082,19 @@ def settings_map_sources_clear_cache(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_clear_map_source_cache(source_id)
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(
+                    "Map source cache cleared." if success else (error or "Failed to clear map source cache.")
+                ),
+                "reload": success,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _settings_page_context(
         request,
         current_user,

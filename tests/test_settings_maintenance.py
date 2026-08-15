@@ -247,6 +247,23 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("?edit_map_source={{ source.id }}#settings-panel-map-sources", template_source)
         self.assertIn('/settings#settings-panel-map-sources', template_source)
 
+    def test_map_source_actions_use_shared_settings_progress_modal(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+        for action_id in (
+            "save-map-source",
+            "move-map-source",
+            "default-map-source",
+            "delete-map-source",
+            "clear-map-source-cache",
+        ):
+            self.assertIn(f'data-settings-action-id="{action_id}"', template_source)
+        self.assertIn('data-settings-action-group="map-sources"', template_source)
+        self.assertIn("window.aprsboxSubmitSettingsAction(form", template_source)
+        self.assertIn('"Map source cache cleared."', router_source)
+        self.assertIn('"Map source order updated."', router_source)
+        self.assertGreaterEqual(router_source.count('request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"'), 5)
+
     def test_settings_template_contains_container_mode_guards(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("{% if is_container_mode %}", template_source)

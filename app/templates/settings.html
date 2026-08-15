@@ -375,19 +375,19 @@
                             {% if can_manage_map_sources %}
                             <td class="map-sources-actions-cell">
                                 <div class="table-actions table-actions-start">
-                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form" data-settings-action-id="move-map-source" data-settings-action-group="map-sources" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'move-map-source', group: 'map-sources', message: {{ t('Updating...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
                                         <input type="hidden" name="direction" value="up">
                                         <button type="submit" class="table-icon-button" {% if loop.first %}disabled{% endif %} title="{{ t('Move map source up') }}" aria-label="{{ t('Move map source up') }} {{ source.name }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/arrow-up.svg" alt="">
                                         </button>
                                     </form>
-                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form" data-settings-action-id="move-map-source" data-settings-action-group="map-sources" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'move-map-source', group: 'map-sources', message: {{ t('Updating...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
                                         <input type="hidden" name="direction" value="down">
                                         <button type="submit" class="table-icon-button" {% if loop.last %}disabled{% endif %} title="{{ t('Move map source down') }}" aria-label="{{ t('Move map source down') }} {{ source.name }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/arrow-down.svg" alt="">
                                         </button>
                                     </form>
-                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/default" class="table-action-form">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/default" class="table-action-form" data-settings-action-id="default-map-source" data-settings-action-group="map-sources" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'default-map-source', group: 'map-sources', message: {{ t('Updating...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
                                         <button type="submit" class="table-icon-button" {% if source.is_default or not source.enabled %}disabled{% endif %} title="{{ t('Set as default') }}" aria-label="{{ t('Set as default') }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/star-outline.svg" alt="">
                                         </button>
@@ -395,12 +395,12 @@
                                     <a href="{{ request.scope.root_path }}/settings?edit_map_source={{ source.id }}#settings-panel-map-sources" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                                     </a>
-                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/delete" class="table-action-form">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/delete" class="table-action-form" data-settings-action-id="delete-map-source" data-settings-action-group="map-sources" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'delete-map-source', group: 'map-sources', message: {{ t('Deleting...')|tojson|forceescape }}, busyLabel: {{ t('Deleting...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
                                         <button type="submit" class="table-icon-button table-icon-button-danger" {% if map_sources|length <= 1 or source.is_default %}disabled{% endif %} title="{{ t('Delete') }}" aria-label="{{ t('Delete') }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                         </button>
                                     </form>
-                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/cache/clear" class="table-action-form">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/cache/clear" class="table-action-form" data-settings-action-id="clear-map-source-cache" data-settings-action-group="map-sources" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'clear-map-source-cache', group: 'map-sources', message: {{ t('Clearing...')|tojson|forceescape }}, busyLabel: {{ t('Clearing...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
                                         <button type="submit" class="table-icon-button" title="{{ t('Clear cache') }}" aria-label="{{ t('Clear cache') }} {{ source.name }}" data-settings-confirm="{{ t('Clear local tile cache for this map source?') }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/broom.svg" alt="">
                                         </button>
@@ -419,7 +419,7 @@
             </div>
 
             {% if can_manage_map_sources %}
-            <form method="post" action="{{ request.scope.root_path }}/settings/map-sources" class="form-grid map-source-form" id="map-source-form">
+            <form method="post" action="{{ request.scope.root_path }}/settings/map-sources" class="form-grid map-source-form" id="map-source-form" data-settings-action-id="save-map-source" data-settings-action-group="map-sources">
                 {% if map_source_form.record_id %}
                 <input type="hidden" name="record_id" value="{{ map_source_form.record_id }}">
                 {% endif %}
@@ -1947,12 +1947,22 @@
             }
             urlInput.setCustomValidity("");
             const error = validateBeforeSubmit();
-            if (!error) {
+            if (error) {
+                event.preventDefault();
+                urlInput.setCustomValidity(error);
+                urlInput.reportValidity();
                 return;
             }
             event.preventDefault();
-            urlInput.setCustomValidity(error);
-            urlInput.reportValidity();
+            window.aprsboxSubmitSettingsAction(form, {
+                actionId: "save-map-source",
+                group: "map-sources",
+                message: {{ t("Saving...")|tojson }},
+                busyLabel: {{ t("Saving...")|tojson }},
+                mode: "json",
+                minSpinnerMs: 500,
+                reloadOnSuccess: true,
+            });
         });
     })();
 </script>
