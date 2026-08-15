@@ -1076,7 +1076,14 @@
             unsupportedActionMode: {{ t("Unsupported action mode.")|tojson }},
             updateTitle: {{ t("Application update")|tojson }},
             restartTitle: {{ t("Service restart")|tojson }},
+            rebootTitle: {{ t("Reboot host")|tojson }},
+            poweroffTitle: {{ t("Power off host")|tojson }},
             takingLonger: {{ t("This operation is taking longer than usual. Status monitoring is still active.")|tojson }},
+            systemActionMessages: {
+                "restart-services": {{ t("Service restart started. Please wait...")|tojson }},
+                "reboot-host": {{ t("Host reboot started. Please wait...")|tojson }},
+                "poweroff-host": {{ t("Host shutdown started. Please wait...")|tojson }},
+            },
             jobStages: {
                 queued: {{ t("Waiting for the update process to start...")|tojson }},
                 starting: {{ t("Starting the update process...")|tojson }},
@@ -1181,13 +1188,23 @@
             const normalized = String(actionId || "");
             if (normalized === "update-application") return labels.updateTitle;
             if (normalized === "restart-services") return labels.restartTitle;
+            if (normalized === "reboot-host") return labels.rebootTitle;
+            if (normalized === "poweroff-host") return labels.poweroffTitle;
             return labels.defaultTitle;
         };
 
-        const messageForJobStage = (stage, fallback = "") => {
-            const normalized = String(stage || "").trim();
-            if (normalized && Object.prototype.hasOwnProperty.call(labels.jobStages, normalized)) {
-                return String(labels.jobStages[normalized]);
+        const messageForJobStage = (actionId, stage, fallback = "") => {
+            const normalizedAction = String(actionId || "");
+            const normalizedStage = String(stage || "").trim();
+            if (
+                normalizedAction === "update-application"
+                && normalizedStage
+                && Object.prototype.hasOwnProperty.call(labels.jobStages, normalizedStage)
+            ) {
+                return String(labels.jobStages[normalizedStage]);
+            }
+            if (Object.prototype.hasOwnProperty.call(labels.systemActionMessages, normalizedAction)) {
+                return String(labels.systemActionMessages[normalizedAction]);
             }
             return String(fallback || labels.defaultMessage);
         };
@@ -1494,6 +1511,7 @@
                         lastProgressPercent = Math.max(0, Math.min(100, parsedProgress));
                     }
                     lastStageLabel = messageForJobStage(
+                        actionId,
                         stage,
                         message || String(options.message || labels.defaultMessage)
                     );
@@ -1505,7 +1523,7 @@
                             // Ignore storage errors.
                         }
                         const successLabel = actionId === "update-application"
-                            ? messageForJobStage("completed", labels.completed)
+                            ? messageForJobStage(actionId, "completed", labels.completed)
                             : (message || labels.completed);
                         finishAction(successLabel, {
                             reload: reloadAfterFinish,
@@ -1524,7 +1542,7 @@
                             // Ignore storage errors.
                         }
                         const failedLabel = actionId === "update-application"
-                            ? messageForJobStage("failed", labels.failed)
+                            ? messageForJobStage(actionId, "failed", labels.failed)
                             : labels.failed;
                         finishAction(failedLabel, {
                             reload: false,

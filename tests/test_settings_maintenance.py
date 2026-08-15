@@ -460,6 +460,17 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('class="settings-progress-actions" hidden', template_source)
         self.assertIn("actionsNode.hidden = progressLocked", template_source)
 
+    def test_system_action_progress_does_not_use_update_stage_messages(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('rebootTitle: {{ t("Reboot host")|tojson }}', template_source)
+        self.assertIn('poweroffTitle: {{ t("Power off host")|tojson }}', template_source)
+        self.assertIn('"reboot-host": {{ t("Host reboot started. Please wait...")|tojson }}', template_source)
+        self.assertIn('"poweroff-host": {{ t("Host shutdown started. Please wait...")|tojson }}', template_source)
+        self.assertIn('const messageForJobStage = (actionId, stage, fallback = "") => {', template_source)
+        self.assertIn('normalizedAction === "update-application"', template_source)
+        self.assertIn('if (normalized === "reboot-host") return labels.rebootTitle;', template_source)
+        self.assertIn('if (normalized === "poweroff-host") return labels.poweroffTitle;', template_source)
+
     def test_restart_services_has_reload_delay(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("actionId: 'restart-services'", template_source)
