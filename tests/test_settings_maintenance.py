@@ -426,13 +426,22 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("actionId: 'update-application'", template_source)
         self.assertIn("lockTimeoutMs: 1200000", template_source)
 
-    def test_update_application_uses_styled_confirmation_modal(self) -> None:
+    def test_settings_actions_use_shared_styled_confirmation_modal(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
-        self.assertIn('id="application-update-confirm-modal"', template_source)
-        self.assertIn('aria-labelledby="application-update-confirm-title"', template_source)
-        self.assertIn('id="application-update-confirm-accept"', template_source)
-        self.assertIn('data-close-application-update-confirm', template_source)
-        self.assertNotIn("return confirm({{ t('Start application update now?')", template_source)
+        self.assertIn('id="settings-action-confirm-modal"', template_source)
+        self.assertIn('aria-labelledby="settings-action-confirm-title"', template_source)
+        self.assertIn('id="settings-action-confirm-accept"', template_source)
+        self.assertIn('data-close-settings-confirm', template_source)
+        self.assertIn('data-settings-confirm="{{ t(\'Start application update now?\') }}"', template_source)
+        self.assertIn('data-settings-confirm-value="REBOOT"', template_source)
+        self.assertIn('data-settings-confirm-value="POWER OFF"', template_source)
+        self.assertNotIn("return confirm(", template_source)
+        self.assertNotIn("window.prompt(", template_source)
+
+    def test_settings_progress_modal_hides_close_action_while_busy(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('class="settings-progress-actions" hidden', template_source)
+        self.assertIn("actionsNode.hidden = progressLocked", template_source)
 
     def test_restart_services_has_reload_delay(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")

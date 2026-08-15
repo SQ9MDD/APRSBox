@@ -204,6 +204,8 @@
                 class="form-stack"
                 data-settings-action-id="update-application"
                 data-settings-action-group="update-controls"
+                data-settings-confirm="{{ t('Start application update now?') }}"
+                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
@@ -399,7 +401,7 @@
                                         </button>
                                     </form>
                                     <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/cache/clear" class="table-action-form">
-                                        <button type="submit" class="table-icon-button" title="{{ t('Clear cache') }}" aria-label="{{ t('Clear cache') }} {{ source.name }}" onclick="return confirm({{ t('Clear local tile cache for this map source?')|tojson|forceescape }});">
+                                        <button type="submit" class="table-icon-button" title="{{ t('Clear cache') }}" aria-label="{{ t('Clear cache') }} {{ source.name }}" data-settings-confirm="{{ t('Clear local tile cache for this map source?') }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/broom.svg" alt="">
                                         </button>
                                     </form>
@@ -550,7 +552,8 @@
             enctype="multipart/form-data"
             class="form-grid"
             data-settings-action-id="import-config-backup"
-            onsubmit="return confirm({{ t('Import configuration backup now? Current settings will be replaced.')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'import-config-backup', message: {{ t('Importing configuration backup...')|tojson|forceescape }}, busyLabel: {{ t('Importing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500, reloadOnSuccess: true, errorAutoHideMs: 12000});"
+            data-settings-confirm="{{ t('Import configuration backup now? Current settings will be replaced.') }}"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'import-config-backup', message: {{ t('Importing configuration backup...')|tojson|forceescape }}, busyLabel: {{ t('Importing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500, reloadOnSuccess: true, errorAutoHideMs: 12000});"
         >
             <label class="full">
                 <span>{{ t("Backup file") }}</span>
@@ -651,7 +654,8 @@
                 action="{{ request.scope.root_path }}/settings/vacuum-db"
                 class="form-stack"
                 data-settings-action-id="vacuum-db"
-                onsubmit="return confirm({{ t('Run database vacuum now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Running...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+                data-settings-confirm="{{ t('Run database vacuum now?') }}"
+                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Running...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before running database vacuum.') }}"{% endif %}>{{ t("Run VACUUM") }}</button>
             </form>
@@ -660,7 +664,8 @@
                 action="{{ request.scope.root_path }}/settings/reset-runtime-data"
                 class="form-stack"
                 data-settings-action-id="reset-runtime-data"
-                onsubmit="return confirm({{ t('Clear runtime logs and traffic history now? Configuration tables will not be changed.')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'reset-runtime-data', message: {{ t('Clearing runtime logs and traffic history...')|tojson|forceescape }}, busyLabel: {{ t('Clearing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+                data-settings-confirm="{{ t('Clear runtime logs and traffic history now? Configuration tables will not be changed.') }}"
+                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'reset-runtime-data', message: {{ t('Clearing runtime logs and traffic history...')|tojson|forceescape }}, busyLabel: {{ t('Clearing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button button-secondary" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before clearing runtime logs and traffic history.') }}"{% endif %}>{{ t("Reset runtime logs/data") }}</button>
             </form>
@@ -699,7 +704,8 @@
                     class="form-stack"
                     data-settings-action-id="restart-services"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, reloadOnSuccess: true, reloadDelayMs: 3000});"
+                    data-settings-confirm="{{ t('Restart services now?') }}"
+                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, reloadOnSuccess: true, reloadDelayMs: 3000});"
                 >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
@@ -713,7 +719,10 @@
                     class="form-stack"
                     data-settings-action-id="reboot-host"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson|forceescape }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
+                    data-settings-confirm="{{ t('Type REBOOT to confirm host reboot.') }}"
+                    data-settings-confirm-value="REBOOT"
+                    data-settings-confirm-danger="true"
+                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
                 </form>
@@ -727,7 +736,10 @@
                     class="form-stack"
                     data-settings-action-id="poweroff-host"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson|forceescape }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Shutting down...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
+                    data-settings-confirm="{{ t('Type POWER OFF to confirm host shutdown.') }}"
+                    data-settings-confirm-value="POWER OFF"
+                    data-settings-confirm-danger="true"
+                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Shutting down...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Power off host") }}</button>
                 </form>
@@ -739,26 +751,26 @@
     </div>
 </section>
 
-{% if can_manage_updates and not is_container_mode %}
-<div class="settings-progress-backdrop" id="application-update-confirm-modal" hidden>
+<div class="settings-progress-backdrop" id="settings-action-confirm-modal" hidden>
     <div
         class="settings-progress-modal"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="application-update-confirm-title"
-        aria-describedby="application-update-confirm-question"
+        aria-labelledby="settings-action-confirm-title"
+        aria-describedby="settings-action-confirm-question"
+        tabindex="-1"
     >
         <div class="settings-progress-header">
-            <h3 class="settings-progress-title" id="application-update-confirm-title">{{ t("Are you sure?") }}</h3>
+            <h3 class="settings-progress-title" id="settings-action-confirm-title">{{ t("Are you sure?") }}</h3>
         </div>
-        <p class="settings-progress-message" id="application-update-confirm-question">{{ t("Start application update now?") }}</p>
+        <p class="settings-progress-message" id="settings-action-confirm-question"></p>
+        <input class="settings-confirm-input" id="settings-action-confirm-input" type="text" autocomplete="off" spellcheck="false" hidden>
         <div class="settings-progress-actions">
-            <button type="button" class="button button-secondary" data-close-application-update-confirm>{{ t("Cancel") }}</button>
-            <button type="button" class="button" id="application-update-confirm-accept">{{ t("Update application") }}</button>
+            <button type="button" class="button button-secondary" data-close-settings-confirm>{{ t("Cancel") }}</button>
+            <button type="button" class="button" id="settings-action-confirm-accept">{{ t("OK") }}</button>
         </div>
     </div>
 </div>
-{% endif %}
 
 {% include "partials/help_modal.html" %}
 {% endblock %}
@@ -872,12 +884,12 @@
         }
 
         const ensureFallbackBackdrop = () => {
-            const existing = document.querySelector(".settings-progress-backdrop");
+            const existing = document.querySelector(".settings-action-progress-backdrop");
             if (existing instanceof HTMLElement) {
                 return existing;
             }
             const backdrop = document.createElement("div");
-            backdrop.className = "settings-progress-backdrop";
+            backdrop.className = "settings-progress-backdrop settings-action-progress-backdrop";
             backdrop.hidden = true;
             backdrop.innerHTML = `
                 <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
@@ -895,7 +907,7 @@
                         </div>
                     </div>
                     <p class="settings-progress-message"></p>
-                    <div class="settings-progress-actions">
+                    <div class="settings-progress-actions" hidden>
                         <button type="button" class="button button-secondary settings-progress-close">${fallbackCloseLabel}</button>
                     </div>
                 </div>
@@ -1088,7 +1100,7 @@
         const versionResultNode = document.getElementById("settings-version-result");
 
         const backdrop = document.createElement("div");
-        backdrop.className = "settings-progress-backdrop";
+        backdrop.className = "settings-progress-backdrop settings-action-progress-backdrop";
         backdrop.hidden = true;
         backdrop.innerHTML = `
             <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
@@ -1106,7 +1118,7 @@
                     </div>
                 </div>
                 <p class="settings-progress-message"></p>
-                <div class="settings-progress-actions">
+                <div class="settings-progress-actions" hidden>
                     <button type="button" class="button button-secondary settings-progress-close">${labels.closeButton}</button>
                 </div>
             </div>
@@ -1120,6 +1132,7 @@
         const progressPercentNode = backdrop.querySelector(".settings-progress-percent");
         const progressTrackNode = backdrop.querySelector(".settings-progress-track");
         const progressBarNode = backdrop.querySelector(".settings-progress-bar");
+        const actionsNode = backdrop.querySelector(".settings-progress-actions");
         const closeButton = backdrop.querySelector(".settings-progress-close");
 
         let hideTimer = null;
@@ -1222,6 +1235,9 @@
             }
             renderProgress(message, options);
             progressLocked = Boolean(options.locked);
+            if (actionsNode instanceof HTMLElement) {
+                actionsNode.hidden = progressLocked;
+            }
             if (progressLocked && progressDismissed) {
                 return true;
             }
@@ -1242,6 +1258,9 @@
             if (timeoutMs > 0) {
                 lockTimeoutTimer = window.setTimeout(() => {
                     progressLocked = false;
+                    if (actionsNode instanceof HTMLElement) {
+                        actionsNode.hidden = false;
+                    }
                     if (messageNode instanceof HTMLElement) {
                         messageNode.textContent = labels.timeout;
                     }
@@ -1730,15 +1749,16 @@
         resumeActiveJob();
     })();
     (() => {
-        const form = document.getElementById("application-update-form");
-        const modal = document.getElementById("application-update-confirm-modal");
-        const acceptButton = document.getElementById("application-update-confirm-accept");
-        const closeButtons = modal
-            ? modal.querySelectorAll("[data-close-application-update-confirm]")
-            : [];
+        const modal = document.getElementById("settings-action-confirm-modal");
+        const question = document.getElementById("settings-action-confirm-question");
+        const confirmationInput = document.getElementById("settings-action-confirm-input");
+        const acceptButton = document.getElementById("settings-action-confirm-accept");
+        const closeButtons = modal ? modal.querySelectorAll("[data-close-settings-confirm]") : [];
+        const bypassConfirmation = new WeakSet();
+        let pendingAction = null;
         let returnFocus = null;
 
-        if (!(form instanceof HTMLFormElement) || !(modal instanceof HTMLElement)) return;
+        if (!(modal instanceof HTMLElement)) return;
 
         const closeModal = ({ restoreFocus = true } = {}) => {
             modal.hidden = true;
@@ -1747,21 +1767,68 @@
                 returnFocus.focus();
             }
             returnFocus = null;
+            pendingAction = null;
+            if (confirmationInput instanceof HTMLInputElement) {
+                confirmationInput.value = "";
+                confirmationInput.hidden = true;
+            }
         };
 
-        const openModal = () => {
+        const openModal = (form, submitter, message, requiredValue, danger) => {
+            pendingAction = { form, submitter };
             returnFocus = document.activeElement instanceof HTMLElement
                 ? document.activeElement
                 : form.querySelector("button[type='submit']");
+            if (question instanceof HTMLElement) {
+                question.textContent = message;
+            }
+            if (acceptButton instanceof HTMLButtonElement) {
+                const submitterLabel = submitter instanceof HTMLElement
+                    ? String(submitter.textContent || submitter.getAttribute("aria-label") || "").trim()
+                    : "";
+                acceptButton.textContent = submitterLabel || {{ t("OK")|tojson }};
+                acceptButton.classList.toggle("button-danger", danger);
+                acceptButton.disabled = Boolean(requiredValue);
+            }
+            if (confirmationInput instanceof HTMLInputElement) {
+                confirmationInput.value = "";
+                confirmationInput.hidden = !requiredValue;
+                confirmationInput.placeholder = requiredValue;
+                confirmationInput.setAttribute("aria-label", message);
+                confirmationInput.dataset.requiredValue = requiredValue;
+            }
             modal.hidden = false;
             document.body.classList.add("modal-open");
-            acceptButton?.focus();
+            if (requiredValue && confirmationInput instanceof HTMLInputElement) {
+                confirmationInput.focus();
+            } else {
+                acceptButton?.focus();
+            }
         };
 
-        form.addEventListener("submit", (event) => {
+        document.addEventListener("submit", (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement)) return;
+            if (bypassConfirmation.has(form)) {
+                bypassConfirmation.delete(form);
+                return;
+            }
+            const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
+            const message = String(
+                submitter?.dataset.settingsConfirm || form.dataset.settingsConfirm || ""
+            ).trim();
+            if (!message) return;
+
             event.preventDefault();
-            openModal();
-        });
+            event.stopImmediatePropagation();
+            const requiredValue = String(
+                submitter?.dataset.settingsConfirmValue || form.dataset.settingsConfirmValue || ""
+            ).trim();
+            const danger = String(
+                submitter?.dataset.settingsConfirmDanger || form.dataset.settingsConfirmDanger || ""
+            ) === "true";
+            openModal(form, submitter, message, requiredValue, danger);
+        }, true);
 
         closeButtons.forEach((button) => button.addEventListener("click", () => closeModal()));
         modal.addEventListener("click", (event) => {
@@ -1773,17 +1840,23 @@
                 closeModal();
             }
         });
+        confirmationInput?.addEventListener("input", () => {
+            if (!(confirmationInput instanceof HTMLInputElement) || !(acceptButton instanceof HTMLButtonElement)) return;
+            acceptButton.disabled = confirmationInput.value.trim() !== String(confirmationInput.dataset.requiredValue || "");
+        });
         acceptButton?.addEventListener("click", () => {
+            const action = pendingAction;
+            if (!action || !(action.form instanceof HTMLFormElement)) {
+                closeModal();
+                return;
+            }
             closeModal({ restoreFocus: false });
-            window.aprsboxSubmitSettingsAction(form, {
-                actionId: 'update-application',
-                group: 'update-controls',
-                message: {{ t("Update started. Please wait...")|tojson }},
-                busyLabel: {{ t("Starting update...")|tojson }},
-                mode: 'job',
-                lockTimeoutMs: 1200000,
-                reloadOnSuccess: true,
-            });
+            bypassConfirmation.add(action.form);
+            if (action.submitter instanceof HTMLButtonElement || action.submitter instanceof HTMLInputElement) {
+                action.form.requestSubmit(action.submitter);
+            } else {
+                action.form.requestSubmit();
+            }
         });
     })();
 </script>

@@ -5866,6 +5866,17 @@ select:focus-visible,
     white-space: pre-line;
 }
 
+.settings-confirm-input {
+    width: 100%;
+    margin-top: 0.35rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.035em;
+}
+
+.settings-confirm-input[hidden] {
+    display: none !important;
+}
+
 .settings-progress-actions {
     margin-top: 0.9rem;
     display: flex;
