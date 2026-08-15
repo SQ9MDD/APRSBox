@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.11.dev - 2026-08-15
+- `GUI / Hilfe`: Das gemeinsame Modal für alle Hilfedokumente besitzt jetzt eine sichtbare, schmale und an das aktive Theme angepasste Bildlaufleiste; das Scrollen bleibt im Dialog und wird nicht an die dahinterliegende Seite weitergegeben.
+- `APRS / Symbolauswahl`: Die Symbollisten in `Meine Station`, `Objekte / Elemente` und im Symbolfilter von `Packet Flow` zeigen jetzt neben Symbol und Code die offizielle Beschreibung aus dem aprs.fi-Symbolindex; Beschreibung und Vorschau folgen der ausgewählten primären `/` beziehungsweise alternativen `\` Tabelle.
+- `APRS / Modern-Symbole`: Das erste Symbol des Sets `modern` (`/!`, Polizeistation) wurde korrigiert, indem die abgeschnittene Datei durch die richtige Kachel aus dem Quell-Symbolblatt ersetzt wurde.
+
 ## 1.10.10.dev - 2026-08-14
 - `Packet Routing / Speichern`: Das Aktivieren und Deaktivieren von Regeln sowie das Speichern im Editor verwenden jetzt den APRSBox-Standarddialog mit Spinner, Ergebnismeldung und Fehlerbehandlung ohne Neuladen der Seite; nach erfolgreichem Speichern kehrt der Benutzer zur passenden Liste oder zur bearbeiteten Regel zurück.
 - `GUI / Hilfe`: Alle Hilfeschaltflächen verwenden jetzt ein um 50 % vergrößertes Symbol mit einem einheitlichen blauen Akzent für Symbol, Rahmen und Hintergrund, sodass Hilfeelemente in allen Ansichten und Farbpaletten sofort erkennbar sind.

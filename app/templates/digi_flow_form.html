@@ -1305,14 +1305,21 @@
                     const selected = symbolCodeOptions.find((option) => option.value === pickerState.symbolCode) || symbolCodeOptions[0];
                     const useAlternate = pickerState.symbolTable === "\\";
                     const icon = useAlternate ? selected.alternate_icon : selected.primary_icon;
+                    const description = useAlternate ? selected.alternate_description : selected.primary_description;
                     triggerImage.src = `${rootPath}/static/${icon || window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif"}`;
-                    triggerText.textContent = selected.label || i18n.selectSymbol;
+                    triggerText.textContent = [selected.label || i18n.selectSymbol, description].filter(Boolean).join(" — ");
                     for (const optionButton of symbolMenu.querySelectorAll(".station-symbol-option")) {
                         const useAlt = pickerState.symbolTable === "\\";
                         const image = optionButton.querySelector(".station-symbol-option-image");
                         const optionIcon = useAlt ? optionButton.dataset.alternateIcon : optionButton.dataset.primaryIcon;
                         if (image) {
                             image.src = optionIcon || `${rootPath}/static/${window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif"}`;
+                        }
+                        const descriptionNode = optionButton.querySelector(".station-symbol-option-description");
+                        if (descriptionNode) {
+                            descriptionNode.textContent = (useAlt
+                                ? optionButton.dataset.alternateDescription
+                                : optionButton.dataset.primaryDescription) || "";
                         }
                         const isActive = optionButton.dataset.value === selected.value;
                         optionButton.classList.toggle("active", isActive);
@@ -1327,6 +1334,8 @@
                     optionButton.dataset.value = optionValue.value;
                     optionButton.dataset.primaryIcon = `${rootPath}/static/${optionValue.primary_icon}`;
                     optionButton.dataset.alternateIcon = `${rootPath}/static/${optionValue.alternate_icon}`;
+                    optionButton.dataset.primaryDescription = optionValue.primary_description || "";
+                    optionButton.dataset.alternateDescription = optionValue.alternate_description || "";
                     optionButton.setAttribute("role", "option");
                     optionButton.setAttribute("aria-selected", "false");
 
@@ -1337,8 +1346,12 @@
                     const optionLabel = document.createElement("span");
                     optionLabel.className = "station-symbol-option-label";
                     optionLabel.textContent = optionValue.label;
+                    const optionDescription = document.createElement("span");
+                    optionDescription.className = "station-symbol-option-description";
+                    optionDescription.textContent = optionValue.primary_description || "";
                     optionButton.appendChild(optionImage);
                     optionButton.appendChild(optionLabel);
+                    optionButton.appendChild(optionDescription);
                     optionButton.addEventListener("click", () => {
                         pickerState.symbolCode = optionValue.value || ">";
                         syncIconPickerPreview();

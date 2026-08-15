@@ -10,6 +10,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
+from app.aprs_symbols import get_aprs_symbol_description
 from app.dependencies import get_current_user, require_roles
 from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
@@ -386,15 +387,7 @@ def _section_template_context(
                     {"value": "/", "label": "Primary (/)"},
                     {"value": "\\", "label": "Alternate (\\)"},
                 ],
-                "symbol_code_options": [
-                    {
-                        "value": chr(code),
-                        "label": chr(code),
-                        "primary_icon": get_aprs_symbol_icon_path(f"/{chr(code)}"),
-                        "alternate_icon": get_aprs_symbol_icon_path(f"\\{chr(code)}"),
-                    }
-                    for code in range(33, 127)
-                ],
+                "symbol_code_options": _symbol_code_options(),
             }
         )
     if slug == "objects":
@@ -672,21 +665,27 @@ def _station_form_options(
             + [{"value": str(value), "label": str(value)} for value in range(10)]
             + [{"value": chr(code), "label": chr(code)} for code in range(ord("A"), ord("Z") + 1)]
         ),
-        "symbol_code_options": [
-            {
-                "value": chr(code),
-                "label": chr(code),
-                "primary_icon": get_aprs_symbol_icon_path(f"/{chr(code)}"),
-                "alternate_icon": get_aprs_symbol_icon_path(f"\\{chr(code)}"),
-            }
-            for code in range(33, 127)
-        ],
+        "symbol_code_options": _symbol_code_options(),
         "beacon_interval_options": [{"value": value, "label": f"{value}m"} for value in (15, 30, 45, 60)],
         "beacon_position_interval_options": (
             [{"value": str(value), "label": f"{value}m"} for value in (15, 30, 45, 60)]
             + [{"value": BEACON_INTERVAL_MODE_PROPORTIONAL, "label": "Proportional Path"}]
         ),
     }
+
+
+def _symbol_code_options() -> list[dict[str, str]]:
+    return [
+        {
+            "value": symbol_code,
+            "label": symbol_code,
+            "primary_icon": get_aprs_symbol_icon_path(f"/{symbol_code}"),
+            "alternate_icon": get_aprs_symbol_icon_path(f"\\{symbol_code}"),
+            "primary_description": get_aprs_symbol_description("/", symbol_code),
+            "alternate_description": get_aprs_symbol_description("\\", symbol_code),
+        }
+        for symbol_code in (chr(code) for code in range(33, 127))
+    ]
 
 
 def _station_page_context(

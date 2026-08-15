@@ -3289,7 +3289,7 @@ body {
 
 .station-symbol-option {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-columns: 32px 2rem minmax(0, 1fr);
     align-items: center;
     gap: 0.7rem;
     width: 100%;
@@ -3321,6 +3321,16 @@ body {
 
 .station-symbol-option-label {
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-weight: 700;
+}
+
+.station-symbol-option-description {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--muted);
     text-overflow: ellipsis;
     white-space: nowrap;
 }

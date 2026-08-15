@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.11.dev - 15.08.2026
+- `GUI / pomoc`: wspólny modal wszystkich plików pomocy ma teraz widoczny, cienki pasek przewijania dopasowany kolorystycznie do aktywnego motywu; przewijanie pozostaje wewnątrz okna i nie przenosi się na stronę pod modalem.
+- `APRS / wybór symbolu`: listy symboli w `Mojej stacji`, `Obiektach / Elementach` oraz filtrze ikon `Packet Flow` pokazują teraz obok ikony i kodu oficjalny opis z indeksu symboli aprs.fi; opis oraz podgląd zmieniają się zgodnie z wybraną tablicą podstawową `/` lub alternatywną `\`.
+- `APRS / ikony modern`: naprawiono uszkodzony pierwszy symbol zestawu `modern` (`/!`, posterunek policji), zastępując ucięty plik prawidłowym wycinkiem ze źródłowego arkusza ikon.
+
 ## 1.10.10.dev - 14.08.2026
 - `Packet Routing / zapis`: włączanie i wyłączanie reguł oraz zapis w edytorze używają teraz standardowego modala APRSBox ze spinnerem, komunikatem wyniku i obsługą błędów bez przeładowania strony; po udanym zapisie użytkownik wraca do właściwej listy lub edytowanej reguły.
 - `GUI / pomoc`: wszystkie przyciski pomocy mają ikonę powiększoną o 50% oraz stały niebieski akcent ikony, obramowania i tła, dzięki czemu są jednoznacznie rozpoznawalne we wszystkich widokach i paletach kolorystycznych.

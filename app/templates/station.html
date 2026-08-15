@@ -380,11 +380,14 @@
                                         data-label="{{ option.label }}"
                                         data-primary-icon="{{ request.scope.root_path }}/static/{{ option.primary_icon }}"
                                         data-alternate-icon="{{ request.scope.root_path }}/static/{{ option.alternate_icon }}"
+                                        data-primary-description="{{ option.primary_description }}"
+                                        data-alternate-description="{{ option.alternate_description }}"
                                         role="option"
                                         aria-selected="{% if station.symbol_code == option.value %}true{% else %}false{% endif %}"
                                     >
                                         <img class="station-symbol-option-image" src="{{ request.scope.root_path }}/static/{{ option.primary_icon }}" alt="">
                                         <span class="station-symbol-option-label">{{ option.label }}</span>
+                                        <span class="station-symbol-option-description">{{ option.primary_description }}</span>
                                     </button>
                                     {% endfor %}
                                 </div>
@@ -684,9 +687,12 @@
                 const icon = symbolTable.value === "\\"
                     ? selected.dataset.alternateIcon
                     : selected.dataset.primaryIcon;
+                const description = symbolTable.value === "\\"
+                    ? selected.dataset.alternateDescription
+                    : selected.dataset.primaryDescription;
 
                 symbolTriggerImage.src = icon || "{{ request.scope.root_path }}/static/{{ aprs_symbol_icon_fallback }}";
-                symbolTriggerText.textContent = selected.dataset.label || selected.value;
+                symbolTriggerText.textContent = [selected.dataset.label || selected.value, description].filter(Boolean).join(" — ");
 
                 for (const option of symbolOptions) {
                     const optionIcon = symbolTable.value === "\\"
@@ -695,6 +701,13 @@
                     const image = option.querySelector(".station-symbol-option-image");
                     if (image) {
                         image.src = optionIcon || "{{ request.scope.root_path }}/static/{{ aprs_symbol_icon_fallback }}";
+                    }
+                    const optionDescription = symbolTable.value === "\\"
+                        ? option.dataset.alternateDescription
+                        : option.dataset.primaryDescription;
+                    const descriptionNode = option.querySelector(".station-symbol-option-description");
+                    if (descriptionNode) {
+                        descriptionNode.textContent = optionDescription || "";
                     }
                     const isActive = option.dataset.value === selected.dataset.value;
                     option.classList.toggle("active", isActive);
