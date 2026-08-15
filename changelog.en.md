@@ -3,7 +3,7 @@
 ## 1.10.11.dev - 2026-08-15
 - `GUI / help`: the shared modal used by every help document now has a visible thin scrollbar styled for the active theme; scrolling remains contained inside the dialog instead of propagating to the page behind it.
 - `APRS / symbol selection`: symbol lists in `My Station`, `Objects / Items`, and the `Packet Flow` icon filter now show the official aprs.fi symbol-index description beside each icon and code; the description and preview follow the selected primary `/` or alternate `\` table.
-- `APRS / modern icons`: fixed the first symbol in the `modern` set (`/!`, Police station) by replacing the clipped file with the correct tile from the source icon sheet.
+- `APRS / modern icons`: fixed the broken `/!` (Police station), `\!` (Emergency), and `/q` and `\q` (grid-square variants) symbols by replacing incorrect files, including files containing an entire sprite sheet, with the proper tiles from the source icon sheets.
 
 ## 1.10.10.dev - 2026-08-14
 - `Packet Routing / save`: enabling and disabling rules and saving in the editor now use the standard APRSBox dialog with a spinner, result message, and inline error handling without a page reload; after a successful save, the user returns to the appropriate list or edited rule.

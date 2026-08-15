@@ -3,7 +3,7 @@
 ## 1.10.11.dev - 2026-08-15
 - `GUI / ayuda`: el modal compartido por todos los documentos de ayuda tiene ahora una barra de desplazamiento fina y visible, adaptada al tema activo; el desplazamiento permanece dentro del diálogo y no se propaga a la página situada detrás.
 - `APRS / selección de símbolos`: las listas de símbolos de `Mi estación`, `Objetos / Elementos` y el filtro de iconos de `Packet Flow` muestran ahora, junto al icono y el código, la descripción oficial del índice de símbolos de aprs.fi; la descripción y la vista previa siguen la tabla primaria `/` o alternativa `\` seleccionada.
-- `APRS / iconos modernos`: se corrigió el primer símbolo del conjunto `modern` (`/!`, comisaría de policía), sustituyendo el archivo recortado por la celda correcta de la hoja de iconos original.
+- `APRS / iconos modernos`: se corrigieron los símbolos dañados `/!` (comisaría de policía), `\!` (emergencia), `/q` y `\q` (variantes de cuadrícula), sustituyendo los archivos incorrectos —incluidos los que contenían una hoja completa— por las celdas adecuadas de las hojas de iconos originales.
 
 ## 1.10.10.dev - 2026-08-14
 - `Packet Routing / guardado`: activar y desactivar reglas, así como guardar desde el editor, utiliza ahora el diálogo estándar de APRSBox con indicador de progreso, mensaje de resultado y gestión de errores sin recargar la página; tras guardar correctamente, el usuario vuelve a la lista correspondiente o a la regla editada.
