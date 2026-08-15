@@ -392,16 +392,19 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("settings-progress-track", template_source)
         self.assertIn("progress_percent", template_source)
 
-    def test_job_modal_uses_health_recovery_only_for_host_reboot(self) -> None:
+    def test_job_modal_uses_health_recovery_for_disruptive_system_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertNotIn("canFinalizeRunningJobFromHealth", template_source)
         self.assertNotIn("canReloadOnHealthRecovery", template_source)
         self.assertIn('const healthUrl = `${rootPath}/health`', template_source)
         self.assertIn('if (actionId === "reboot-host") {', template_source)
-        self.assertIn("pollRebootHealth(jobId, startedAt, options);", template_source)
+        self.assertIn("pollHealthRecovery(jobId, startedAt, options);", template_source)
+        self.assertIn('actionId === "restart-services"', template_source)
+        self.assertIn('stage === "restarting-web" || lastProgressPercent >= 75', template_source)
+        self.assertIn("acceptHealthyAfterMs: 5000", template_source)
         self.assertIn("if (response.status === 200)", template_source)
-        self.assertIn("finishRebootRecovery();", template_source)
-        self.assertIn("rebootOutageObserved", template_source)
+        self.assertIn("finishHealthRecovery();", template_source)
+        self.assertIn("healthOutageObserved", template_source)
         self.assertIn('if (status === "success")', template_source)
         self.assertIn('if (status === "error")', template_source)
         self.assertIn("window.sessionStorage.removeItem(activeJobStorageKey)", template_source)
@@ -476,9 +479,10 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('if (normalized === "reboot-host") return labels.rebootTitle;', template_source)
         self.assertIn('if (normalized === "poweroff-host") return labels.poweroffTitle;', template_source)
 
-    def test_reboot_health_wait_has_timeout_and_manual_refresh_message(self) -> None:
+    def test_system_recovery_health_wait_has_timeout_and_manual_refresh_message(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
-        self.assertIn("rebootHealthTimeoutMs: 600000", template_source)
+        self.assertIn("recoveryHealthTimeoutMs: 600000", template_source)
+        self.assertIn("recoveryHealthTimeoutMs: 300000", template_source)
         self.assertIn("controller.abort(), 5000", template_source)
         self.assertIn("finishAction(labels.timeout", template_source)
         self.assertIn("autoHideMs: 0", template_source)
@@ -487,7 +491,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("actionId: 'restart-services'", template_source)
         self.assertIn("lockTimeoutMs: 300000", template_source)
-        self.assertIn("reloadDelayMs: 3000", template_source)
+        self.assertIn("recoveryHealthTimeoutMs: 300000", template_source)
 
     def test_system_jobs_store_progress_and_stage(self) -> None:
         with temporary_database():

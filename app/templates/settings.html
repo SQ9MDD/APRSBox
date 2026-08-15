@@ -705,7 +705,7 @@
                     data-settings-action-id="restart-services"
                     data-settings-action-group="danger-actions"
                     data-settings-confirm="{{ t('Restart services now?') }}"
-                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, reloadOnSuccess: true, reloadDelayMs: 3000});"
+                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, recoveryHealthTimeoutMs: 300000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
@@ -722,7 +722,7 @@
                     data-settings-confirm="{{ t('Type REBOOT to confirm host reboot.') }}"
                     data-settings-confirm-value="REBOOT"
                     data-settings-confirm-danger="true"
-                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, rebootHealthTimeoutMs: 600000, reloadOnSuccess: true});"
+                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, recoveryHealthTimeoutMs: 600000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
                 </form>
@@ -1488,19 +1488,19 @@
             }
         };
 
-        const rememberRebootOutage = (jobId) => {
+        const rememberHealthOutage = (jobId) => {
             try {
                 const raw = window.sessionStorage.getItem(activeJobStorageKey);
                 const stored = raw ? JSON.parse(raw) : null;
                 if (!stored || Number(stored.jobId || 0) !== Number(jobId || 0)) return;
-                stored.rebootOutageObserved = true;
+                stored.healthOutageObserved = true;
                 window.sessionStorage.setItem(activeJobStorageKey, JSON.stringify(stored));
             } catch (_error) {
                 // Ignore storage errors.
             }
         };
 
-        const finishRebootRecovery = () => {
+        const finishHealthRecovery = () => {
             stopPolling();
             clearActiveJob();
             progressLocked = false;
@@ -1512,11 +1512,16 @@
             }, 100);
         };
 
-        const pollRebootHealth = (jobId, startedAt, options) => {
-            const timeoutMs = Math.max(1000, Number(options.rebootHealthTimeoutMs || 600000));
-            const title = titleForAction("reboot-host");
-            const waitingMessage = String(options.message || labels.systemActionMessages["reboot-host"]);
-            let outageObserved = Boolean(options.rebootOutageObserved);
+        const pollHealthRecovery = (jobId, startedAt, options) => {
+            const actionId = String(options.actionId || "");
+            const timeoutMs = Math.max(1000, Number(options.recoveryHealthTimeoutMs || 300000));
+            const title = titleForAction(actionId);
+            const waitingMessage = String(
+                options.message || labels.systemActionMessages[actionId] || labels.defaultMessage
+            );
+            let outageObserved = Boolean(options.healthOutageObserved);
+            const acceptHealthyAfterMs = Math.max(0, Number(options.acceptHealthyAfterMs || 0));
+            const healthyFallbackAt = Date.now() + acceptHealthyAfterMs;
 
             const pollOnce = async () => {
                 if (Date.now() - Number(startedAt || Date.now()) >= timeoutMs) {
@@ -1539,8 +1544,8 @@
                         signal: controller.signal,
                     });
                     if (response.status === 200) {
-                        if (outageObserved) {
-                            finishRebootRecovery();
+                        if (outageObserved || (acceptHealthyAfterMs > 0 && Date.now() >= healthyFallbackAt)) {
+                            finishHealthRecovery();
                             return;
                         }
                         showSettingsProgress(waitingMessage, {
@@ -1554,7 +1559,7 @@
                 } catch (_error) {
                     if (!outageObserved) {
                         outageObserved = true;
-                        rememberRebootOutage(jobId);
+                        rememberHealthOutage(jobId);
                     }
                     showSettingsProgress(waitingMessage, {
                         locked: true,
@@ -1577,7 +1582,7 @@
             const reloadAfterFinish = Boolean(options.reloadOnSuccess);
             const actionId = String(options.actionId || "");
             if (actionId === "reboot-host") {
-                pollRebootHealth(jobId, startedAt, options);
+                pollHealthRecovery(jobId, startedAt, options);
                 return;
             }
             const reloadDelayMs = Number(options.reloadDelayMs || 0);
@@ -1643,6 +1648,17 @@
                         return;
                     }
 
+                    if (
+                        actionId === "restart-services"
+                        && (stage === "restarting-web" || lastProgressPercent >= 75)
+                    ) {
+                        pollHealthRecovery(jobId, startedAt, {
+                            ...options,
+                            acceptHealthyAfterMs: 5000,
+                        });
+                        return;
+                    }
+
                     showSettingsProgress(lastStageLabel, {
                         locked: true,
                         title,
@@ -1703,7 +1719,7 @@
                             message: String(options.message || ""),
                             reloadOnSuccess: Boolean(options.reloadOnSuccess),
                             reloadDelayMs: Number(options.reloadDelayMs || 0),
-                            rebootHealthTimeoutMs: Number(options.rebootHealthTimeoutMs || 0),
+                            recoveryHealthTimeoutMs: Number(options.recoveryHealthTimeoutMs || 0),
                         })
                     );
                 } catch (_error) {
@@ -1779,7 +1795,10 @@
             if (!Number.isFinite(jobId) || jobId <= 0) return;
 
             const actionId = String(stored.actionId || "").trim();
-            if (actionId === "reboot-host" && Boolean(stored.rebootOutageObserved)) {
+            if (
+                (actionId === "reboot-host" || actionId === "restart-services")
+                && Boolean(stored.healthOutageObserved)
+            ) {
                 clearActiveJob();
                 return;
             }
@@ -1796,7 +1815,7 @@
             const message = String(stored.message || labels.defaultMessage);
             const reloadOnSuccess = Boolean(stored.reloadOnSuccess);
             const reloadDelayMs = Number(stored.reloadDelayMs || 0);
-            const rebootHealthTimeoutMs = Number(stored.rebootHealthTimeoutMs || 0);
+            const recoveryHealthTimeoutMs = Number(stored.recoveryHealthTimeoutMs || 0);
 
             progressDismissed = false;
             showSettingsProgress(message, {
@@ -1811,7 +1830,7 @@
                 message,
                 reloadOnSuccess,
                 reloadDelayMs,
-                rebootHealthTimeoutMs,
+                recoveryHealthTimeoutMs,
             });
         };
 
