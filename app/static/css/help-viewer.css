@@ -111,8 +111,26 @@
 .help-viewer-body {
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
     padding: 1rem;
     scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--accent) 42%, var(--border)) transparent;
+    -ms-overflow-style: auto;
+}
+
+.help-viewer-body::-webkit-scrollbar {
+    width: 0.42rem;
+    height: 0.42rem;
+}
+
+.help-viewer-body::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 42%, var(--border));
+}
+
+.help-viewer-body::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .help-viewer-markdown {

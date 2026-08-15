@@ -287,6 +287,9 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("width: 1.38rem;", help_viewer_style)
         self.assertIn("height: 1.38rem;", help_viewer_style)
         self.assertIn('mask: url("../icons/help-circle-outline.svg")', help_viewer_style)
+        self.assertIn(".help-viewer-body::-webkit-scrollbar {", help_viewer_style)
+        self.assertIn("scrollbar-width: thin;", help_viewer_style)
+        self.assertIn("overscroll-behavior: contain;", help_viewer_style)
 
     def test_alarm_help_links_to_localized_cawf_and_nws_warn_guides(self) -> None:
         languages = ("en", "de", "pl", "es", "tlh")
