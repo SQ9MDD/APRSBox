@@ -722,7 +722,7 @@
                     data-settings-confirm="{{ t('Type REBOOT to confirm host reboot.') }}"
                     data-settings-confirm-value="REBOOT"
                     data-settings-confirm-danger="true"
-                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
+                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, rebootHealthTimeoutMs: 600000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
                 </form>
@@ -1478,11 +1478,108 @@
         };
 
         const jobStatusUrl = (jobId) => `${rootPath}/api/settings/jobs/${encodeURIComponent(String(jobId || ""))}`;
+        const healthUrl = `${rootPath}/health`;
+
+        const clearActiveJob = () => {
+            try {
+                window.sessionStorage.removeItem(activeJobStorageKey);
+            } catch (_error) {
+                // Ignore storage errors.
+            }
+        };
+
+        const rememberRebootOutage = (jobId) => {
+            try {
+                const raw = window.sessionStorage.getItem(activeJobStorageKey);
+                const stored = raw ? JSON.parse(raw) : null;
+                if (!stored || Number(stored.jobId || 0) !== Number(jobId || 0)) return;
+                stored.rebootOutageObserved = true;
+                window.sessionStorage.setItem(activeJobStorageKey, JSON.stringify(stored));
+            } catch (_error) {
+                // Ignore storage errors.
+            }
+        };
+
+        const finishRebootRecovery = () => {
+            stopPolling();
+            clearActiveJob();
+            progressLocked = false;
+            restoreControls();
+            hideBackdrop(true);
+            window.aprsboxRememberSettingsPosition?.();
+            window.setTimeout(() => {
+                window.location.reload();
+            }, 100);
+        };
+
+        const pollRebootHealth = (jobId, startedAt, options) => {
+            const timeoutMs = Math.max(1000, Number(options.rebootHealthTimeoutMs || 600000));
+            const title = titleForAction("reboot-host");
+            const waitingMessage = String(options.message || labels.systemActionMessages["reboot-host"]);
+            let outageObserved = Boolean(options.rebootOutageObserved);
+
+            const pollOnce = async () => {
+                if (Date.now() - Number(startedAt || Date.now()) >= timeoutMs) {
+                    clearActiveJob();
+                    finishAction(labels.timeout, {
+                        reload: false,
+                        autoHideMs: 0,
+                        title,
+                    });
+                    return;
+                }
+
+                const controller = new AbortController();
+                const requestTimeout = window.setTimeout(() => controller.abort(), 5000);
+                try {
+                    const response = await window.fetch(healthUrl, {
+                        cache: "no-store",
+                        credentials: "same-origin",
+                        headers: { "Accept": "application/json" },
+                        signal: controller.signal,
+                    });
+                    if (response.status === 200) {
+                        if (outageObserved) {
+                            finishRebootRecovery();
+                            return;
+                        }
+                        showSettingsProgress(waitingMessage, {
+                            locked: true,
+                            title,
+                            stageLabel: waitingMessage,
+                        });
+                    } else {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                } catch (_error) {
+                    if (!outageObserved) {
+                        outageObserved = true;
+                        rememberRebootOutage(jobId);
+                    }
+                    showSettingsProgress(waitingMessage, {
+                        locked: true,
+                        title,
+                        stageLabel: waitingMessage,
+                        detail: labels.reconnecting,
+                    });
+                } finally {
+                    window.clearTimeout(requestTimeout);
+                }
+
+                activePollTimer = window.setTimeout(pollOnce, 2000);
+            };
+
+            pollOnce();
+        };
 
         const pollJobStatus = async (jobId, startedAt, options) => {
             const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
             const reloadAfterFinish = Boolean(options.reloadOnSuccess);
             const actionId = String(options.actionId || "");
+            if (actionId === "reboot-host") {
+                pollRebootHealth(jobId, startedAt, options);
+                return;
+            }
             const reloadDelayMs = Number(options.reloadDelayMs || 0);
             const title = titleForAction(actionId);
             let lastProgressPercent = 0;
@@ -1517,11 +1614,7 @@
                     );
 
                     if (status === "success") {
-                        try {
-                            window.sessionStorage.removeItem(activeJobStorageKey);
-                        } catch (_error) {
-                            // Ignore storage errors.
-                        }
+                        clearActiveJob();
                         const successLabel = actionId === "update-application"
                             ? messageForJobStage(actionId, "completed", labels.completed)
                             : (message || labels.completed);
@@ -1536,11 +1629,7 @@
                     }
 
                     if (status === "error") {
-                        try {
-                            window.sessionStorage.removeItem(activeJobStorageKey);
-                        } catch (_error) {
-                            // Ignore storage errors.
-                        }
+                        clearActiveJob();
                         const failedLabel = actionId === "update-application"
                             ? messageForJobStage(actionId, "failed", labels.failed)
                             : labels.failed;
@@ -1614,6 +1703,7 @@
                             message: String(options.message || ""),
                             reloadOnSuccess: Boolean(options.reloadOnSuccess),
                             reloadDelayMs: Number(options.reloadDelayMs || 0),
+                            rebootHealthTimeoutMs: Number(options.rebootHealthTimeoutMs || 0),
                         })
                     );
                 } catch (_error) {
@@ -1689,6 +1779,10 @@
             if (!Number.isFinite(jobId) || jobId <= 0) return;
 
             const actionId = String(stored.actionId || "").trim();
+            if (actionId === "reboot-host" && Boolean(stored.rebootOutageObserved)) {
+                clearActiveJob();
+                return;
+            }
             const form = actionId
                 ? actionForms.find((candidate) => String(candidate.dataset.settingsActionId || "") === actionId)
                 : null;
@@ -1702,6 +1796,7 @@
             const message = String(stored.message || labels.defaultMessage);
             const reloadOnSuccess = Boolean(stored.reloadOnSuccess);
             const reloadDelayMs = Number(stored.reloadDelayMs || 0);
+            const rebootHealthTimeoutMs = Number(stored.rebootHealthTimeoutMs || 0);
 
             progressDismissed = false;
             showSettingsProgress(message, {
@@ -1710,7 +1805,14 @@
                 progressPercent: 0,
                 stageLabel: message,
             });
-            pollJobStatus(jobId, startedAt, { actionId, lockTimeoutMs, message, reloadOnSuccess, reloadDelayMs });
+            pollJobStatus(jobId, startedAt, {
+                actionId,
+                lockTimeoutMs,
+                message,
+                reloadOnSuccess,
+                reloadDelayMs,
+                rebootHealthTimeoutMs,
+            });
         };
 
         window.__aprsboxSettingsSubmit = submitSettingsAction;
