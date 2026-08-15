@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.12.dev - 2026-08-15
+- `Ajustes / diálogos`: los cuadros nativos del navegador `confirm` y `prompt` se sustituyeron por el modal compartido de APRSBox para la actualización de la aplicación, la importación de configuración, el mantenimiento de la base de datos, el reinicio de servicios y las operaciones del host; las confirmaciones `REBOOT` y `POWER OFF` exigen escribir la frase exacta, y la acción de cierre del modal de progreso solo aparece al finalizar la operación.
+- `Ajustes / fuentes de mapas`: guardar y editar una fuente, cambiar el orden, seleccionar la fuente predeterminada, eliminar y limpiar la caché usan ahora el mismo modal asíncrono con indicador de progreso, mensaje de resultado localizado y gestión de errores que las demás acciones del sistema; la validación del formulario se conserva antes del envío.
+
 ## 1.10.11.dev - 2026-08-15
 - `GUI / ayuda`: el modal compartido por todos los documentos de ayuda tiene ahora una barra de desplazamiento fina y visible, adaptada al tema activo; el desplazamiento permanece dentro del diálogo y no se propaga a la página situada detrás.
 - `APRS / selección de símbolos`: las listas de símbolos de `Mi estación`, `Objetos / Elementos` y el filtro de iconos de `Packet Flow` muestran ahora, junto al icono y el código, la descripción oficial del índice de símbolos de aprs.fi; la descripción y la vista previa siguen la tabla primaria `/` o alternativa `\` seleccionada.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.12.dev - 2026-08-15
+- `Einstellungen / Dialoge`: Die nativen Browserdialoge `confirm` und `prompt` wurden für Anwendungsaktualisierung, Konfigurationsimport, Datenbankwartung, Dienstneustart und Host-Aktionen durch das gemeinsame APRSBox-Modal ersetzt; Bestätigungen für `REBOOT` und `POWER OFF` erfordern die exakte Eingabe, während die Schließen-Aktion des Fortschrittsmodals erst nach Abschluss des Vorgangs erscheint.
+- `Einstellungen / Kartenquellen`: Speichern und Bearbeiten, Umsortieren, Festlegen der Standardquelle, Löschen und Leeren des Caches verwenden jetzt denselben asynchronen Modalablauf mit Spinner, lokalisierter Ergebnismeldung und Fehlerbehandlung wie die übrigen Systemaktionen; die Formularvalidierung erfolgt weiterhin vor dem Absenden.
+
 ## 1.10.11.dev - 2026-08-15
 - `GUI / Hilfe`: Das gemeinsame Modal für alle Hilfedokumente besitzt jetzt eine sichtbare, schmale und an das aktive Theme angepasste Bildlaufleiste; das Scrollen bleibt im Dialog und wird nicht an die dahinterliegende Seite weitergegeben.
 - `APRS / Symbolauswahl`: Die Symbollisten in `Meine Station`, `Objekte / Elemente` und im Symbolfilter von `Packet Flow` zeigen jetzt neben Symbol und Code die offizielle Beschreibung aus dem aprs.fi-Symbolindex; Beschreibung und Vorschau folgen der ausgewählten primären `/` beziehungsweise alternativen `\` Tabelle.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.12.dev - 15.08.2026
+- `Ustawienia / modale`: natywne okna przeglądarki `confirm` i `prompt` zastąpiono wspólnym modalem APRSBox dla aktualizacji aplikacji, importu konfiguracji, konserwacji bazy, restartu usług oraz operacji na hoście; potwierdzenia `REBOOT` i `POWER OFF` wymagają wpisania właściwej frazy, a przycisk zamknięcia modala postępu pojawia się dopiero po zakończeniu operacji.
+- `Ustawienia / źródła map`: zapis i edycja źródła, zmiana kolejności, ustawienie domyślnego źródła, usuwanie oraz czyszczenie cache używają teraz tego samego asynchronicznego modala ze spinnerem, lokalizowanym komunikatem wyniku i obsługą błędów jak pozostałe akcje systemu; zachowano walidację formularza przed wysłaniem.
+
 ## 1.10.11.dev - 15.08.2026
 - `GUI / pomoc`: wspólny modal wszystkich plików pomocy ma teraz widoczny, cienki pasek przewijania dopasowany kolorystycznie do aktywnego motywu; przewijanie pozostaje wewnątrz okna i nie przenosi się na stronę pod modalem.
 - `APRS / wybór symbolu`: listy symboli w `Mojej stacji`, `Obiektach / Elementach` oraz filtrze ikon `Packet Flow` pokazują teraz obok ikony i kodu oficjalny opis z indeksu symboli aprs.fi; opis oraz podgląd zmieniają się zgodnie z wybraną tablicą podstawową `/` lub alternatywną `\`.
