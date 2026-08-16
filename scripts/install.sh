@@ -226,6 +226,7 @@ prepare_directories() {
         "$INSTALL_ROOT/logs" \
         "$INSTALL_ROOT/backups"
     chown -R "$APP_USER":"$APP_USER" "$INSTALL_ROOT"
+    chmod 0750 "$SSL_DIR"
 }
 
 stop_services() {

@@ -58,6 +58,10 @@ class HttpsServiceDeploymentTests(unittest.TestCase):
         self.assertIn('--https-enabled', restart_helper)
         self.assertIn('systemd-run', restart_helper)
         self.assertIn('JOB_FINALIZATION_DEFERRED="1"', restart_helper)
+        self.assertIn('chown aprsbox:aprsbox "$SSL_DIR"', restart_helper)
+        self.assertIn('chown aprsbox:aprsbox "$SSL_DIR"', systemd_helper)
+        self.assertIn('chmod 0750 "$SSL_DIR"', systemd_helper)
+        self.assertIn('chmod 0750 "$SSL_DIR"', restart_helper)
         requirements = Path("requirements.txt").read_text(encoding="utf-8")
 
         self.assertIn("deploy/systemd/aprsbox-http-redirect.service", systemd_helper)

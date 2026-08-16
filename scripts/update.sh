@@ -289,6 +289,7 @@ mkdir -p "$LOG_DIR"
 mkdir -p "$INSTALL_ROOT/backups"
 mkdir -p "$SSL_DIR"
 chown "$APP_USER":"$APP_USER" "$SSL_DIR" 2>/dev/null || true
+chmod 0750 "$SSL_DIR"
 
 job_update "running" "Downloading application files." "" "8" "downloading"
 git clone --depth 1 --branch "$GIT_BRANCH" "$GIT_URL" "$CHECKOUT_DIR"

@@ -67,6 +67,8 @@ trap on_exit EXIT
 job_update "running" "Restarting the web service. The browser may reconnect briefly." "" "98" "restarting-web"
 sleep 1
 mkdir -p "$SSL_DIR"
+chown aprsbox:aprsbox "$SSL_DIR" 2>/dev/null || true
+chmod 0750 "$SSL_DIR"
 if [ ! -f "$SSL_DIR/https-enabled" ] && grep -q -- "--ssl-certfile" /etc/systemd/system/aprsbox-web.service 2>/dev/null; then
     touch "$SSL_DIR/https-enabled"
     chown aprsbox:aprsbox "$SSL_DIR/https-enabled" 2>/dev/null || true
