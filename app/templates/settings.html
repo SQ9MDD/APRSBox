@@ -223,12 +223,28 @@
                 <h2>{{ t("HTTPS") }}</h2>
             </div>
         </div>
-        <div class="form-grid">
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/https"
+            class="form-grid"
+            data-settings-action-id="save-https-settings"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-https-settings', message: {{ t('Saving HTTPS settings and restarting services...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, redirectAfterStart: (this.elements.https_enabled.checked ? 'https://' : 'http://') + window.location.hostname + {{ request.scope.root_path|tojson|forceescape }} + '/settings#settings-panel-https'});"
+        >
             <label class="full checkbox-row">
-                <input type="checkbox" {% if not https_ready %}disabled{% endif %}>
+                <input
+                    type="checkbox"
+                    name="https_enabled"
+                    value="1"
+                    {% if https_enabled %}checked{% endif %}
+                    {% if not https_ready and not https_enabled %}disabled{% endif %}
+                    onchange="this.form.querySelector('button[type=submit]').disabled = false;"
+                >
                 <span>{{ t("Enable HTTPS") }}</span>
             </label>
-        </div>
+            <div class="form-actions">
+                <button type="submit" class="button" disabled>{{ t("Save and restart") }}</button>
+            </div>
+        </form>
         <form
             method="post"
             action="{{ request.scope.root_path }}/settings/https/certificates"
@@ -265,11 +281,11 @@
             <dt>{{ t("CA chain") }}</dt>
             <dd><code>{{ https_ca_chain_filename }}</code> — {{ t("Available") if ca_chain_available else t("Missing") }}</dd>
             <dt>{{ t("Hostname") }}</dt>
-            <dd>{{ t("Unknown") }}</dd>
+            <dd><code>{{ request.url.hostname or t("Unknown") }}</code></dd>
             <dt>{{ t("HTTPS") }}</dt>
-            <dd>{{ t("Disabled") }}</dd>
+            <dd>{{ t("Enabled") if https_enabled else t("Disabled") }}</dd>
             <dt>{{ t("HTTP redirect") }}</dt>
-            <dd>{{ t("Disabled") }}</dd>
+            <dd>{{ t("Enabled") if https_enabled else t("Disabled") }}</dd>
         </dl>
     </div>
 </section>
@@ -1763,6 +1779,12 @@
                 if (response.status !== 202 || !payload || payload.ok !== true || !payload.job_id) {
                     const detail = payload && payload.error ? String(payload.error) : `HTTP ${response.status}`;
                     finishAction(`${labels.requestFailed} ${detail}`, { reload: false });
+                    return;
+                }
+
+                const redirectAfterStart = String(options.redirectAfterStart || "").trim();
+                if (redirectAfterStart) {
+                    window.setTimeout(() => window.location.assign(redirectAfterStart), 6000);
                     return;
                 }
 

@@ -2058,5 +2058,9 @@
   "Certificate file is empty.": "Certificate file is empty.",
   "Certificate file is too large (limit: 1 MB).": "Certificate file is too large (limit: 1 MB).",
   "Select at least one certificate file.": "Select at least one certificate file.",
-  "Failed to store certificate files.": "Failed to store certificate files."
+  "Failed to store certificate files.": "Failed to store certificate files.",
+  "Save and restart": "Save and restart",
+  "Saving HTTPS settings and restarting services...": "Saving HTTPS settings and restarting services...",
+  "A matching certificate and private key are required before enabling HTTPS.": "A matching certificate and private key are required before enabling HTTPS.",
+  "Failed to save HTTPS setting.": "Failed to save HTTPS setting."
 }

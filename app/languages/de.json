@@ -2024,5 +2024,9 @@
   "Certificate file is empty.": "Die Zertifikatsdatei ist leer.",
   "Certificate file is too large (limit: 1 MB).": "Die Zertifikatsdatei ist zu groß (Limit: 1 MB).",
   "Select at least one certificate file.": "Wählen Sie mindestens eine Zertifikatsdatei aus.",
-  "Failed to store certificate files.": "Zertifikatsdateien konnten nicht gespeichert werden."
+  "Failed to store certificate files.": "Zertifikatsdateien konnten nicht gespeichert werden.",
+  "Save and restart": "Speichern und neu starten",
+  "Saving HTTPS settings and restarting services...": "HTTPS-Einstellungen werden gespeichert und Dienste neu gestartet...",
+  "A matching certificate and private key are required before enabling HTTPS.": "Vor dem Aktivieren von HTTPS sind ein zusammengehöriges Zertifikat und ein privater Schlüssel erforderlich.",
+  "Failed to save HTTPS setting.": "Die HTTPS-Einstellung konnte nicht gespeichert werden."
 }

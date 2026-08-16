@@ -1,7 +1,7 @@
 [Unit]
 Description=APRSBox Web
-After=local-fs.target network-online.target aprsbox-core.service aprsbox-http-redirect.service
-Wants=network-online.target aprsbox-http-redirect.service
+After=local-fs.target network-online.target aprsbox-core.service
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -18,7 +18,7 @@ Environment=APRSBOX_CORE_HOST=127.0.0.1
 Environment=APRSBOX_CORE_PORT=18081
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-ExecStart=/opt/aprsbox/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 443 --ssl-certfile /opt/aprsbox/data/ssl/aprsbox.crt --ssl-keyfile /opt/aprsbox/data/ssl/aprsbox.key --access-log
+ExecStart=/opt/aprsbox/app/scripts/start-web.sh
 Restart=on-failure
 RestartSec=2
 StandardOutput=append:/opt/aprsbox/logs/aprsbox-web.log

@@ -334,6 +334,21 @@ fi
 job_update "running" "Application dependencies are ready." "" "60" "preparing-dependencies"
 
 detect_service_manager
+if [ ! -f "$SSL_DIR/https-enabled" ]; then
+    case "$SERVICE_MANAGER" in
+        systemd)
+            if grep -q -- "--ssl-certfile" /etc/systemd/system/aprsbox-web.service 2>/dev/null; then
+                touch "$SSL_DIR/https-enabled"
+            fi
+            ;;
+        openrc)
+            if grep -q -- "--ssl-certfile" /etc/init.d/aprsbox-web 2>/dev/null; then
+                touch "$SSL_DIR/https-enabled"
+            fi
+            ;;
+    esac
+    chown "$APP_USER":"$APP_USER" "$SSL_DIR/https-enabled" 2>/dev/null || true
+fi
 job_update "running" "Stopping application services." "" "64" "stopping-services"
 stop_services
 job_update "running" "Backing up the database." "" "68" "backing-up-database"
@@ -379,13 +394,21 @@ case "$SERVICE_MANAGER" in
         install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-web.service" /etc/systemd/system/aprsbox-web.service
         install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-http-redirect.service" /etc/systemd/system/aprsbox-http-redirect.service
         systemctl daemon-reload
-        systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
+        if [ -f "$SSL_DIR/https-enabled" ]; then
+            systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
+        else
+            systemctl disable --now aprsbox-http-redirect.service >/dev/null 2>&1 || true
+        fi
         ;;
     openrc)
         install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-core" /etc/init.d/aprsbox-core
         install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-web" /etc/init.d/aprsbox-web
         install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-http-redirect" /etc/init.d/aprsbox-http-redirect
-        rc-update add aprsbox-http-redirect default >/dev/null 2>&1 || true
+        if [ -f "$SSL_DIR/https-enabled" ]; then
+            rc-update add aprsbox-http-redirect default >/dev/null 2>&1 || true
+        else
+            rc-update del aprsbox-http-redirect default >/dev/null 2>&1 || true
+        fi
         ;;
 esac
 
@@ -403,7 +426,9 @@ WEB_RESTART_SCRIPT="$APP_DIR/scripts/update-web-restart.sh"
 if [ "$SERVICE_MANAGER" = "systemd" ]; then
     job_update "running" "Restarting the core service." "" "90" "restarting-core"
     systemctl restart aprsbox-core.service
-    systemctl restart aprsbox-http-redirect.service
+    if [ -f "$SSL_DIR/https-enabled" ]; then
+        systemctl restart aprsbox-http-redirect.service
+    fi
 fi
 
 job_update "running" "Finalizing the update and cleaning up old files." "" "94" "finalizing"

@@ -2080,5 +2080,9 @@
   "Certificate file is empty.": "Plik certyfikatu jest pusty.",
   "Certificate file is too large (limit: 1 MB).": "Plik certyfikatu jest za duży (limit: 1 MB).",
   "Select at least one certificate file.": "Wybierz co najmniej jeden plik certyfikatu.",
-  "Failed to store certificate files.": "Nie udało się zapisać plików certyfikatu."
+  "Failed to store certificate files.": "Nie udało się zapisać plików certyfikatu.",
+  "Save and restart": "Zapisz i uruchom ponownie",
+  "Saving HTTPS settings and restarting services...": "Zapisywanie ustawień HTTPS i ponowne uruchamianie usług...",
+  "A matching certificate and private key are required before enabling HTTPS.": "Przed włączeniem HTTPS wymagane są pasujące do siebie certyfikat i klucz prywatny.",
+  "Failed to save HTTPS setting.": "Nie udało się zapisać ustawienia HTTPS."
 }

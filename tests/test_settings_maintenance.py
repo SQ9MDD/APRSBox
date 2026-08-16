@@ -143,9 +143,12 @@ class SettingsMaintenanceTests(unittest.TestCase):
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
 
         self.assertIn('action="{{ request.scope.root_path }}/settings/https/certificates"', template_source)
-        self.assertIn('{% if not https_ready %}disabled{% endif %}', template_source)
+        self.assertIn('{% if not https_ready and not https_enabled %}disabled{% endif %}', template_source)
+        self.assertIn('action="{{ request.scope.root_path }}/settings/https"', template_source)
+        self.assertIn('{{ t("Save and restart") }}', template_source)
         self.assertNotIn('{{ t("HTTPS only") }}', template_source)
         self.assertIn('@router.post("/settings/https/certificates")', router_source)
+        self.assertIn('@router.post("/settings/https")', router_source)
         self.assertIn("HTTPS_CERTIFICATE_FILENAME", router_source)
         self.assertIn("HTTPS_PRIVATE_KEY_FILENAME", router_source)
 

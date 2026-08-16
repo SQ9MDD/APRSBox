@@ -16,6 +16,7 @@ SYSTEMD_DEPLOY_DIR="$DEPLOY_ROOT/systemd"
 VENV_DIR="$INSTALL_ROOT/venv"
 TARGET_APP_DIR="$INSTALL_ROOT/app"
 DB_PATH="${APRSBOX_DB_PATH:-$INSTALL_ROOT/data/aprsbox.db}"
+SSL_DIR="$INSTALL_ROOT/data/ssl"
 ADMIN_USER="${APRSBOX_ADMIN_USER:-}"
 ADMIN_PASSWORD="${APRSBOX_ADMIN_PASSWORD:-}"
 BOOTSTRAP_WORKDIR=""
@@ -220,7 +221,7 @@ prepare_directories() {
     mkdir -p \
         "$INSTALL_ROOT" \
         "$INSTALL_ROOT/data" \
-        "$INSTALL_ROOT/data/ssl" \
+        "$SSL_DIR" \
         "$INSTALL_ROOT/config" \
         "$INSTALL_ROOT/logs" \
         "$INSTALL_ROOT/backups"
@@ -493,8 +494,14 @@ enable_services() {
     case "$SERVICE_MANAGER" in
         systemd)
             systemctl daemon-reload
-            systemctl enable aprsbox-core.service aprsbox-web.service aprsbox-http-redirect.service >/dev/null 2>&1 || true
-            if systemctl restart aprsbox-core.service && systemctl restart aprsbox-http-redirect.service && systemctl restart aprsbox-web.service; then
+            systemctl enable aprsbox-core.service aprsbox-web.service >/dev/null 2>&1 || true
+            if [ -f "$SSL_DIR/https-enabled" ]; then
+                systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
+                systemctl restart aprsbox-http-redirect.service
+            else
+                systemctl disable --now aprsbox-http-redirect.service >/dev/null 2>&1 || true
+            fi
+            if systemctl restart aprsbox-core.service && systemctl restart aprsbox-web.service; then
                 SERVICES_STARTED="1"
                 return
             fi
@@ -505,13 +512,17 @@ enable_services() {
             if command -v rc-update >/dev/null 2>&1; then
                 rc-update add aprsbox-core default || true
                 rc-update add aprsbox-web default || true
-                rc-update add aprsbox-http-redirect default || true
+                if [ -f "$SSL_DIR/https-enabled" ]; then
+                    rc-update add aprsbox-http-redirect default || true
+                    rc-service aprsbox-http-redirect restart || rc-service aprsbox-http-redirect start
+                else
+                    rc-service aprsbox-http-redirect stop >/dev/null 2>&1 || true
+                    rc-update del aprsbox-http-redirect default >/dev/null 2>&1 || true
+                fi
                 if rc-service aprsbox-core restart || rc-service aprsbox-core start; then
-                    if rc-service aprsbox-http-redirect restart || rc-service aprsbox-http-redirect start; then
-                        if rc-service aprsbox-web restart || rc-service aprsbox-web start; then
-                            SERVICES_STARTED="1"
-                            return
-                        fi
+                    if rc-service aprsbox-web restart || rc-service aprsbox-web start; then
+                        SERVICES_STARTED="1"
+                        return
                     fi
                 fi
                 log "OpenRC commands are available, but services could not be started automatically."
@@ -537,7 +548,11 @@ verify_services() {
     fi
 
     wait_for_http http://127.0.0.1:18081/health aprsbox-core
-    wait_for_http https://127.0.0.1:443/health aprsbox-web
+    if [ -f "$SSL_DIR/https-enabled" ]; then
+        wait_for_http https://127.0.0.1:443/health aprsbox-web
+    else
+        wait_for_http http://127.0.0.1:80/health aprsbox-web
+    fi
     log "Health checks passed for aprsbox-core and aprsbox-web."
 }
 
@@ -585,7 +600,11 @@ main() {
     log "Web application root: $TARGET_APP_DIR"
     log "Database path: $DB_PATH"
     log ""
-    log "Application URL: https://<your ip address>"
+    if [ -f "$SSL_DIR/https-enabled" ]; then
+        log "Application URL: https://<your ip address>"
+    else
+        log "Application URL: http://<your ip address>"
+    fi
     log "Login: $ADMIN_USER"
     log "Password: $ADMIN_PASSWORD"
     log ""

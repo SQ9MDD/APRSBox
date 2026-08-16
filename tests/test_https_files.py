@@ -8,6 +8,7 @@ from app.services.https_files import (
     HTTPS_CERTIFICATE_FILENAME,
     HTTPS_PRIVATE_KEY_FILENAME,
     https_file_status,
+    save_https_enabled,
     save_https_file,
 )
 
@@ -23,6 +24,7 @@ class HttpsFileTests(unittest.TestCase):
                     "private_key_available": False,
                     "ca_chain_available": False,
                     "https_ready": False,
+                    "https_enabled": False,
                 },
             )
 
@@ -33,6 +35,14 @@ class HttpsFileTests(unittest.TestCase):
             self.assertFalse(https_file_status(ssl_dir)["https_ready"])
             with patch("app.services.https_files.ssl.SSLContext.load_cert_chain"):
                 self.assertTrue(https_file_status(ssl_dir)["https_ready"])
+
+    def test_https_enabled_marker_persists_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ssl_dir = Path(temp_dir) / "ssl"
+            save_https_enabled(ssl_dir, True)
+            self.assertTrue(https_file_status(ssl_dir)["https_enabled"])
+            save_https_enabled(ssl_dir, False)
+            self.assertFalse(https_file_status(ssl_dir)["https_enabled"])
 
     def test_uploads_use_fixed_filenames_and_private_key_permissions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

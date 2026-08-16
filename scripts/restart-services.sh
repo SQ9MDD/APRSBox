@@ -6,6 +6,7 @@ JOB_ID="${APRSBOX_JOB_ID:-}"
 DB_PATH="${APRSBOX_DB_PATH:-}"
 INSTALL_ROOT="${APRSBOX_INSTALL_ROOT:-/opt/aprsbox}"
 APP_DIR="$INSTALL_ROOT/app"
+SSL_DIR="$INSTALL_ROOT/data/ssl"
 
 log() {
     printf '%s\n' "$*"
@@ -128,32 +129,51 @@ detect_service_manager
 
 case "$SERVICE_MANAGER" in
     systemd)
+        mkdir -p "$SSL_DIR"
+        if [ ! -f "$SSL_DIR/https-enabled" ] && grep -q -- "--ssl-certfile" /etc/systemd/system/aprsbox-web.service 2>/dev/null; then
+            touch "$SSL_DIR/https-enabled"
+            chown aprsbox:aprsbox "$SSL_DIR/https-enabled" 2>/dev/null || true
+        fi
         install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-core.service" /etc/systemd/system/aprsbox-core.service
         install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-web.service" /etc/systemd/system/aprsbox-web.service
         install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-http-redirect.service" /etc/systemd/system/aprsbox-http-redirect.service
         systemctl daemon-reload
-        systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
         job_update "running" "Restarting the core service." "" "45" "restarting-core"
         systemctl restart aprsbox-core.service
-        systemctl restart aprsbox-http-redirect.service
+        if [ -f "$SSL_DIR/https-enabled" ]; then
+            systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
+            systemctl restart aprsbox-http-redirect.service
+        else
+            systemctl disable --now aprsbox-http-redirect.service >/dev/null 2>&1 || true
+        fi
         job_update "running" "Restarting the web service. The browser may reconnect briefly." "" "75" "restarting-web"
         systemctl restart aprsbox-web.service
         ;;
     openrc)
+        mkdir -p "$SSL_DIR"
+        if [ ! -f "$SSL_DIR/https-enabled" ] && grep -q -- "--ssl-certfile" /etc/init.d/aprsbox-web 2>/dev/null; then
+            touch "$SSL_DIR/https-enabled"
+            chown aprsbox:aprsbox "$SSL_DIR/https-enabled" 2>/dev/null || true
+        fi
         install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-core" /etc/init.d/aprsbox-core
         install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-web" /etc/init.d/aprsbox-web
         install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-http-redirect" /etc/init.d/aprsbox-http-redirect
-        rc-update add aprsbox-http-redirect default >/dev/null 2>&1 || true
         job_update "running" "Restarting the core service." "" "45" "restarting-core"
         if rc-service aprsbox-core status >/dev/null 2>&1; then
             rc-service aprsbox-core restart || { rc-service aprsbox-core stop || true; rc-service aprsbox-core start; }
         else
             rc-service aprsbox-core start
         fi
-        if rc-service aprsbox-http-redirect status >/dev/null 2>&1; then
-            rc-service aprsbox-http-redirect restart || { rc-service aprsbox-http-redirect stop || true; rc-service aprsbox-http-redirect start; }
+        if [ -f "$SSL_DIR/https-enabled" ]; then
+            rc-update add aprsbox-http-redirect default >/dev/null 2>&1 || true
+            if rc-service aprsbox-http-redirect status >/dev/null 2>&1; then
+                rc-service aprsbox-http-redirect restart || { rc-service aprsbox-http-redirect stop || true; rc-service aprsbox-http-redirect start; }
+            else
+                rc-service aprsbox-http-redirect start
+            fi
         else
-            rc-service aprsbox-http-redirect start
+            rc-service aprsbox-http-redirect stop >/dev/null 2>&1 || true
+            rc-update del aprsbox-http-redirect default >/dev/null 2>&1 || true
         fi
         job_update "running" "Restarting the web service. The browser may reconnect briefly." "" "75" "restarting-web"
         if rc-service aprsbox-web status >/dev/null 2>&1; then

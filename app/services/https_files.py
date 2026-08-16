@@ -9,6 +9,7 @@ from tempfile import NamedTemporaryFile
 HTTPS_CERTIFICATE_FILENAME = "aprsbox.crt"
 HTTPS_PRIVATE_KEY_FILENAME = "aprsbox.key"
 HTTPS_CA_CHAIN_FILENAME = "aprsbox-ca-chain.crt"
+HTTPS_ENABLED_FILENAME = "https-enabled"
 HTTPS_FILE_MAX_BYTES = 1024 * 1024
 
 
@@ -30,7 +31,17 @@ def https_file_status(ssl_dir: Path) -> dict[str, bool]:
         "private_key_available": private_key_available,
         "ca_chain_available": (ssl_dir / HTTPS_CA_CHAIN_FILENAME).is_file(),
         "https_ready": https_ready,
+        "https_enabled": (ssl_dir / HTTPS_ENABLED_FILENAME).is_file(),
     }
+
+
+def save_https_enabled(ssl_dir: Path, enabled: bool) -> None:
+    ssl_dir.mkdir(parents=True, exist_ok=True, mode=0o750)
+    marker_path = ssl_dir / HTTPS_ENABLED_FILENAME
+    if enabled:
+        marker_path.touch(mode=0o600, exist_ok=True)
+    elif marker_path.exists():
+        marker_path.unlink()
 
 
 def save_https_file(ssl_dir: Path, filename: str, payload: bytes, *, private: bool = False) -> None:

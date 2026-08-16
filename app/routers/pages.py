@@ -197,6 +197,7 @@ from app.services.https_files import (
     HTTPS_FILE_MAX_BYTES,
     HTTPS_PRIVATE_KEY_FILENAME,
     https_file_status,
+    save_https_enabled,
     save_https_file,
 )
 from app.services.map_service import (
@@ -1807,6 +1808,56 @@ async def settings_upload_https_certificates(
     return JSONResponse(
         {"ok": True, "message": _translate("Certificate files uploaded."), "reload": True}
     )
+
+
+@router.post("/settings/https")
+def settings_update_https(
+    request: Request,
+    https_enabled: str | None = Form(None),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    if is_container_mode():
+        return _container_mode_system_action_denied_response()
+
+    ssl_dir = request.app.state.settings.ssl_dir
+    current_status = https_file_status(ssl_dir)
+    requested_enabled = https_enabled is not None
+    if requested_enabled and not current_status["https_ready"]:
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": _translate(
+                    "A matching certificate and private key are required before enabling HTTPS."
+                ),
+            },
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+    previous_enabled = bool(current_status["https_enabled"])
+    try:
+        save_https_enabled(ssl_dir, requested_enabled)
+    except OSError:
+        return JSONResponse(
+            {"ok": False, "error": _translate("Failed to save HTTPS setting.")},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    job_id = create_system_job("restart-services", message=_translate("Queued."))
+    result = start_service_restart_job(job_id=job_id)
+    if not result.get("ok"):
+        save_https_enabled(ssl_dir, previous_enabled)
+        mark_system_job_error(job_id, message=_translate(str(result.get("error") or "Failed to start restart script.")))
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(result.get("error") or "Failed to start service restart."))},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    mark_system_job_running(
+        job_id,
+        pid=int(result.get("pid") or 0) or None,
+        log_file=str(result.get("log_file") or "") or None,
+        message=_translate("Running."),
+    )
+    return JSONResponse({"ok": True, "job_id": job_id, "status": "queued"}, status_code=status.HTTP_202_ACCEPTED)
 
 
 @router.post("/settings/global")

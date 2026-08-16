@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
+import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
 
 class RedirectHandler(BaseHTTPRequestHandler):
@@ -22,6 +24,9 @@ class RedirectHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    install_root = Path(os.getenv("APRSBOX_INSTALL_ROOT", "/opt/aprsbox"))
+    if not (install_root / "data" / "ssl" / "https-enabled").is_file():
+        return
     HTTPServer(("0.0.0.0", 80), RedirectHandler).serve_forever()
 
 
