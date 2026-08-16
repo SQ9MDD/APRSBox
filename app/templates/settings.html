@@ -222,6 +222,15 @@
             <div class="panel-header-copy">
                 <h2>{{ t("HTTPS") }}</h2>
             </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_https"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('HTTPS') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
         </div>
         <form
             method="post"
@@ -270,7 +279,7 @@
             </div>
         </form>
         <div class="settings-update-actions">
-            <button type="button" class="button">{{ t("Generate local PKI") }}</button>
+            <button type="button" class="button" disabled>{{ t("Generate local PKI") }}</button>
             <button type="button" class="button button-secondary" disabled>{{ t("Download Root CA") }}</button>
         </div>
         <dl class="details-grid">

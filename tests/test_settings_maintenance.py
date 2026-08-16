@@ -295,6 +295,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
         help_pages = (
             "settings_global",
             "settings_update",
+            "settings_https",
             "settings_alarms",
             "settings_map_sources",
             "settings_device_identification",
@@ -323,6 +324,11 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("--help-icon-accent: #3b82f6;", help_viewer_style)
         self.assertIn("width: 1.38rem;", help_viewer_style)
         self.assertIn("height: 1.38rem;", help_viewer_style)
+
+        https_help = Path("help/application/settings_https.en.md").read_text(encoding="utf-8")
+        self.assertIn("mDNS hostname", https_help)
+        self.assertIn("Subject Alternative Name (SAN)", https_help)
+        self.assertIn("IP:192.168.1.20", https_help)
         self.assertIn('mask: url("../icons/help-circle-outline.svg")', help_viewer_style)
         self.assertIn(".help-viewer-body::-webkit-scrollbar {", help_viewer_style)
         self.assertIn("scrollbar-width: thin;", help_viewer_style)
