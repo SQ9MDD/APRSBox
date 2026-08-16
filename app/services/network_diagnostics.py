@@ -189,15 +189,59 @@ def _resolve_mdns(name: str | None) -> str | None:
     return None
 
 
-def build_web_ui_url(*, mdns_name: str | None, scheme: str, port: int | None, root_path: str = "") -> str | None:
-    if not mdns_name:
+def resolve_web_ui_port(
+    *,
+    scheme: str,
+    request_port: int | None,
+    server_port: int | None,
+    forwarded_port: str | None = None,
+    forwarded_proto: str | None = None,
+) -> int | None:
+    if request_port is not None:
+        return request_port
+    try:
+        parsed_forwarded_port = int(str(forwarded_port or "").split(",", 1)[0].strip())
+    except ValueError:
+        parsed_forwarded_port = 0
+    if 1 <= parsed_forwarded_port <= 65535:
+        return parsed_forwarded_port
+    normalized_forwarded_proto = str(forwarded_proto or "").split(",", 1)[0].strip().lower()
+    if normalized_forwarded_proto in {"http", "https"}:
+        return 443 if normalized_forwarded_proto == "https" else 80
+    if server_port is not None and 1 <= int(server_port) <= 65535:
+        return int(server_port)
+    normalized_scheme = str(scheme or "").strip().lower()
+    return 443 if normalized_scheme == "https" else 80 if normalized_scheme == "http" else None
+
+
+def build_web_ui_url(
+    *,
+    host: str | None = None,
+    mdns_name: str | None = None,
+    scheme: str,
+    port: int | None,
+    root_path: str = "",
+    interface: str | None = None,
+) -> str | None:
+    resolved_host = str(host or mdns_name or "").strip()
+    if not resolved_host:
         return None
     normalized_scheme = str(scheme or "").strip().lower()
     if normalized_scheme not in {"http", "https"}:
         return None
+    try:
+        address = ipaddress.ip_address(resolved_host.split("%", 1)[0])
+    except ValueError:
+        formatted_host = resolved_host
+    else:
+        if address.version == 6:
+            zone = f"%25{quote(interface, safe='')}" if address.is_link_local and interface else ""
+            formatted_host = f"[{address}{zone}]"
+        else:
+            formatted_host = str(address)
     port_suffix = "" if port is None or (normalized_scheme, port) in {("http", 80), ("https", 443)} else f":{port}"
     normalized_root = "/" + quote(str(root_path or "").strip().strip("/"), safe="/") if str(root_path or "").strip("/") else ""
-    return f"{normalized_scheme}://{mdns_name}{port_suffix}{normalized_root}"
+    return f"{normalized_scheme}://{formatted_host}{port_suffix}{normalized_root}"
 
 
 def get_network_diagnostics(*, scheme: str, port: int | None, root_path: str = "") -> dict[str, Any]:
@@ -221,9 +265,16 @@ def get_network_diagnostics(*, scheme: str, port: int | None, root_path: str = "
         "mdns_resolve": resolved_address,
         "mdns_resolve_tone": "ok" if resolved_address else "neutral",
         "web_ui_url": build_web_ui_url(
-            mdns_name=mdns_name,
+            host=mdns_name,
             scheme=scheme,
             port=port,
             root_path=root_path,
+        ),
+        "ipv6_web_ui_url": build_web_ui_url(
+            host=ipv6,
+            scheme=scheme,
+            port=port,
+            root_path=root_path,
+            interface=interface,
         ),
     }

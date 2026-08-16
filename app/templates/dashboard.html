@@ -115,7 +115,6 @@
                 <div class="panel-header">
                     <div class="panel-header-copy">
                         <h2>{{ t("Network") }}</h2>
-                        <span class="dashboard-v2-eyebrow">{{ t("Network diagnostics") }}</span>
                     </div>
                 </div>
                 <dl class="dashboard-v2-network-grid">
@@ -132,7 +131,7 @@
                     </div>
                     <div>
                         <dt>IPv6</dt>
-                        <dd>{{ network_diagnostics.ipv6 or t("Unavailable") }}</dd>
+                        <dd>{% if network_diagnostics.ipv6_web_ui_url %}<a href="{{ network_diagnostics.ipv6_web_ui_url }}">{{ network_diagnostics.ipv6_web_ui_url }}</a>{% else %}{{ t("Unavailable") }}{% endif %}</dd>
                     </div>
                     <div>
                         <dt>{{ t("mDNS name") }}</dt>

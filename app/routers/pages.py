@@ -165,7 +165,7 @@ from app.services.band_condition import (
     get_band_condition_page_data,
     get_band_condition_snapshot,
 )
-from app.services.network_diagnostics import get_network_diagnostics
+from app.services.network_diagnostics import get_network_diagnostics, resolve_web_ui_port
 from app.services.aprsis import (
     aprsis_runtime_badge,
     get_aprsis_config,
@@ -1100,6 +1100,15 @@ def dashboard(
     templates = request.app.state.templates
     dashboard_band = _dashboard_band_condition_card()
     dashboard_activity = get_dashboard_radio_activity(range_value="24h")
+    server = request.scope.get("server")
+    server_port = server[1] if isinstance(server, (list, tuple)) and len(server) > 1 else None
+    web_ui_port = resolve_web_ui_port(
+        scheme=request.url.scheme,
+        request_port=request.url.port,
+        server_port=server_port,
+        forwarded_port=request.headers.get("x-forwarded-port"),
+        forwarded_proto=request.headers.get("x-forwarded-proto"),
+    )
     context = build_template_context(
         request,
         page_title="Dashboard",
@@ -1109,7 +1118,7 @@ def dashboard(
         dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
         network_diagnostics=get_network_diagnostics(
             scheme=request.url.scheme,
-            port=request.url.port,
+            port=web_ui_port,
             root_path=request.scope.get("root_path", ""),
         ),
     )

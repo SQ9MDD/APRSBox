@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from app.services.network_diagnostics import build_web_ui_url, get_network_diagnostics
+from app.services.network_diagnostics import build_web_ui_url, get_network_diagnostics, resolve_web_ui_port
 
 
 class NetworkDiagnosticsTests(unittest.TestCase):
@@ -34,6 +34,7 @@ class NetworkDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result["ipv6"], "2001:db8::24")
         self.assertEqual(result["mdns_name"], "aprsbox.local")
         self.assertEqual(result["web_ui_url"], "https://aprsbox.local")
+        self.assertEqual(result["ipv6_web_ui_url"], "https://[2001:db8::24]")
 
     def test_missing_avahi_and_addresses_are_reported_without_exceptions(self) -> None:
         with (
@@ -70,6 +71,34 @@ class NetworkDiagnosticsTests(unittest.TestCase):
         self.assertEqual(
             build_web_ui_url(mdns_name="aprsbox.local", scheme="http", port=80),
             "http://aprsbox.local",
+        )
+
+    def test_ipv6_web_url_uses_brackets_port_and_link_local_zone(self) -> None:
+        self.assertEqual(
+            build_web_ui_url(host="fe80::1234", scheme="http", port=8000, interface="eth0"),
+            "http://[fe80::1234%25eth0]:8000",
+        )
+
+    def test_direct_http_uses_detected_server_port_when_host_header_has_no_port(self) -> None:
+        self.assertEqual(
+            resolve_web_ui_port(
+                scheme="http",
+                request_port=None,
+                server_port=8000,
+            ),
+            8000,
+        )
+
+    def test_forwarded_port_takes_precedence_over_internal_listener(self) -> None:
+        self.assertEqual(
+            resolve_web_ui_port(
+                scheme="https",
+                request_port=None,
+                server_port=8000,
+                forwarded_port="9443",
+                forwarded_proto="https",
+            ),
+            9443,
         )
 
 
