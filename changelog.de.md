@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.15.dev - 2026-08-16
+- `Einstellungen / HTTPS`: Ein Panel zur Verwaltung von `aprsbox.crt`, `aprsbox.key` und der optionalen CA-Kette in `/opt/aprsbox/data/ssl` wurde ergänzt; die Oberfläche prüft das Zertifikat-Schlüssel-Paar, zeigt den Dateistatus, unterstützt Upload und sicheres Löschen und ermöglicht den Download der CA-Kette. Lokale PKI-Erzeugung und Root-CA-Download bleiben vorerst deaktiviert.
+- `HTTPS / Laufzeit`: Der Schalter speichert den HTTPS-Zustand und startet die Dienste neu; der HTTP-Modus lauscht auf Port `8000`, während der HTTPS-Modus diesen Listener deaktiviert, Uvicorn mit TLS auf `443` startet und einen separaten Dienst für die Weiterleitung von Port `80` zu HTTPS mit Status `308` verwendet.
+- `Installer / Aktualisierung`: Redirect-Dienst und Uvicorn-Units wurden für systemd und OpenRC ergänzt und ersetzen Gunicorn als Starter für Web und Core; außerdem wurden Unit-Migration, explizite Übergabe des HTTPS-Zustands, `CAP_NET_BIND_SERVICE` und nachfolgende Aktualisierungen aus der GUI korrigiert.
+- `HTTPS / Zuverlässigkeit und Hilfe`: Der abschließende Neustart läuft außerhalb der cgroup des Webdienstes und meldet seinen Abschluss, HTTP/HTTPS-Wechsel warten auf die Dienste und entfernen veraltete Jobzustände, und das SSL-Verzeichnis wird auf `aprsbox:aprsbox` mit Modus `0750` korrigiert; die lokalisierte Hilfe beschreibt mDNS, DNS-SAN-Einträge und Zertifikate für IP-Adressen.
+
 ## 1.10.14.dev - 2026-08-16
 - `GUI / Alarme`: Der Eintrag `Alarme` in der Seitenleiste wird ausgeblendet, wenn `APRS-Alarme aktivieren` deaktiviert ist.
 

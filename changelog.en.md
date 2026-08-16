@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.15.dev - 2026-08-16
+- `Settings / HTTPS`: added a panel for managing `aprsbox.crt`, `aprsbox.key`, and the optional CA chain in `/opt/aprsbox/data/ssl`; the UI verifies the certificate/key pair, displays file status, supports upload and safe removal, and allows the CA chain to be downloaded. Local PKI generation and Root CA download remain disabled for now.
+- `HTTPS / runtime`: the switch persists HTTPS state and restarts services; HTTP mode listens on port `8000`, while HTTPS mode disables that listener, starts Uvicorn with TLS on `443`, and runs a separate service that redirects port `80` to HTTPS with status `308`.
+- `Installer / updater`: added redirect-service and Uvicorn-unit support for both systemd and OpenRC, replacing Gunicorn as the web and core service runner; fixed unit migration, explicit HTTPS-state handoff, `CAP_NET_BIND_SERVICE`, and subsequent GUI-driven updates.
+- `HTTPS / reliability and help`: the final restart now runs outside the web service cgroup and reports completion, HTTP/HTTPS transitions wait for service recovery and clear stale job state, and the SSL directory is repaired to `aprsbox:aprsbox` mode `0750`; localized help covers mDNS, DNS SAN entries, and certificates issued for IP addresses.
+
 ## 1.10.14.dev - 2026-08-16
 - `GUI / alerts`: the `Alerts` sidebar item is hidden when `Enable APRS alarms` is turned off.
 

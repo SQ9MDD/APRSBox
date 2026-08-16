@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.15.dev - 2026-08-16
+- `Ajustes / HTTPS`: se añadió un panel para administrar `aprsbox.crt`, `aprsbox.key` y la cadena de CA opcional en `/opt/aprsbox/data/ssl`; la interfaz verifica el par certificado/clave, muestra el estado de los archivos, permite subirlos y eliminarlos de forma segura y descargar la cadena de CA. La generación de PKI local y la descarga de la CA raíz siguen desactivadas por ahora.
+- `HTTPS / ejecución`: el selector guarda el estado HTTPS y reinicia los servicios; el modo HTTP escucha en el puerto `8000`, mientras que el modo HTTPS desactiva ese listener, inicia Uvicorn con TLS en `443` y ejecuta un servicio separado que redirige el puerto `80` a HTTPS con el estado `308`.
+- `Instalador / actualizador`: se añadió compatibilidad con el redirector y las unidades Uvicorn para systemd y OpenRC, sustituyendo Gunicorn como ejecutor de web y core; también se corrigieron la migración de unidades, la entrega explícita del estado HTTPS, `CAP_NET_BIND_SERVICE` y las actualizaciones posteriores iniciadas desde la GUI.
+- `HTTPS / fiabilidad y ayuda`: el reinicio final se ejecuta fuera del cgroup del servicio web y registra su finalización, las transiciones HTTP/HTTPS esperan la recuperación de los servicios y limpian estados de tareas antiguos, y el directorio SSL se corrige a `aprsbox:aprsbox` con modo `0750`; la ayuda localizada explica mDNS, SAN para nombres DNS y certificados emitidos para direcciones IP.
+
 ## 1.10.14.dev - 2026-08-16
 - `GUI / alarmas`: la opción `Alarmas` de la barra lateral se oculta cuando `Activar alarmas APRS` está deshabilitado.
 
