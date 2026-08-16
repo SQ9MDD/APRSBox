@@ -2013,11 +2013,18 @@
   "Private key (.key/.pem)": "Clave privada (.key/.pem)",
   "CA chain (.crt/.pem, optional)": "Cadena de CA (.crt/.pem, opcional)",
   "Generate local PKI": "Generar PKI local",
-  "HTTPS only": "Solo HTTPS",
   "Download Root CA": "Descargar CA raíz",
   "Certificate": "Certificado",
   "Private key": "Clave privada",
   "CA chain": "Cadena de CA",
   "Hostname": "Nombre del host",
-  "HTTP redirect": "Redirección HTTP"
+  "HTTP redirect": "Redirección HTTP",
+  "Upload certificate files": "Subir archivos de certificado",
+  "Uploading certificate files...": "Subiendo archivos de certificado...",
+  "Certificate files uploaded.": "Los archivos de certificado se han subido.",
+  "Unsupported certificate file type.": "Tipo de archivo de certificado no compatible.",
+  "Certificate file is empty.": "El archivo de certificado está vacío.",
+  "Certificate file is too large (limit: 1 MB).": "El archivo de certificado es demasiado grande (límite: 1 MB).",
+  "Select at least one certificate file.": "Selecciona al menos un archivo de certificado.",
+  "Failed to store certificate files.": "No se pudieron guardar los archivos de certificado."
 }

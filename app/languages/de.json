@@ -2011,11 +2011,18 @@
   "Private key (.key/.pem)": "Privater Schlüssel (.key/.pem)",
   "CA chain (.crt/.pem, optional)": "CA-Kette (.crt/.pem, optional)",
   "Generate local PKI": "Lokale PKI erzeugen",
-  "HTTPS only": "Nur HTTPS",
   "Download Root CA": "Root-CA herunterladen",
   "Certificate": "Zertifikat",
   "Private key": "Privater Schlüssel",
   "CA chain": "CA-Kette",
   "Hostname": "Hostname",
-  "HTTP redirect": "HTTP-Weiterleitung"
+  "HTTP redirect": "HTTP-Weiterleitung",
+  "Upload certificate files": "Zertifikatsdateien hochladen",
+  "Uploading certificate files...": "Zertifikatsdateien werden hochgeladen...",
+  "Certificate files uploaded.": "Zertifikatsdateien wurden hochgeladen.",
+  "Unsupported certificate file type.": "Nicht unterstützter Zertifikatsdateityp.",
+  "Certificate file is empty.": "Die Zertifikatsdatei ist leer.",
+  "Certificate file is too large (limit: 1 MB).": "Die Zertifikatsdatei ist zu groß (Limit: 1 MB).",
+  "Select at least one certificate file.": "Wählen Sie mindestens eine Zertifikatsdatei aus.",
+  "Failed to store certificate files.": "Zertifikatsdateien konnten nicht gespeichert werden."
 }

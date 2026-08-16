@@ -138,6 +138,17 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('action="{{ request.scope.root_path }}/settings/config/import"', template_source)
         self.assertIn('name="backup_file"', template_source)
 
+    def test_settings_https_upload_requires_certificate_and_key_before_enable(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+
+        self.assertIn('action="{{ request.scope.root_path }}/settings/https/certificates"', template_source)
+        self.assertIn('{% if not https_ready %}disabled{% endif %}', template_source)
+        self.assertNotIn('{{ t("HTTPS only") }}', template_source)
+        self.assertIn('@router.post("/settings/https/certificates")', router_source)
+        self.assertIn("HTTPS_CERTIFICATE_FILENAME", router_source)
+        self.assertIn("HTTPS_PRIVATE_KEY_FILENAME", router_source)
+
     def test_settings_template_contains_event_log_controls(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn('name="traffic_retention_minutes"', template_source)

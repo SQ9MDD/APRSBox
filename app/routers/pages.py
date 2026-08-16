@@ -191,6 +191,14 @@ from app.services.config_backup import (
     export_configuration_backup_bytes,
     safe_import_configuration_backup,
 )
+from app.services.https_files import (
+    HTTPS_CA_CHAIN_FILENAME,
+    HTTPS_CERTIFICATE_FILENAME,
+    HTTPS_FILE_MAX_BYTES,
+    HTTPS_PRIVATE_KEY_FILENAME,
+    https_file_status,
+    save_https_file,
+)
 from app.services.map_service import (
     COVERAGE_FILL_OPACITY_SETTING_KEY,
     DEFAULT_COVERAGE_FILL_OPACITY_PERCENT,
@@ -283,6 +291,25 @@ DATABASE_MAINTENANCE_TABLE_LABELS: dict[str, str] = {
 
 def _translate(message: object) -> str:
     return get_translator(get_app_language())(message)
+
+
+async def _read_https_upload(upload: UploadFile | None, allowed_suffixes: set[str]) -> bytes | None:
+    if upload is None:
+        return None
+    if not upload.filename:
+        await upload.close()
+        return None
+    try:
+        if Path(upload.filename).suffix.lower() not in allowed_suffixes:
+            raise ValueError("Unsupported certificate file type.")
+        payload = await upload.read(HTTPS_FILE_MAX_BYTES + 1)
+    finally:
+        await upload.close()
+    if not payload:
+        raise ValueError("Certificate file is empty.")
+    if len(payload) > HTTPS_FILE_MAX_BYTES:
+        raise ValueError("Certificate file is too large (limit: 1 MB).")
+    return payload
 
 
 def _system_job_process_is_running(pid: object) -> bool:
@@ -969,6 +996,7 @@ def _settings_page_context(
         }
         for category in ALERT_EVENT_CATEGORIES
     ]
+    https_status = https_file_status(request.app.state.settings.ssl_dir)
     return build_template_context(
         request,
         page_title="Settings",
@@ -984,6 +1012,10 @@ def _settings_page_context(
         can_manage_global_settings=current_user.role in {"admin", "operator"},
         can_manage_database_maintenance=current_user.role in {"admin", "operator"},
         can_manage_config_backup=current_user.role in {"admin", "operator"},
+        https_certificate_filename=HTTPS_CERTIFICATE_FILENAME,
+        https_private_key_filename=HTTPS_PRIVATE_KEY_FILENAME,
+        https_ca_chain_filename=HTTPS_CA_CHAIN_FILENAME,
+        **https_status,
         current_language=current_language if current_language is not None else get_app_language(),
         current_default_units=current_default_units if current_default_units is not None else station_settings.get("default_units", "metric"),
         current_ui_palette=resolved_ui_palette,
@@ -1722,6 +1754,58 @@ async def settings_import_configuration_backup(
             "message": _translate("Configuration backup imported. Restart services to apply runtime changes."),
             "reload": True,
         }
+    )
+
+
+@router.post("/settings/https/certificates")
+async def settings_upload_https_certificates(
+    request: Request,
+    certificate_file: UploadFile | None = File(None),
+    private_key_file: UploadFile | None = File(None),
+    ca_chain_file: UploadFile | None = File(None),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    payloads: list[bytes | None] = []
+    validation_error: ValueError | None = None
+    for upload, allowed_suffixes in (
+        (certificate_file, {".crt", ".pem"}),
+        (private_key_file, {".key", ".pem"}),
+        (ca_chain_file, {".crt", ".pem"}),
+    ):
+        try:
+            payloads.append(await _read_https_upload(upload, allowed_suffixes))
+        except ValueError as exc:
+            validation_error = validation_error or exc
+            payloads.append(None)
+    if validation_error is not None:
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(validation_error))},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    certificate_payload, private_key_payload, ca_chain_payload = payloads
+    uploads = (
+        (HTTPS_CERTIFICATE_FILENAME, certificate_payload, False),
+        (HTTPS_PRIVATE_KEY_FILENAME, private_key_payload, True),
+        (HTTPS_CA_CHAIN_FILENAME, ca_chain_payload, False),
+    )
+    if not any(payload is not None for _, payload, _ in uploads):
+        return JSONResponse(
+            {"ok": False, "error": _translate("Select at least one certificate file.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        for filename, payload, private in uploads:
+            if payload is not None:
+                save_https_file(request.app.state.settings.ssl_dir, filename, payload, private=private)
+    except OSError:
+        return JSONResponse(
+            {"ok": False, "error": _translate("Failed to store certificate files.")},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    return JSONResponse(
+        {"ok": True, "message": _translate("Certificate files uploaded."), "reload": True}
     )
 
 

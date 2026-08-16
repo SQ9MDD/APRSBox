@@ -79,6 +79,10 @@ class Settings:
         return self.data_dir / "cache"
 
     @property
+    def ssl_dir(self) -> Path:
+        return self.data_dir / "ssl"
+
+    @property
     def config_dir(self) -> Path:
         return Path(os.getenv("APRSBOX_CONFIG_DIR", self.runtime_root / "config"))
 

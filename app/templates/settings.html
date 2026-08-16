@@ -225,39 +225,45 @@
         </div>
         <div class="form-grid">
             <label class="full checkbox-row">
-                <input type="checkbox">
+                <input type="checkbox" {% if not https_ready %}disabled{% endif %}>
                 <span>{{ t("Enable HTTPS") }}</span>
             </label>
+        </div>
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/https/certificates"
+            enctype="multipart/form-data"
+            class="form-grid"
+            data-settings-action-id="upload-https-certificates"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'upload-https-certificates', message: {{ t('Uploading certificate files...')|tojson|forceescape }}, busyLabel: {{ t('Uploading certificate files...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
+        >
             <label>
                 <span>{{ t("Certificate (.crt/.pem)") }}</span>
-                <input type="file" accept=".crt,.pem,application/x-pem-file,application/pem-certificate-chain">
+                <input type="file" name="certificate_file" accept=".crt,.pem,application/x-pem-file,application/pem-certificate-chain">
             </label>
             <label>
                 <span>{{ t("Private key (.key/.pem)") }}</span>
-                <input type="file" accept=".key,.pem,application/x-pem-file">
+                <input type="file" name="private_key_file" accept=".key,.pem,application/x-pem-file">
             </label>
             <label class="full">
                 <span>{{ t("CA chain (.crt/.pem, optional)") }}</span>
-                <input type="file" accept=".crt,.pem,application/x-pem-file,application/pem-certificate-chain">
+                <input type="file" name="ca_chain_file" accept=".crt,.pem,application/x-pem-file,application/pem-certificate-chain">
             </label>
             <div class="form-actions">
-                <button type="button" class="button">{{ t("Generate local PKI") }}</button>
+                <button type="submit" class="button">{{ t("Upload certificate files") }}</button>
             </div>
-            <label class="full checkbox-row">
-                <input type="checkbox" disabled>
-                <span>{{ t("HTTPS only") }}</span>
-            </label>
-            <div class="form-actions">
-                <button type="button" class="button button-secondary" disabled>{{ t("Download Root CA") }}</button>
-            </div>
+        </form>
+        <div class="settings-update-actions">
+            <button type="button" class="button">{{ t("Generate local PKI") }}</button>
+            <button type="button" class="button button-secondary" disabled>{{ t("Download Root CA") }}</button>
         </div>
         <dl class="details-grid">
             <dt>{{ t("Certificate") }}</dt>
-            <dd>{{ t("Not configured") }}</dd>
+            <dd><code>{{ https_certificate_filename }}</code> — {{ t("Available") if certificate_available else t("Missing") }}</dd>
             <dt>{{ t("Private key") }}</dt>
-            <dd>{{ t("Not configured") }}</dd>
+            <dd><code>{{ https_private_key_filename }}</code> — {{ t("Available") if private_key_available else t("Missing") }}</dd>
             <dt>{{ t("CA chain") }}</dt>
-            <dd>{{ t("Not configured") }}</dd>
+            <dd><code>{{ https_ca_chain_filename }}</code> — {{ t("Available") if ca_chain_available else t("Missing") }}</dd>
             <dt>{{ t("Hostname") }}</dt>
             <dd>{{ t("Unknown") }}</dd>
             <dt>{{ t("HTTPS") }}</dt>
