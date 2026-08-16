@@ -2492,8 +2492,54 @@ body {
     mask-image: url("../icons/minus-circle-multiple-outline.svg");
 }
 
-.dashboard-v2-band-panel .panel-body {
+.dashboard-v2-network-panel .panel-body {
     align-content: start;
+}
+
+.dashboard-v2-network-grid {
+    margin: 0;
+    padding: 0.72rem 0.78rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--accent) 7%, var(--panel-alt));
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.52rem 0.9rem;
+}
+
+.dashboard-v2-network-grid > div {
+    min-width: 0;
+}
+
+.dashboard-v2-network-grid dt {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+}
+
+.dashboard-v2-network-grid dd {
+    margin: 0.1rem 0 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 0.82rem;
+    font-weight: 650;
+}
+
+.dashboard-v2-network-grid dd small {
+    margin-left: 0.32rem;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 500;
+}
+
+.dashboard-v2-network-grid a {
+    color: var(--accent);
+}
+
+.dashboard-v2-network-url {
+    grid-column: 1 / -1;
 }
 
 .dashboard-v2-band-summary {

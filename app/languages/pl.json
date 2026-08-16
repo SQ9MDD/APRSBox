@@ -2089,5 +2089,12 @@
   "Disable HTTPS before deleting the certificate or private key.": "Wyłącz HTTPS przed usunięciem certyfikatu lub klucza prywatnego.",
   "Failed to delete HTTPS file.": "Nie udało się usunąć pliku HTTPS.",
   "HTTPS file deleted.": "Plik HTTPS został usunięty.",
-  "Download CA chain": "Pobierz łańcuch CA"
+  "Download CA chain": "Pobierz łańcuch CA",
+  "Network": "Sieć",
+  "Network diagnostics": "Diagnostyka sieciowa",
+  "Primary IPv4 LAN": "Główny IPv4 LAN",
+  "mDNS name": "Nazwa mDNS",
+  "Local mDNS resolve": "Lokalne rozwiązywanie mDNS",
+  "Web UI URL": "URL interfejsu WWW",
+  "Inactive": "Nieaktywne"
 }

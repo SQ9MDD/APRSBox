@@ -110,34 +110,53 @@
                 </ul>
             </div>
         </section>
-        <section class="panel dashboard-v2-band-panel">
+        <section class="panel dashboard-v2-network-panel">
             <div class="panel-body">
                 <div class="panel-header">
                     <div class="panel-header-copy">
-                        <h2>{{ t("Band Condition") }}</h2>
+                        <h2>{{ t("Network") }}</h2>
+                        <span class="dashboard-v2-eyebrow">{{ t("Network diagnostics") }}</span>
                     </div>
-                    <a href="{{ request.scope.root_path }}/band-condition" class="button button-secondary">{{ t("Open") }}</a>
                 </div>
-                {% if dashboard_band %}
-                <section class="dashboard-v2-band-summary dashboard-v2-band-summary-{{ dashboard_band.diagnosis_tone }}">
-                    <span class="dashboard-v2-eyebrow">{{ t("Current propagation") }}</span>
-                    <div class="dashboard-v2-band-current">
-                        <strong class="dashboard-v2-band-index">{% if dashboard_band.condition_index is none %}W–{% else %}W{{ dashboard_band.condition_index }}{% endif %}</strong>
-                        <strong class="dashboard-v2-band-label">{{ t(dashboard_band.label) }}</strong>
+                <dl class="dashboard-v2-network-grid">
+                    <div>
+                        <dt>{{ t("Hostname") }}</dt>
+                        <dd>{{ network_diagnostics.hostname or t("Unavailable") }}</dd>
                     </div>
-                    <p>{{ t(dashboard_home.band_summary) }}</p>
-                    <ol class="dashboard-v2-band-meter{% if dashboard_band.condition_index is none %} dashboard-v2-band-meter-empty{% endif %}" aria-label="{{ t('Propagation scale W0 to W5') }}">
-                        {% for level in range(6) %}
-                        <li class="{% if dashboard_band.condition_index is not none and level < dashboard_band.condition_index %}is-reached{% endif %}{% if dashboard_band.condition_index == level %} is-current{% endif %}"{% if dashboard_band.condition_index == level %} aria-current="true"{% endif %}>
-                            <span class="dashboard-v2-band-meter-bar" aria-hidden="true"></span>
-                            <span class="dashboard-v2-band-meter-level">W{{ level }}</span>
-                        </li>
-                        {% endfor %}
-                    </ol>
-                </section>
-                {% else %}
-                <div class="notice">{{ t("Band condition is not available yet.") }}</div>
-                {% endif %}
+                    <div>
+                        <dt>{{ t("Primary IPv4 LAN") }}</dt>
+                        <dd>
+                            {{ network_diagnostics.ipv4 or t("Unavailable") }}
+                            {% if network_diagnostics.ipv4 and network_diagnostics.interface %}<small>{{ network_diagnostics.interface }}</small>{% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>IPv6</dt>
+                        <dd>{{ network_diagnostics.ipv6 or t("Unavailable") }}</dd>
+                    </div>
+                    <div>
+                        <dt>{{ t("mDNS name") }}</dt>
+                        <dd>{{ network_diagnostics.mdns_name or t("Unavailable") }}</dd>
+                    </div>
+                    <div>
+                        <dt>avahi-daemon</dt>
+                        <dd class="dashboard-v2-state dashboard-v2-state-{{ network_diagnostics.avahi_tone }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ network_diagnostics.avahi_tone }}"></span>
+                            {{ t(network_diagnostics.avahi_status) }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>{{ t("Local mDNS resolve") }}</dt>
+                        <dd class="dashboard-v2-state dashboard-v2-state-{{ network_diagnostics.mdns_resolve_tone }}">
+                            <span class="dashboard-indicator dashboard-indicator-{{ network_diagnostics.mdns_resolve_tone }}"></span>
+                            {{ network_diagnostics.mdns_resolve or t("Unavailable") }}
+                        </dd>
+                    </div>
+                    <div class="dashboard-v2-network-url">
+                        <dt>{{ t("Web UI URL") }}</dt>
+                        <dd>{% if network_diagnostics.web_ui_url %}<a href="{{ network_diagnostics.web_ui_url }}">{{ network_diagnostics.web_ui_url }}</a>{% else %}{{ t("Unavailable") }}{% endif %}</dd>
+                    </div>
+                </dl>
             </div>
         </section>
     </section>

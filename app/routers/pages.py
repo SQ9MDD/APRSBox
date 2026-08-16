@@ -165,6 +165,7 @@ from app.services.band_condition import (
     get_band_condition_page_data,
     get_band_condition_snapshot,
 )
+from app.services.network_diagnostics import get_network_diagnostics
 from app.services.aprsis import (
     aprsis_runtime_badge,
     get_aprsis_config,
@@ -1106,6 +1107,11 @@ def dashboard(
         active_nav="dashboard",
         dashboard_band=dashboard_band,
         dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
+        network_diagnostics=get_network_diagnostics(
+            scheme=request.url.scheme,
+            port=request.url.port,
+            root_path=request.scope.get("root_path", ""),
+        ),
     )
     return templates.TemplateResponse("dashboard.html", context)
 
