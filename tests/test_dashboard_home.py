@@ -292,7 +292,11 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertNotIn('t("Network diagnostics")', template)
         self.assertIn("network_diagnostics.web_ui_url", template)
         self.assertIn("network_diagnostics.ipv6 or", template)
-        self.assertNotIn('t("Band Condition")', template)
+        self.assertIn("{% if dashboard_bands %}", template)
+        self.assertIn("dashboard-v2-band-indicators", template)
+        self.assertIn("dashboard-v2-band-indicator-{{ item.diagnosis_tone }}", template)
+        self.assertIn("{% for level in [5, 4, 3, 2, 1, 0] %}", template)
+        self.assertIn('href="{{ request.scope.root_path }}/band-condition"', template)
         self.assertNotIn("dashboard_home.band_updated_at", template)
         self.assertNotIn("Current estimate for", template)
         self.assertNotIn("dashboard-v2-band-meter-current", template)
@@ -321,6 +325,9 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn(".dashboard-v2-station-panel::before", stylesheet)
         self.assertIn("min-height: 7.6rem", stylesheet)
         self.assertIn(".dashboard-v2-network-grid", stylesheet)
+        self.assertIn(".dashboard-v2-top-grid.has-band-indicators", stylesheet)
+        self.assertIn(".dashboard-v2-top-grid.has-band-indicators {\n        grid-template-columns: 1fr;", stylesheet)
+        self.assertIn(".dashboard-v2-band-step.is-active", stylesheet)
         self.assertIn(".dashboard-v2-event-item:not(:last-child)", stylesheet)
 
     def test_dashboard_does_not_expose_traffic_monitor_check(self) -> None:

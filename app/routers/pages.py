@@ -663,9 +663,13 @@ def _digi_flow_editor_context(
     )
 
 
-def _dashboard_band_condition_card() -> dict | None:
+def _dashboard_band_condition_cards() -> list[dict]:
     snapshot = get_band_condition_snapshot()
-    bands = snapshot.get("bands") or []
+    return list(snapshot.get("bands") or [])
+
+
+def _dashboard_band_condition_card(bands: list[dict] | None = None) -> dict | None:
+    bands = bands if bands is not None else _dashboard_band_condition_cards()
     if not bands:
         return None
     preferred = next((item for item in bands if item.get("band") == "2m"), None)
@@ -1104,7 +1108,8 @@ def dashboard(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
-    dashboard_band = _dashboard_band_condition_card()
+    dashboard_bands = _dashboard_band_condition_cards()
+    dashboard_band = _dashboard_band_condition_card(dashboard_bands)
     dashboard_activity = get_dashboard_radio_activity(range_value="24h")
     https_enabled = bool(https_file_status(request.app.state.settings.ssl_dir)["https_enabled"])
     direct_scheme = "https" if https_enabled else "http"
@@ -1119,6 +1124,7 @@ def dashboard(
         current_user=current_user,
         active_nav="dashboard",
         dashboard_band=dashboard_band,
+        dashboard_bands=dashboard_bands,
         dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
         network_diagnostics=get_network_diagnostics(
             scheme=direct_scheme,

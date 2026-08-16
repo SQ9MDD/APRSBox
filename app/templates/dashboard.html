@@ -48,7 +48,7 @@
 {% endfor %}
 {% set has_activity_chart = dashboard_home.activity_chart.labels and dashboard_home.activity_chart.labels|length > 0 %}
 <div class="dashboard-layout dashboard-v2">
-    <section class="dashboard-v2-top-grid">
+    <section class="dashboard-v2-top-grid{% if dashboard_bands %} has-band-indicators{% endif %}">
         <section class="panel dashboard-v2-station-panel">
             <div class="panel-body">
                 <div class="dashboard-v2-station-stage">
@@ -110,6 +110,29 @@
                 </ul>
             </div>
         </section>
+        {% if dashboard_bands %}
+        <div class="dashboard-v2-band-indicators" aria-label="{{ t('Band Condition') }}">
+            {% for item in dashboard_bands %}
+            <a
+                class="panel dashboard-v2-band-indicator dashboard-v2-band-indicator-{{ item.diagnosis_tone }}"
+                href="{{ request.scope.root_path }}/band-condition"
+                title="{{ item.interface_name }} — {{ t(item.label) }}"
+                aria-label="{{ t('Band') }} {{ item.band_label }}: {{ t(item.label) }}{% if item.condition_index is not none %}, W{{ item.condition_index }}{% endif %}"
+            >
+                <span class="dashboard-v2-band-name">{{ item.band_label }}</span>
+                <strong class="dashboard-v2-band-value">{% if item.condition_index is none %}W–{% else %}W{{ item.condition_index }}{% endif %}</strong>
+                <span class="dashboard-v2-band-scale" aria-hidden="true">
+                    {% for level in [5, 4, 3, 2, 1, 0] %}
+                    <span class="dashboard-v2-band-step dashboard-v2-band-step-{{ level }}{% if item.condition_index == level %} is-active{% endif %}">
+                        <small>W{{ level }}</small>
+                    </span>
+                    {% endfor %}
+                </span>
+                <span class="dashboard-v2-band-label">{{ t(item.label) }}</span>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
         <section class="panel dashboard-v2-network-panel">
             <div class="panel-body">
                 <div class="panel-header">
