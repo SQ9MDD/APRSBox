@@ -275,11 +275,27 @@
         </div>
         <dl class="details-grid">
             <dt>{{ t("Certificate") }}</dt>
-            <dd><code>{{ https_certificate_filename }}</code> — {% if certificate_available %}<span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>{% else %}{{ t("Missing") }}{% endif %}</dd>
+            <dd class="https-file-status">
+                <code>{{ https_certificate_filename }}</code>
+                {% if certificate_available %}
+                <span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>
+                <form method="post" action="{{ request.scope.root_path }}/settings/https/certificates/certificate/delete" class="https-file-delete-form" data-settings-action-id="delete-https-certificate" data-settings-confirm="{{ t('Delete this HTTPS file?') }}" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'delete-https-certificate', message: {{ t('Deleting...')|tojson|forceescape }}, busyLabel: {{ t('Deleting...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
+                    <button type="submit" class="table-icon-button table-icon-button-danger https-file-delete-button" {% if https_enabled %}disabled{% endif %} title="{{ t('Disable HTTPS before deleting the certificate or private key.') if https_enabled else t('Delete') }}" aria-label="{{ t('Delete') }} {{ t('Certificate') }}"><img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt=""></button>
+                </form>
+                {% else %}<span class="muted">{{ t("Missing") }}</span>{% endif %}
+            </dd>
             <dt>{{ t("Private key") }}</dt>
-            <dd><code>{{ https_private_key_filename }}</code> — {% if private_key_available %}<span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>{% else %}{{ t("Missing") }}{% endif %}</dd>
+            <dd class="https-file-status">
+                <code>{{ https_private_key_filename }}</code>
+                {% if private_key_available %}
+                <span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>
+                <form method="post" action="{{ request.scope.root_path }}/settings/https/certificates/private-key/delete" class="https-file-delete-form" data-settings-action-id="delete-https-private-key" data-settings-confirm="{{ t('Delete this HTTPS file?') }}" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'delete-https-private-key', message: {{ t('Deleting...')|tojson|forceescape }}, busyLabel: {{ t('Deleting...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
+                    <button type="submit" class="table-icon-button table-icon-button-danger https-file-delete-button" {% if https_enabled %}disabled{% endif %} title="{{ t('Disable HTTPS before deleting the certificate or private key.') if https_enabled else t('Delete') }}" aria-label="{{ t('Delete') }} {{ t('Private key') }}"><img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt=""></button>
+                </form>
+                {% else %}<span class="muted">{{ t("Missing") }}</span>{% endif %}
+            </dd>
             <dt>{{ t("CA chain") }}</dt>
-            <dd><code>{{ https_ca_chain_filename }}</code> — {% if ca_chain_available %}<span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>{% else %}{{ t("Missing") }}{% endif %}</dd>
+            <dd class="https-file-status"><code>{{ https_ca_chain_filename }}</code> {% if ca_chain_available %}<span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>{% else %}<span class="muted">{{ t("Missing") }}</span>{% endif %}</dd>
             <dt>{{ t("Hostname") }}</dt>
             <dd><code>{{ request.url.hostname or t("Unknown") }}</code></dd>
             <dt>{{ t("HTTPS") }}</dt>

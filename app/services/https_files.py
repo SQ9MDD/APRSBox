@@ -11,6 +11,7 @@ HTTPS_PRIVATE_KEY_FILENAME = "aprsbox.key"
 HTTPS_CA_CHAIN_FILENAME = "aprsbox-ca-chain.crt"
 HTTPS_ENABLED_FILENAME = "https-enabled"
 HTTPS_FILE_MAX_BYTES = 1024 * 1024
+HTTPS_REMOVABLE_FILENAMES = {HTTPS_CERTIFICATE_FILENAME, HTTPS_PRIVATE_KEY_FILENAME}
 
 
 def https_file_status(ssl_dir: Path) -> dict[str, bool]:
@@ -42,6 +43,12 @@ def save_https_enabled(ssl_dir: Path, enabled: bool) -> None:
         marker_path.touch(mode=0o600, exist_ok=True)
     elif marker_path.exists():
         marker_path.unlink()
+
+
+def delete_https_file(ssl_dir: Path, filename: str) -> None:
+    if filename not in HTTPS_REMOVABLE_FILENAMES:
+        raise ValueError("Unsupported HTTPS file")
+    (ssl_dir / filename).unlink(missing_ok=True)
 
 
 def save_https_file(ssl_dir: Path, filename: str, payload: bytes, *, private: bool = False) -> None:

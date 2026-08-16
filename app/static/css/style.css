@@ -5904,6 +5904,31 @@ select:focus-visible,
     gap: 0.45rem 1rem;
 }
 
+.https-file-status {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: var(--icon-control-size);
+}
+
+.https-file-status .tnc-status-icon,
+.https-file-delete-button {
+    width: 1.75rem;
+    min-width: 1.75rem;
+    height: 1.75rem;
+    min-height: 1.75rem;
+}
+
+.https-file-status .tnc-status-icon img {
+    width: 0.9rem;
+    height: 0.9rem;
+}
+
+.https-file-delete-form {
+    display: inline-flex;
+    margin: 0;
+}
+
 .station-detail-header,
 .station-detail-actions {
     display: flex;

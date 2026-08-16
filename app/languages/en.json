@@ -2062,5 +2062,9 @@
   "Save and restart": "Save and restart",
   "Saving HTTPS settings and restarting services...": "Saving HTTPS settings and restarting services...",
   "A matching certificate and private key are required before enabling HTTPS.": "A matching certificate and private key are required before enabling HTTPS.",
-  "Failed to save HTTPS setting.": "Failed to save HTTPS setting."
+  "Failed to save HTTPS setting.": "Failed to save HTTPS setting.",
+  "Delete this HTTPS file?": "Delete this HTTPS file?",
+  "Disable HTTPS before deleting the certificate or private key.": "Disable HTTPS before deleting the certificate or private key.",
+  "Failed to delete HTTPS file.": "Failed to delete HTTPS file.",
+  "HTTPS file deleted.": "HTTPS file deleted."
 }

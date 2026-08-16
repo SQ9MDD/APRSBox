@@ -7,6 +7,7 @@ from app.services.https_files import (
     HTTPS_CA_CHAIN_FILENAME,
     HTTPS_CERTIFICATE_FILENAME,
     HTTPS_PRIVATE_KEY_FILENAME,
+    delete_https_file,
     https_file_status,
     save_https_enabled,
     save_https_file,
@@ -55,6 +56,16 @@ class HttpsFileTests(unittest.TestCase):
             self.assertEqual((ssl_dir / "aprsbox.key").read_bytes(), b"private-key")
             self.assertEqual((ssl_dir / "aprsbox-ca-chain.crt").read_bytes(), b"ca-chain")
             self.assertEqual((ssl_dir / "aprsbox.key").stat().st_mode & 0o777, 0o600)
+
+    def test_delete_is_limited_to_certificate_and_private_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ssl_dir = Path(temp_dir) / "ssl"
+            save_https_file(ssl_dir, HTTPS_CERTIFICATE_FILENAME, b"certificate")
+            delete_https_file(ssl_dir, HTTPS_CERTIFICATE_FILENAME)
+            self.assertFalse((ssl_dir / HTTPS_CERTIFICATE_FILENAME).exists())
+
+            with self.assertRaises(ValueError):
+                delete_https_file(ssl_dir, HTTPS_CA_CHAIN_FILENAME)
 
 
 if __name__ == "__main__":

@@ -196,6 +196,7 @@ from app.services.https_files import (
     HTTPS_CERTIFICATE_FILENAME,
     HTTPS_FILE_MAX_BYTES,
     HTTPS_PRIVATE_KEY_FILENAME,
+    delete_https_file,
     https_file_status,
     save_https_enabled,
     save_https_file,
@@ -1808,6 +1809,34 @@ async def settings_upload_https_certificates(
     return JSONResponse(
         {"ok": True, "message": _translate("Certificate files uploaded."), "reload": True}
     )
+
+
+@router.post("/settings/https/certificates/{file_kind}/delete")
+def settings_delete_https_file(
+    file_kind: str,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    filenames = {
+        "certificate": HTTPS_CERTIFICATE_FILENAME,
+        "private-key": HTTPS_PRIVATE_KEY_FILENAME,
+    }
+    filename = filenames.get(file_kind)
+    if filename is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="HTTPS file not found")
+    if https_file_status(request.app.state.settings.ssl_dir)["https_enabled"]:
+        return JSONResponse(
+            {"ok": False, "error": _translate("Disable HTTPS before deleting the certificate or private key.")},
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    try:
+        delete_https_file(request.app.state.settings.ssl_dir, filename)
+    except OSError:
+        return JSONResponse(
+            {"ok": False, "error": _translate("Failed to delete HTTPS file.")},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    return JSONResponse({"ok": True, "message": _translate("HTTPS file deleted."), "reload": True})
 
 
 @router.post("/settings/https")

@@ -2084,5 +2084,9 @@
   "Save and restart": "Zapisz i uruchom ponownie",
   "Saving HTTPS settings and restarting services...": "Zapisywanie ustawień HTTPS i ponowne uruchamianie usług...",
   "A matching certificate and private key are required before enabling HTTPS.": "Przed włączeniem HTTPS wymagane są pasujące do siebie certyfikat i klucz prywatny.",
-  "Failed to save HTTPS setting.": "Nie udało się zapisać ustawienia HTTPS."
+  "Failed to save HTTPS setting.": "Nie udało się zapisać ustawienia HTTPS.",
+  "Delete this HTTPS file?": "Usunąć ten plik HTTPS?",
+  "Disable HTTPS before deleting the certificate or private key.": "Wyłącz HTTPS przed usunięciem certyfikatu lub klucza prywatnego.",
+  "Failed to delete HTTPS file.": "Nie udało się usunąć pliku HTTPS.",
+  "HTTPS file deleted.": "Plik HTTPS został usunięty."
 }
