@@ -46,6 +46,19 @@ class HttpsServiceDeploymentTests(unittest.TestCase):
         self.assertIn("rc-update add aprsbox-http-redirect default", installer)
         self.assertIn("rc-update add aprsbox-http-redirect default", updater)
 
+    def test_new_restart_helpers_migrate_units_when_launched_by_old_updater(self) -> None:
+        systemd_helper = Path("scripts/update-web-restart.sh").read_text(encoding="utf-8")
+        restart_helper = Path("scripts/restart-services.sh").read_text(encoding="utf-8")
+        requirements = Path("requirements.txt").read_text(encoding="utf-8")
+
+        self.assertIn("deploy/systemd/aprsbox-http-redirect.service", systemd_helper)
+        self.assertIn("systemctl daemon-reload", systemd_helper)
+        self.assertIn("systemctl restart aprsbox-core.service", systemd_helper)
+        self.assertIn("systemctl restart aprsbox-http-redirect.service", systemd_helper)
+        self.assertIn("deploy/openrc/aprsbox-http-redirect", restart_helper)
+        self.assertIn("rc-update add aprsbox-http-redirect default", restart_helper)
+        self.assertIn("gunicorn==23.0.0", requirements)
+
 
 if __name__ == "__main__":
     unittest.main()

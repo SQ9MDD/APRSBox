@@ -4,6 +4,8 @@ set -eu
 SERVICE_MANAGER="unknown"
 JOB_ID="${APRSBOX_JOB_ID:-}"
 DB_PATH="${APRSBOX_DB_PATH:-}"
+INSTALL_ROOT="${APRSBOX_INSTALL_ROOT:-/opt/aprsbox}"
+APP_DIR="$INSTALL_ROOT/app"
 
 log() {
     printf '%s\n' "$*"
@@ -126,6 +128,11 @@ detect_service_manager
 
 case "$SERVICE_MANAGER" in
     systemd)
+        install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-core.service" /etc/systemd/system/aprsbox-core.service
+        install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-web.service" /etc/systemd/system/aprsbox-web.service
+        install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-http-redirect.service" /etc/systemd/system/aprsbox-http-redirect.service
+        systemctl daemon-reload
+        systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
         job_update "running" "Restarting the core service." "" "45" "restarting-core"
         systemctl restart aprsbox-core.service
         systemctl restart aprsbox-http-redirect.service
@@ -133,6 +140,10 @@ case "$SERVICE_MANAGER" in
         systemctl restart aprsbox-web.service
         ;;
     openrc)
+        install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-core" /etc/init.d/aprsbox-core
+        install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-web" /etc/init.d/aprsbox-web
+        install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-http-redirect" /etc/init.d/aprsbox-http-redirect
+        rc-update add aprsbox-http-redirect default >/dev/null 2>&1 || true
         job_update "running" "Restarting the core service." "" "45" "restarting-core"
         if rc-service aprsbox-core status >/dev/null 2>&1; then
             rc-service aprsbox-core restart || { rc-service aprsbox-core stop || true; rc-service aprsbox-core start; }

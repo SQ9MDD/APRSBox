@@ -3,6 +3,8 @@ set -eu
 
 JOB_ID="${APRSBOX_JOB_ID:-}"
 DB_PATH="${APRSBOX_DB_PATH:-}"
+INSTALL_ROOT="${APRSBOX_INSTALL_ROOT:-/opt/aprsbox}"
+APP_DIR="$INSTALL_ROOT/app"
 
 job_can_update() {
     if [ -z "$JOB_ID" ] || [ -z "$DB_PATH" ]; then
@@ -62,4 +64,11 @@ on_exit() {
 trap on_exit EXIT
 job_update "running" "Restarting the web service. The browser may reconnect briefly." "" "98" "restarting-web"
 sleep 1
+install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-core.service" /etc/systemd/system/aprsbox-core.service
+install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-web.service" /etc/systemd/system/aprsbox-web.service
+install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-http-redirect.service" /etc/systemd/system/aprsbox-http-redirect.service
+systemctl daemon-reload
+systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
+systemctl restart aprsbox-core.service
+systemctl restart aprsbox-http-redirect.service
 systemctl restart aprsbox-web.service
