@@ -18,6 +18,7 @@ class HttpsServiceDeploymentTests(unittest.TestCase):
         web_launcher = Path("scripts/start-web.sh").read_text(encoding="utf-8")
 
         self.assertIn("AmbientCapabilities=CAP_NET_BIND_SERVICE", web_service)
+        self.assertNotIn("CapabilityBoundingSet=CAP_NET_BIND_SERVICE", web_service)
         self.assertIn("scripts/start-web.sh", web_service)
         self.assertIn("--port 443", web_launcher)
         self.assertIn('--ssl-certfile "$SSL_DIR/aprsbox.crt"', web_launcher)

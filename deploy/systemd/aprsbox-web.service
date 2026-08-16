@@ -17,7 +17,6 @@ Environment=APRSBOX_PRIVILEGED_RUNNER=sudo -n
 Environment=APRSBOX_CORE_HOST=127.0.0.1
 Environment=APRSBOX_CORE_PORT=18081
 AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ExecStart=/opt/aprsbox/app/scripts/start-web.sh
 Restart=on-failure
 RestartSec=2
