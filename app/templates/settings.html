@@ -275,11 +275,11 @@
         </div>
         <dl class="details-grid">
             <dt>{{ t("Certificate") }}</dt>
-            <dd><code>{{ https_certificate_filename }}</code> — {{ t("Available") if certificate_available else t("Missing") }}</dd>
+            <dd><code>{{ https_certificate_filename }}</code> — {% if certificate_available %}<span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>{% else %}{{ t("Missing") }}{% endif %}</dd>
             <dt>{{ t("Private key") }}</dt>
-            <dd><code>{{ https_private_key_filename }}</code> — {{ t("Available") if private_key_available else t("Missing") }}</dd>
+            <dd><code>{{ https_private_key_filename }}</code> — {% if private_key_available %}<span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>{% else %}{{ t("Missing") }}{% endif %}</dd>
             <dt>{{ t("CA chain") }}</dt>
-            <dd><code>{{ https_ca_chain_filename }}</code> — {{ t("Available") if ca_chain_available else t("Missing") }}</dd>
+            <dd><code>{{ https_ca_chain_filename }}</code> — {% if ca_chain_available %}<span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>{% else %}{{ t("Missing") }}{% endif %}</dd>
             <dt>{{ t("Hostname") }}</dt>
             <dd><code>{{ request.url.hostname or t("Unknown") }}</code></dd>
             <dt>{{ t("HTTPS") }}</dt>
@@ -1748,7 +1748,7 @@
                 } catch (_error) {
                     if (redirectAfterStart) {
                         clearActiveJob();
-                        window.setTimeout(() => window.location.assign(redirectAfterStart), 5000);
+                        window.setTimeout(() => window.location.assign(redirectAfterStart), 10000);
                         return;
                     }
                     const reconnectDetail = overdueDetail

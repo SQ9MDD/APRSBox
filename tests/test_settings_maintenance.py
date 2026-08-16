@@ -146,6 +146,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('{% if not https_ready and not https_enabled %}disabled{% endif %}', template_source)
         self.assertIn('action="{{ request.scope.root_path }}/settings/https"', template_source)
         self.assertIn('{{ t("Save and restart") }}', template_source)
+        self.assertIn('class="tnc-status-icon tnc-status-icon-enabled"', template_source)
+        self.assertIn('/static/icons/check-circle.svg', template_source)
         self.assertNotIn('{{ t("HTTPS only") }}', template_source)
         self.assertIn('@router.post("/settings/https/certificates")', router_source)
         self.assertIn('@router.post("/settings/https")', router_source)
