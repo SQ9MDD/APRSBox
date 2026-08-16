@@ -8,6 +8,7 @@ INSTALL_ROOT="${APRSBOX_INSTALL_ROOT:-/opt/aprsbox}"
 APP_DIR="$INSTALL_ROOT/app"
 SSL_DIR="$INSTALL_ROOT/data/ssl"
 HTTPS_ENABLED_REQUEST=""
+JOB_FINALIZATION_DEFERRED="0"
 
 log() {
     printf '%s\n' "$*"
@@ -109,6 +110,9 @@ job_update() {
 
 on_exit() {
     code="$?"
+    if [ "$JOB_FINALIZATION_DEFERRED" = "1" ] && [ "$code" -eq 0 ]; then
+        exit "$code"
+    fi
     if [ "$code" -eq 0 ]; then
         job_update "success" "Service restart finished." "0" "100" "completed"
     else
@@ -158,16 +162,29 @@ case "$SERVICE_MANAGER" in
         install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-web.service" /etc/systemd/system/aprsbox-web.service
         install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-http-redirect.service" /etc/systemd/system/aprsbox-http-redirect.service
         systemctl daemon-reload
-        job_update "running" "Restarting the core service." "" "45" "restarting-core"
-        systemctl restart aprsbox-core.service
-        if [ -f "$SSL_DIR/https-enabled" ]; then
-            systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
-            systemctl restart aprsbox-http-redirect.service
-        else
-            systemctl disable --now aprsbox-http-redirect.service >/dev/null 2>&1 || true
-        fi
         job_update "running" "Restarting the web service. The browser may reconnect briefly." "" "75" "restarting-web"
-        systemctl restart aprsbox-web.service
+        WEB_RESTART_SCRIPT="$APP_DIR/scripts/update-web-restart.sh"
+        if command -v systemd-run >/dev/null 2>&1 && [ -x "$WEB_RESTART_SCRIPT" ] && systemd-run \
+            --quiet \
+            --collect \
+            --unit "aprsbox-service-restart-$$" \
+            --setenv="APRSBOX_JOB_ID=$JOB_ID" \
+            --setenv="APRSBOX_DB_PATH=$DB_PATH" \
+            --setenv="APRSBOX_INSTALL_ROOT=$INSTALL_ROOT" \
+            --setenv="APRSBOX_JOB_SUCCESS_MESSAGE=Service restart finished." \
+            "$WEB_RESTART_SCRIPT" >/dev/null 2>&1; then
+            JOB_FINALIZATION_DEFERRED="1"
+        else
+            job_update "running" "Restarting the core service." "" "45" "restarting-core"
+            systemctl restart aprsbox-core.service
+            if [ -f "$SSL_DIR/https-enabled" ]; then
+                systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
+                systemctl restart aprsbox-http-redirect.service
+            else
+                systemctl disable --now aprsbox-http-redirect.service >/dev/null 2>&1 || true
+            fi
+            systemctl restart aprsbox-web.service
+        fi
         ;;
     openrc)
         mkdir -p "$SSL_DIR"

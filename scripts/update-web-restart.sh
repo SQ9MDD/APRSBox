@@ -6,6 +6,7 @@ DB_PATH="${APRSBOX_DB_PATH:-}"
 INSTALL_ROOT="${APRSBOX_INSTALL_ROOT:-/opt/aprsbox}"
 APP_DIR="$INSTALL_ROOT/app"
 SSL_DIR="$INSTALL_ROOT/data/ssl"
+SUCCESS_MESSAGE="${APRSBOX_JOB_SUCCESS_MESSAGE:-Application update finished successfully.}"
 
 job_can_update() {
     if [ -z "$JOB_ID" ] || [ -z "$DB_PATH" ]; then
@@ -55,7 +56,7 @@ job_update() {
 on_exit() {
     code="$?"
     if [ "$code" -eq 0 ]; then
-        job_update "success" "Application update finished successfully." "0" "100" "completed"
+        job_update "success" "$SUCCESS_MESSAGE" "0" "100" "completed"
     else
         job_update "error" "Web service restart failed (exit $code)." "$code" "98" "failed"
     fi

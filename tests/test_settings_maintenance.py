@@ -422,6 +422,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('if (status === "success")', template_source)
         self.assertIn('if (status === "error")', template_source)
         self.assertIn("window.sessionStorage.removeItem(activeJobStorageKey)", template_source)
+        self.assertIn('transitionUrl.searchParams.delete("https-transition")', template_source)
 
     def test_settings_styles_include_busy_state_spinner(self) -> None:
         style_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
@@ -622,7 +623,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('APRSBOX_JOB_ID="" "$RESTART_SCRIPT"', update_source)
         self.assertIn('"100" "completed"', restart_source)
         self.assertIn('systemctl restart aprsbox-web.service', web_restart_source)
-        self.assertIn('"success" "Application update finished successfully."', web_restart_source)
+        self.assertIn("APRSBOX_JOB_SUCCESS_MESSAGE:-Application update finished successfully.", web_restart_source)
+        self.assertIn('"success" "$SUCCESS_MESSAGE"', web_restart_source)
 
     def test_maintenance_scripts_accept_tracking_arguments(self) -> None:
         for script_name in (

@@ -56,6 +56,8 @@ class HttpsServiceDeploymentTests(unittest.TestCase):
         systemd_helper = Path("scripts/update-web-restart.sh").read_text(encoding="utf-8")
         restart_helper = Path("scripts/restart-services.sh").read_text(encoding="utf-8")
         self.assertIn('--https-enabled', restart_helper)
+        self.assertIn('systemd-run', restart_helper)
+        self.assertIn('JOB_FINALIZATION_DEFERRED="1"', restart_helper)
         requirements = Path("requirements.txt").read_text(encoding="utf-8")
 
         self.assertIn("deploy/systemd/aprsbox-http-redirect.service", systemd_helper)
