@@ -151,6 +151,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertNotIn('{{ t("HTTPS only") }}', template_source)
         self.assertIn('@router.post("/settings/https/certificates")', router_source)
         self.assertIn('@router.post("/settings/https/certificates/{file_kind}/delete")', router_source)
+        self.assertIn('@router.get("/settings/https/certificates/ca-chain/download")', router_source)
+        self.assertIn('/static/icons/download-outline.svg', template_source)
         self.assertIn("Disable HTTPS before deleting the certificate or private key.", router_source)
         self.assertIn('@router.post("/settings/https")', router_source)
         self.assertIn("HTTPS_CERTIFICATE_FILENAME", router_source)

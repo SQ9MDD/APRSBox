@@ -1820,11 +1820,12 @@ def settings_delete_https_file(
     filenames = {
         "certificate": HTTPS_CERTIFICATE_FILENAME,
         "private-key": HTTPS_PRIVATE_KEY_FILENAME,
+        "ca-chain": HTTPS_CA_CHAIN_FILENAME,
     }
     filename = filenames.get(file_kind)
     if filename is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="HTTPS file not found")
-    if https_file_status(request.app.state.settings.ssl_dir)["https_enabled"]:
+    if file_kind != "ca-chain" and https_file_status(request.app.state.settings.ssl_dir)["https_enabled"]:
         return JSONResponse(
             {"ok": False, "error": _translate("Disable HTTPS before deleting the certificate or private key.")},
             status_code=status.HTTP_409_CONFLICT,
@@ -1837,6 +1838,17 @@ def settings_delete_https_file(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
     return JSONResponse({"ok": True, "message": _translate("HTTPS file deleted."), "reload": True})
+
+
+@router.get("/settings/https/certificates/ca-chain/download")
+def settings_download_https_ca_chain(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> FileResponse:
+    path = request.app.state.settings.ssl_dir / HTTPS_CA_CHAIN_FILENAME
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CA chain not found")
+    return FileResponse(path=path, filename=HTTPS_CA_CHAIN_FILENAME, media_type="application/x-pem-file")
 
 
 @router.post("/settings/https")

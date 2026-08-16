@@ -2088,5 +2088,6 @@
   "Delete this HTTPS file?": "Usunąć ten plik HTTPS?",
   "Disable HTTPS before deleting the certificate or private key.": "Wyłącz HTTPS przed usunięciem certyfikatu lub klucza prywatnego.",
   "Failed to delete HTTPS file.": "Nie udało się usunąć pliku HTTPS.",
-  "HTTPS file deleted.": "Plik HTTPS został usunięty."
+  "HTTPS file deleted.": "Plik HTTPS został usunięty.",
+  "Download CA chain": "Pobierz łańcuch CA"
 }

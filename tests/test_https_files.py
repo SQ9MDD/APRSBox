@@ -64,8 +64,12 @@ class HttpsFileTests(unittest.TestCase):
             delete_https_file(ssl_dir, HTTPS_CERTIFICATE_FILENAME)
             self.assertFalse((ssl_dir / HTTPS_CERTIFICATE_FILENAME).exists())
 
+            save_https_file(ssl_dir, HTTPS_CA_CHAIN_FILENAME, b"ca-chain")
+            delete_https_file(ssl_dir, HTTPS_CA_CHAIN_FILENAME)
+            self.assertFalse((ssl_dir / HTTPS_CA_CHAIN_FILENAME).exists())
+
             with self.assertRaises(ValueError):
-                delete_https_file(ssl_dir, HTTPS_CA_CHAIN_FILENAME)
+                delete_https_file(ssl_dir, "other.pem")
 
 
 if __name__ == "__main__":
