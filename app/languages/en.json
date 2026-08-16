@@ -2038,5 +2038,18 @@
   "APRS-IS → interface": "APRS-IS → interface",
   "Interface → interface": "Interface → interface",
   "No radio interfaces configured.": "No radio interfaces configured.",
-  "Receive-only interface": "Receive-only interface"
+  "Receive-only interface": "Receive-only interface",
+  "HTTPS": "HTTPS",
+  "Enable HTTPS": "Enable HTTPS",
+  "Certificate (.crt/.pem)": "Certificate (.crt/.pem)",
+  "Private key (.key/.pem)": "Private key (.key/.pem)",
+  "CA chain (.crt/.pem, optional)": "CA chain (.crt/.pem, optional)",
+  "Generate local PKI": "Generate local PKI",
+  "HTTPS only": "HTTPS only",
+  "Download Root CA": "Download Root CA",
+  "Certificate": "Certificate",
+  "Private key": "Private key",
+  "CA chain": "CA chain",
+  "Hostname": "Hostname",
+  "HTTP redirect": "HTTP redirect"
 }

@@ -2004,5 +2004,18 @@
   "APRS-IS → interface": "APRS-IS → Schnittstelle",
   "Interface → interface": "Schnittstelle → Schnittstelle",
   "No radio interfaces configured.": "Keine Funkschnittstellen konfiguriert.",
-  "Receive-only interface": "Nur-Empfang-Schnittstelle"
+  "Receive-only interface": "Nur-Empfang-Schnittstelle",
+  "HTTPS": "HTTPS",
+  "Enable HTTPS": "HTTPS aktivieren",
+  "Certificate (.crt/.pem)": "Zertifikat (.crt/.pem)",
+  "Private key (.key/.pem)": "Privater Schlüssel (.key/.pem)",
+  "CA chain (.crt/.pem, optional)": "CA-Kette (.crt/.pem, optional)",
+  "Generate local PKI": "Lokale PKI erzeugen",
+  "HTTPS only": "Nur HTTPS",
+  "Download Root CA": "Root-CA herunterladen",
+  "Certificate": "Zertifikat",
+  "Private key": "Privater Schlüssel",
+  "CA chain": "CA-Kette",
+  "Hostname": "Hostname",
+  "HTTP redirect": "HTTP-Weiterleitung"
 }

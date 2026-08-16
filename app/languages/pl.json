@@ -2060,5 +2060,18 @@
   "APRS-IS → interface": "APRS-IS → interfejs",
   "Interface → interface": "Interfejs → interfejs",
   "No radio interfaces configured.": "Brak skonfigurowanych interfejsów radiowych.",
-  "Receive-only interface": "Interfejs tylko odbiorczy"
+  "Receive-only interface": "Interfejs tylko odbiorczy",
+  "HTTPS": "HTTPS",
+  "Enable HTTPS": "Włącz HTTPS",
+  "Certificate (.crt/.pem)": "Certyfikat (.crt/.pem)",
+  "Private key (.key/.pem)": "Klucz prywatny (.key/.pem)",
+  "CA chain (.crt/.pem, optional)": "Łańcuch CA (.crt/.pem, opcjonalnie)",
+  "Generate local PKI": "Wygeneruj lokalne PKI",
+  "HTTPS only": "Tylko HTTPS",
+  "Download Root CA": "Pobierz główny certyfikat CA",
+  "Certificate": "Certyfikat",
+  "Private key": "Klucz prywatny",
+  "CA chain": "Łańcuch CA",
+  "Hostname": "Nazwa hosta",
+  "HTTP redirect": "Przekierowanie HTTP"
 }

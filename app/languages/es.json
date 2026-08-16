@@ -2006,5 +2006,18 @@
   "APRS-IS → interface": "APRS-IS → interfaz",
   "Interface → interface": "Interfaz → interfaz",
   "No radio interfaces configured.": "No hay interfaces de radio configuradas.",
-  "Receive-only interface": "Interfaz de solo recepción"
+  "Receive-only interface": "Interfaz de solo recepción",
+  "HTTPS": "HTTPS",
+  "Enable HTTPS": "Activar HTTPS",
+  "Certificate (.crt/.pem)": "Certificado (.crt/.pem)",
+  "Private key (.key/.pem)": "Clave privada (.key/.pem)",
+  "CA chain (.crt/.pem, optional)": "Cadena de CA (.crt/.pem, opcional)",
+  "Generate local PKI": "Generar PKI local",
+  "HTTPS only": "Solo HTTPS",
+  "Download Root CA": "Descargar CA raíz",
+  "Certificate": "Certificado",
+  "Private key": "Clave privada",
+  "CA chain": "Cadena de CA",
+  "Hostname": "Nombre del host",
+  "HTTP redirect": "Redirección HTTP"
 }
