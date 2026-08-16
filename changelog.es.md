@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.14.dev - 2026-08-16
+- `GUI / alarmas`: la opción `Alarmas` de la barra lateral se oculta cuando `Activar alarmas APRS` está deshabilitado.
+
 ## 1.10.12.dev - 2026-08-15
 - `Ajustes / diálogos`: los cuadros nativos del navegador `confirm` y `prompt` se sustituyeron por el modal compartido de APRSBox para la actualización de la aplicación, la importación de configuración, el mantenimiento de la base de datos, el reinicio de servicios y las operaciones del host; las confirmaciones `REBOOT` y `POWER OFF` exigen escribir la frase exacta, y la acción de cierre del modal de progreso solo aparece al finalizar la operación.
 - `Ajustes / fuentes de mapas`: guardar y editar una fuente, cambiar el orden, seleccionar la fuente predeterminada, eliminar y limpiar la caché usan ahora el mismo modal asíncrono con indicador de progreso, mensaje de resultado localizado y gestión de errores que las demás acciones del sistema; la validación del formulario se conserva antes del envío.

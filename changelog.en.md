@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.14.dev - 2026-08-16
+- `GUI / alerts`: the `Alerts` sidebar item is hidden when `Enable APRS alarms` is turned off.
+
 ## 1.10.12.dev - 2026-08-15
 - `Settings / dialogs`: native browser `confirm` and `prompt` dialogs were replaced with the shared APRSBox modal for application updates, configuration import, database maintenance, service restart, and host operations; `REBOOT` and `POWER OFF` confirmations require the exact phrase, while the progress modal's close action appears only after the operation finishes.
 - `Settings / map sources`: saving and editing a source, reordering, selecting the default source, deleting, and clearing the cache now use the same asynchronous spinner modal, localized result message, and error handling as other system actions; form validation still runs before submission.

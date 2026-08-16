@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.14.dev - 16.08.2026
+- `GUI / alarmy`: pozycja `Alarmy` w sidebarze jest ukrywana, gdy opcja `Włącz alarmy APRS` jest wyłączona.
+
 ## 1.10.12.dev - 15.08.2026
 - `Ustawienia / modale`: natywne okna przeglądarki `confirm` i `prompt` zastąpiono wspólnym modalem APRSBox dla aktualizacji aplikacji, importu konfiguracji, konserwacji bazy, restartu usług oraz operacji na hoście; potwierdzenia `REBOOT` i `POWER OFF` wymagają wpisania właściwej frazy, a przycisk zamknięcia modala postępu pojawia się dopiero po zakończeniu operacji.
 - `Ustawienia / źródła map`: zapis i edycja źródła, zmiana kolejności, ustawienie domyślnego źródła, usuwanie oraz czyszczenie cache używają teraz tego samego asynchronicznego modala ze spinnerem, lokalizowanym komunikatem wyniku i obsługą błędów jak pozostałe akcje systemu; zachowano walidację formularza przed wysłaniem.

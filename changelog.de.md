@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.10.14.dev - 2026-08-16
+- `GUI / Alarme`: Der Eintrag `Alarme` in der Seitenleiste wird ausgeblendet, wenn `APRS-Alarme aktivieren` deaktiviert ist.
+
 ## 1.10.12.dev - 2026-08-15
 - `Einstellungen / Dialoge`: Die nativen Browserdialoge `confirm` und `prompt` wurden für Anwendungsaktualisierung, Konfigurationsimport, Datenbankwartung, Dienstneustart und Host-Aktionen durch das gemeinsame APRSBox-Modal ersetzt; Bestätigungen für `REBOOT` und `POWER OFF` erfordern die exakte Eingabe, während die Schließen-Aktion des Fortschrittsmodals erst nach Abschluss des Vorgangs erscheint.
 - `Einstellungen / Kartenquellen`: Speichern und Bearbeiten, Umsortieren, Festlegen der Standardquelle, Löschen und Leeren des Caches verwenden jetzt denselben asynchronen Modalablauf mit Spinner, lokalisierter Ergebnismeldung und Fehlerbehandlung wie die übrigen Systemaktionen; die Formularvalidierung erfolgt weiterhin vor dem Absenden.
