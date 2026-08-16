@@ -23,6 +23,8 @@ class HttpsServiceDeploymentTests(unittest.TestCase):
         self.assertIn('--ssl-certfile "$SSL_DIR/aprsbox.crt"', web_launcher)
         self.assertIn('--ssl-keyfile "$SSL_DIR/aprsbox.key"', web_launcher)
         self.assertIn("--port 8000", web_launcher)
+        self.assertIn('if [ -f "$SSL_DIR/https-enabled" ]; then', web_launcher)
+        self.assertIn('exit 1', web_launcher)
         self.assertIn("-m uvicorn app.core_main:app", core_service)
         self.assertIn("AmbientCapabilities=CAP_NET_BIND_SERVICE", redirect_service)
         self.assertNotIn("gunicorn", web_service + core_service)
@@ -52,6 +54,7 @@ class HttpsServiceDeploymentTests(unittest.TestCase):
     def test_new_restart_helpers_migrate_units_when_launched_by_old_updater(self) -> None:
         systemd_helper = Path("scripts/update-web-restart.sh").read_text(encoding="utf-8")
         restart_helper = Path("scripts/restart-services.sh").read_text(encoding="utf-8")
+        self.assertIn('--https-enabled', restart_helper)
         requirements = Path("requirements.txt").read_text(encoding="utf-8")
 
         self.assertIn("deploy/systemd/aprsbox-http-redirect.service", systemd_helper)

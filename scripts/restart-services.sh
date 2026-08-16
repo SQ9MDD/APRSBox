@@ -7,6 +7,7 @@ DB_PATH="${APRSBOX_DB_PATH:-}"
 INSTALL_ROOT="${APRSBOX_INSTALL_ROOT:-/opt/aprsbox}"
 APP_DIR="$INSTALL_ROOT/app"
 SSL_DIR="$INSTALL_ROOT/data/ssl"
+HTTPS_ENABLED_REQUEST=""
 
 log() {
     printf '%s\n' "$*"
@@ -51,6 +52,14 @@ parse_args() {
                     exit 2
                 fi
                 DB_PATH="$2"
+                shift 2
+                ;;
+            --https-enabled)
+                if [ "$#" -lt 2 ] || { [ "$2" != "0" ] && [ "$2" != "1" ]; }; then
+                    log "Invalid HTTPS enabled value"
+                    exit 2
+                fi
+                HTTPS_ENABLED_REQUEST="$2"
                 shift 2
                 ;;
             --)
@@ -126,6 +135,17 @@ detect_service_manager() {
 }
 
 detect_service_manager
+
+if [ "$HTTPS_ENABLED_REQUEST" = "1" ]; then
+    if [ ! -f "$SSL_DIR/aprsbox.crt" ] || [ ! -f "$SSL_DIR/aprsbox.key" ]; then
+        log "Cannot enable HTTPS: aprsbox.crt or aprsbox.key is missing."
+        exit 1
+    fi
+    touch "$SSL_DIR/https-enabled"
+    chown aprsbox:aprsbox "$SSL_DIR/https-enabled" 2>/dev/null || true
+elif [ "$HTTPS_ENABLED_REQUEST" = "0" ]; then
+    rm -f "$SSL_DIR/https-enabled"
+fi
 
 case "$SERVICE_MANAGER" in
     systemd)

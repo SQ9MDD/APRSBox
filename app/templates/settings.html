@@ -1660,6 +1660,7 @@
                 return;
             }
             const reloadDelayMs = Number(options.reloadDelayMs || 0);
+            const redirectAfterStart = String(options.redirectAfterStart || "").trim();
             const title = titleForAction(actionId);
             let lastProgressPercent = 0;
             let lastStageLabel = String(options.message || labels.defaultMessage);
@@ -1694,6 +1695,10 @@
 
                     if (status === "success") {
                         clearActiveJob();
+                        if (redirectAfterStart) {
+                            window.location.assign(redirectAfterStart);
+                            return;
+                        }
                         const successLabel = actionId === "update-application"
                             ? messageForJobStage(actionId, "completed", labels.completed)
                             : (message || labels.completed);
@@ -1741,6 +1746,10 @@
                         detail: overdueDetail,
                     });
                 } catch (_error) {
+                    if (redirectAfterStart) {
+                        window.location.assign(redirectAfterStart);
+                        return;
+                    }
                     const reconnectDetail = overdueDetail
                         ? `${labels.reconnecting}\n${overdueDetail}`
                         : labels.reconnecting;
@@ -1782,12 +1791,6 @@
                     return;
                 }
 
-                const redirectAfterStart = String(options.redirectAfterStart || "").trim();
-                if (redirectAfterStart) {
-                    window.setTimeout(() => window.location.assign(redirectAfterStart), 6000);
-                    return;
-                }
-
                 try {
                     window.sessionStorage.setItem(
                         activeJobStorageKey,
@@ -1800,6 +1803,7 @@
                             reloadOnSuccess: Boolean(options.reloadOnSuccess),
                             reloadDelayMs: Number(options.reloadDelayMs || 0),
                             recoveryHealthTimeoutMs: Number(options.recoveryHealthTimeoutMs || 0),
+                            redirectAfterStart: String(options.redirectAfterStart || ""),
                         })
                     );
                 } catch (_error) {
@@ -1896,6 +1900,7 @@
             const reloadOnSuccess = Boolean(stored.reloadOnSuccess);
             const reloadDelayMs = Number(stored.reloadDelayMs || 0);
             const recoveryHealthTimeoutMs = Number(stored.recoveryHealthTimeoutMs || 0);
+            const redirectAfterStart = String(stored.redirectAfterStart || "");
 
             progressDismissed = false;
             showSettingsProgress(message, {
@@ -1911,6 +1916,7 @@
                 reloadOnSuccess,
                 reloadDelayMs,
                 recoveryHealthTimeoutMs,
+                redirectAfterStart,
             });
         };
 

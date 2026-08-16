@@ -1843,7 +1843,7 @@ def settings_update_https(
         )
 
     job_id = create_system_job("restart-services", message=_translate("Queued."))
-    result = start_service_restart_job(job_id=job_id)
+    result = start_service_restart_job(job_id=job_id, https_enabled=requested_enabled)
     if not result.get("ok"):
         save_https_enabled(ssl_dir, previous_enabled)
         mark_system_job_error(job_id, message=_translate(str(result.get("error") or "Failed to start restart script.")))

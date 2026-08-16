@@ -680,6 +680,13 @@ class SettingsMaintenanceTests(unittest.TestCase):
             kwargs = runner.call_args.kwargs
             self.assertEqual(kwargs.get("extra_args"), ["--git-branch", "dev"])
 
+    def test_https_restart_passes_requested_state_as_cli_argument(self) -> None:
+        with patch("app.services.system._start_background_script", return_value={"ok": True}) as runner:
+            result = start_service_restart_job(job_id=123, https_enabled=True)
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(runner.call_args.kwargs.get("extra_args"), ["--https-enabled", "1"])
+
     def test_system_actions_are_rejected_in_container_mode_without_starting_scripts(self) -> None:
         with patch("app.services.system.is_container_mode", return_value=True), patch(
             "app.services.system._start_background_script"

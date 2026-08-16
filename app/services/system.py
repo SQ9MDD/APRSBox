@@ -413,13 +413,18 @@ def start_service_restart() -> dict[str, Any]:
     )
 
 
-def start_service_restart_job(*, job_id: int) -> dict[str, Any]:
+def start_service_restart_job(*, job_id: int, https_enabled: bool | None = None) -> dict[str, Any]:
     if is_container_mode():
         return _container_mode_action_blocked_result()
     return _start_background_script(
         script_name="restart-services.sh",
         log_filename="service-restart.log",
         job_id=job_id,
+        extra_args=(
+            ["--https-enabled", "1" if https_enabled else "0"]
+            if https_enabled is not None
+            else None
+        ),
     )
 
 
