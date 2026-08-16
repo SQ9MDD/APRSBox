@@ -128,6 +128,7 @@ case "$SERVICE_MANAGER" in
     systemd)
         job_update "running" "Restarting the core service." "" "45" "restarting-core"
         systemctl restart aprsbox-core.service
+        systemctl restart aprsbox-http-redirect.service
         job_update "running" "Restarting the web service. The browser may reconnect briefly." "" "75" "restarting-web"
         systemctl restart aprsbox-web.service
         ;;
@@ -137,6 +138,11 @@ case "$SERVICE_MANAGER" in
             rc-service aprsbox-core restart || { rc-service aprsbox-core stop || true; rc-service aprsbox-core start; }
         else
             rc-service aprsbox-core start
+        fi
+        if rc-service aprsbox-http-redirect status >/dev/null 2>&1; then
+            rc-service aprsbox-http-redirect restart || { rc-service aprsbox-http-redirect stop || true; rc-service aprsbox-http-redirect start; }
+        else
+            rc-service aprsbox-http-redirect start
         fi
         job_update "running" "Restarting the web service. The browser may reconnect briefly." "" "75" "restarting-web"
         if rc-service aprsbox-web status >/dev/null 2>&1; then

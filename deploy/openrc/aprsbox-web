@@ -3,8 +3,9 @@
 name="APRSBox Web"
 description="APRSBox FastAPI web GUI"
 command="/opt/aprsbox/venv/bin/python"
-command_args="-m gunicorn --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker --access-logfile - --error-logfile - app.main:app"
+command_args="-m uvicorn app.main:app --host 0.0.0.0 --port 443 --ssl-certfile /opt/aprsbox/data/ssl/aprsbox.crt --ssl-keyfile /opt/aprsbox/data/ssl/aprsbox.key --access-log"
 command_user="aprsbox:aprsbox"
+capabilities="^cap_net_bind_service"
 directory="/opt/aprsbox/app"
 pidfile="/run/aprsbox-web.pid"
 command_background="yes"
@@ -24,5 +25,6 @@ export APRSBOX_CORE_PORT="18081"
 depend() {
     need localmount
     after aprsbox-core
+    use aprsbox-http-redirect
     use net
 }

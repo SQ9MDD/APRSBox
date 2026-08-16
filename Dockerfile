@@ -62,24 +62,12 @@ else
 fi
 
 echo "[APRSBox] Starting core..."
-gunicorn \
-  --bind 127.0.0.1:18081 \
-  --workers 1 \
-  --worker-class uvicorn.workers.UvicornWorker \
-  --access-logfile - \
-  --error-logfile - \
-  app.core_main:app &
+uvicorn app.core_main:app --host 127.0.0.1 --port 18081 --access-log &
 
 CORE_PID=$!
 
 echo "[APRSBox] Starting web..."
-gunicorn \
-  --bind 0.0.0.0:8000 \
-  --workers 1 \
-  --worker-class uvicorn.workers.UvicornWorker \
-  --access-logfile - \
-  --error-logfile - \
-  app.main:app &
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --access-log &
 
 WEB_PID=$!
 

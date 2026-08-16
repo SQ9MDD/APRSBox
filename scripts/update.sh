@@ -7,6 +7,7 @@ APP_DIR="$INSTALL_ROOT/app"
 VENV_DIR="$INSTALL_ROOT/venv"
 DB_PATH="${APRSBOX_DB_PATH:-$INSTALL_ROOT/data/aprsbox.db}"
 LOG_DIR="${APRSBOX_LOG_DIR:-$INSTALL_ROOT/logs}"
+SSL_DIR="$INSTALL_ROOT/data/ssl"
 GIT_URL="${APRSBOX_GIT_URL:-https://github.com/SQ9MDD/APRSBox.git}"
 GIT_BRANCH="${APRSBOX_GIT_BRANCH:-}"
 GIT_BRANCH_CLI=""
@@ -143,6 +144,7 @@ restart_services_fallback() {
     case "$SERVICE_MANAGER" in
         systemd)
             systemctl restart aprsbox-core.service
+            systemctl restart aprsbox-http-redirect.service
             systemctl restart aprsbox-web.service
             ;;
         openrc)
@@ -150,6 +152,11 @@ restart_services_fallback() {
                 rc-service aprsbox-core restart || { rc-service aprsbox-core stop || true; rc-service aprsbox-core start; }
             else
                 rc-service aprsbox-core start
+            fi
+            if rc-service aprsbox-http-redirect status >/dev/null 2>&1; then
+                rc-service aprsbox-http-redirect restart || { rc-service aprsbox-http-redirect stop || true; rc-service aprsbox-http-redirect start; }
+            else
+                rc-service aprsbox-http-redirect start
             fi
             if rc-service aprsbox-web status >/dev/null 2>&1; then
                 rc-service aprsbox-web restart || { rc-service aprsbox-web stop || true; rc-service aprsbox-web start; }
@@ -172,6 +179,7 @@ stop_services() {
         openrc)
             rc-service aprsbox-web stop >/dev/null 2>&1 || true
             rc-service aprsbox-core stop >/dev/null 2>&1 || true
+            rc-service aprsbox-http-redirect stop >/dev/null 2>&1 || true
             ;;
     esac
 }
@@ -279,6 +287,8 @@ log "Starting application update from $GIT_URL ($GIT_BRANCH)"
 job_update "running" "Starting application update." "" "2" "starting"
 mkdir -p "$LOG_DIR"
 mkdir -p "$INSTALL_ROOT/backups"
+mkdir -p "$SSL_DIR"
+chown "$APP_USER":"$APP_USER" "$SSL_DIR" 2>/dev/null || true
 
 job_update "running" "Downloading application files." "" "8" "downloading"
 git clone --depth 1 --branch "$GIT_BRANCH" "$GIT_URL" "$CHECKOUT_DIR"
@@ -363,6 +373,22 @@ fi
 
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR" "$VENV_DIR" 2>/dev/null || true
 
+case "$SERVICE_MANAGER" in
+    systemd)
+        install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-core.service" /etc/systemd/system/aprsbox-core.service
+        install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-web.service" /etc/systemd/system/aprsbox-web.service
+        install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-http-redirect.service" /etc/systemd/system/aprsbox-http-redirect.service
+        systemctl daemon-reload
+        systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
+        ;;
+    openrc)
+        install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-core" /etc/init.d/aprsbox-core
+        install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-web" /etc/init.d/aprsbox-web
+        install -m 0755 "$APP_DIR/deploy/openrc/aprsbox-http-redirect" /etc/init.d/aprsbox-http-redirect
+        rc-update add aprsbox-http-redirect default >/dev/null 2>&1 || true
+        ;;
+esac
+
 job_update "running" "Updating the application database." "" "84" "updating-database"
 PYTHONPATH="$APP_DIR" \
     APRSBOX_ENV=production \
@@ -377,6 +403,7 @@ WEB_RESTART_SCRIPT="$APP_DIR/scripts/update-web-restart.sh"
 if [ "$SERVICE_MANAGER" = "systemd" ]; then
     job_update "running" "Restarting the core service." "" "90" "restarting-core"
     systemctl restart aprsbox-core.service
+    systemctl restart aprsbox-http-redirect.service
 fi
 
 job_update "running" "Finalizing the update and cleaning up old files." "" "94" "finalizing"

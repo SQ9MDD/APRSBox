@@ -1,0 +1,18 @@
+#!/sbin/openrc-run
+
+name="APRSBox HTTP to HTTPS redirect"
+command="/opt/aprsbox/venv/bin/python"
+command_args="/opt/aprsbox/app/scripts/http-redirect.py"
+command_user="aprsbox:aprsbox"
+capabilities="^cap_net_bind_service"
+directory="/opt/aprsbox/app"
+pidfile="/run/aprsbox-http-redirect.pid"
+command_background="yes"
+output_log="/opt/aprsbox/logs/aprsbox-http-redirect.log"
+error_log="/opt/aprsbox/logs/aprsbox-http-redirect.error.log"
+retry="TERM/30/KILL/5"
+
+depend() {
+    need localmount
+    use net
+}

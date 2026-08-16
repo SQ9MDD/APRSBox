@@ -25,6 +25,7 @@ SERVICES_STARTED="0"
 SERVICE_MANAGER="unknown"
 CORE_PIDFILE="/run/aprsbox-core.pid"
 WEB_PIDFILE="/run/aprsbox-web.pid"
+HTTP_REDIRECT_PIDFILE="/run/aprsbox-http-redirect.pid"
 SERIAL_DEVICE_GLOBS="${APRSBOX_SERIAL_DEVICE_GLOBS:-/dev/ttyACM* /dev/ttyUSB*}"
 PRIV_WRAPPER_DIR="/usr/local/libexec/aprsbox"
 SUDOERS_FILE="/etc/sudoers.d/aprsbox"
@@ -219,6 +220,7 @@ prepare_directories() {
     mkdir -p \
         "$INSTALL_ROOT" \
         "$INSTALL_ROOT/data" \
+        "$INSTALL_ROOT/data/ssl" \
         "$INSTALL_ROOT/config" \
         "$INSTALL_ROOT/logs" \
         "$INSTALL_ROOT/backups"
@@ -228,7 +230,7 @@ prepare_directories() {
 stop_services() {
     case "$SERVICE_MANAGER" in
         systemd)
-            systemctl stop aprsbox-web.service aprsbox-core.service >/dev/null 2>&1 || true
+            systemctl stop aprsbox-http-redirect.service aprsbox-web.service aprsbox-core.service >/dev/null 2>&1 || true
             ;;
         openrc)
             if [ -x /etc/init.d/aprsbox-web ]; then
@@ -237,8 +239,12 @@ stop_services() {
             if [ -x /etc/init.d/aprsbox-core ]; then
                 rc-service aprsbox-core stop || true
             fi
+            if [ -x /etc/init.d/aprsbox-http-redirect ]; then
+                rc-service aprsbox-http-redirect stop || true
+            fi
             cleanup_stale_pidfile "$WEB_PIDFILE"
             cleanup_stale_pidfile "$CORE_PIDFILE"
+            cleanup_stale_pidfile "$HTTP_REDIRECT_PIDFILE"
             ;;
     esac
 }
@@ -347,19 +353,7 @@ verify_python_runtime() {
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -c "import gunicorn.app.wsgiapp, app.main, app.core_main"
-
-    PYTHONPATH="$STAGING_APP_DIR" \
-        APRSBOX_ENV=production \
-        APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
-        APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -m gunicorn --check-config --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.main:app
-
-    PYTHONPATH="$STAGING_APP_DIR" \
-        APRSBOX_ENV=production \
-        APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
-        APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -m gunicorn --check-config --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker app.core_main:app
+        "$VENV_DIR/bin/python" -c "import uvicorn, app.main, app.core_main"
 }
 
 activate_staged_installation() {
@@ -411,10 +405,12 @@ install_service_units() {
         systemd)
             install -m 0644 "$SYSTEMD_DEPLOY_DIR/aprsbox-core.service" /etc/systemd/system/aprsbox-core.service
             install -m 0644 "$SYSTEMD_DEPLOY_DIR/aprsbox-web.service" /etc/systemd/system/aprsbox-web.service
+            install -m 0644 "$SYSTEMD_DEPLOY_DIR/aprsbox-http-redirect.service" /etc/systemd/system/aprsbox-http-redirect.service
             ;;
         openrc)
             install -m 0755 "$OPENRC_DEPLOY_DIR/aprsbox-web" /etc/init.d/aprsbox-web
             install -m 0755 "$OPENRC_DEPLOY_DIR/aprsbox-core" /etc/init.d/aprsbox-core
+            install -m 0755 "$OPENRC_DEPLOY_DIR/aprsbox-http-redirect" /etc/init.d/aprsbox-http-redirect
             ;;
         *)
             log "No supported service manager detected. Service files were not installed."
@@ -497,8 +493,8 @@ enable_services() {
     case "$SERVICE_MANAGER" in
         systemd)
             systemctl daemon-reload
-            systemctl enable aprsbox-core.service aprsbox-web.service >/dev/null 2>&1 || true
-            if systemctl restart aprsbox-core.service && systemctl restart aprsbox-web.service; then
+            systemctl enable aprsbox-core.service aprsbox-web.service aprsbox-http-redirect.service >/dev/null 2>&1 || true
+            if systemctl restart aprsbox-core.service && systemctl restart aprsbox-http-redirect.service && systemctl restart aprsbox-web.service; then
                 SERVICES_STARTED="1"
                 return
             fi
@@ -509,10 +505,13 @@ enable_services() {
             if command -v rc-update >/dev/null 2>&1; then
                 rc-update add aprsbox-core default || true
                 rc-update add aprsbox-web default || true
+                rc-update add aprsbox-http-redirect default || true
                 if rc-service aprsbox-core restart || rc-service aprsbox-core start; then
-                    if rc-service aprsbox-web restart || rc-service aprsbox-web start; then
-                        SERVICES_STARTED="1"
-                        return
+                    if rc-service aprsbox-http-redirect restart || rc-service aprsbox-http-redirect start; then
+                        if rc-service aprsbox-web restart || rc-service aprsbox-web start; then
+                            SERVICES_STARTED="1"
+                            return
+                        fi
                     fi
                 fi
                 log "OpenRC commands are available, but services could not be started automatically."
@@ -538,7 +537,7 @@ verify_services() {
     fi
 
     wait_for_http http://127.0.0.1:18081/health aprsbox-core
-    wait_for_http http://127.0.0.1:8000/health aprsbox-web
+    wait_for_http https://127.0.0.1:443/health aprsbox-web
     log "Health checks passed for aprsbox-core and aprsbox-web."
 }
 
@@ -547,7 +546,7 @@ wait_for_http() {
     service_name="$2"
     attempt=1
     while [ "$attempt" -le 30 ]; do
-        if curl -fsS "$url" >/dev/null 2>&1; then
+        if curl -kfsS "$url" >/dev/null 2>&1; then
             return 0
         fi
         sleep 1
@@ -586,7 +585,7 @@ main() {
     log "Web application root: $TARGET_APP_DIR"
     log "Database path: $DB_PATH"
     log ""
-    log "Application URL: http://<your ip address>:8000"
+    log "Application URL: https://<your ip address>"
     log "Login: $ADMIN_USER"
     log "Password: $ADMIN_PASSWORD"
     log ""
