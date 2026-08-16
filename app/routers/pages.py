@@ -165,7 +165,7 @@ from app.services.band_condition import (
     get_band_condition_page_data,
     get_band_condition_snapshot,
 )
-from app.services.network_diagnostics import get_network_diagnostics, resolve_web_ui_port
+from app.services.network_diagnostics import get_network_diagnostics
 from app.services.aprsis import (
     aprsis_runtime_badge,
     get_aprsis_config,
@@ -1018,6 +1018,12 @@ def _settings_page_context(
         https_certificate_filename=HTTPS_CERTIFICATE_FILENAME,
         https_private_key_filename=HTTPS_PRIVATE_KEY_FILENAME,
         https_ca_chain_filename=HTTPS_CA_CHAIN_FILENAME,
+        web_http_port_suffix=(
+            "" if request.app.state.settings.web_http_port == 80 else f":{request.app.state.settings.web_http_port}"
+        ),
+        web_https_port_suffix=(
+            "" if request.app.state.settings.web_https_port == 443 else f":{request.app.state.settings.web_https_port}"
+        ),
         **https_status,
         current_language=current_language if current_language is not None else get_app_language(),
         current_default_units=current_default_units if current_default_units is not None else station_settings.get("default_units", "metric"),
@@ -1100,14 +1106,12 @@ def dashboard(
     templates = request.app.state.templates
     dashboard_band = _dashboard_band_condition_card()
     dashboard_activity = get_dashboard_radio_activity(range_value="24h")
-    server = request.scope.get("server")
-    server_port = server[1] if isinstance(server, (list, tuple)) and len(server) > 1 else None
-    web_ui_port = resolve_web_ui_port(
-        scheme=request.url.scheme,
-        request_port=request.url.port,
-        server_port=server_port,
-        forwarded_port=request.headers.get("x-forwarded-port"),
-        forwarded_proto=request.headers.get("x-forwarded-proto"),
+    https_enabled = bool(https_file_status(request.app.state.settings.ssl_dir)["https_enabled"])
+    direct_scheme = "https" if https_enabled else "http"
+    direct_port = (
+        request.app.state.settings.web_https_port
+        if https_enabled
+        else request.app.state.settings.web_http_port
     )
     context = build_template_context(
         request,
@@ -1117,8 +1121,8 @@ def dashboard(
         dashboard_band=dashboard_band,
         dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
         network_diagnostics=get_network_diagnostics(
-            scheme=request.url.scheme,
-            port=web_ui_port,
+            scheme=direct_scheme,
+            port=direct_port,
             root_path=request.scope.get("root_path", ""),
         ),
     )

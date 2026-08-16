@@ -237,7 +237,7 @@
             action="{{ request.scope.root_path }}/settings/https"
             class="form-grid"
             data-settings-action-id="save-https-settings"
-            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-https-settings', message: {{ t('Saving HTTPS settings and restarting services...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, redirectAfterStart: (this.elements.https_enabled.checked ? 'https://' + window.location.hostname : 'http://' + window.location.hostname + ':8000') + {{ request.scope.root_path|tojson|forceescape }} + '/settings?https-transition=1#settings-panel-https'});"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-https-settings', message: {{ t('Saving HTTPS settings and restarting services...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, redirectAfterStart: (this.elements.https_enabled.checked ? 'https://' + window.location.hostname + {{ web_https_port_suffix|tojson|forceescape }} : 'http://' + window.location.hostname + {{ web_http_port_suffix|tojson|forceescape }}) + {{ request.scope.root_path|tojson|forceescape }} + '/settings?https-transition=1#settings-panel-https'});"
         >
             <label class="full checkbox-row">
                 <input

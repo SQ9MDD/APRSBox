@@ -5,6 +5,7 @@ ENV APRSBOX_DB_PATH=/opt/aprsbox/data/aprsbox.db
 ENV APRSBOX_LOG_DIR=/opt/aprsbox/logs
 ENV APRSBOX_CORE_HOST=127.0.0.1
 ENV APRSBOX_CORE_PORT=18081
+ENV APRSBOX_WEB_HTTP_PORT=8000
 ENV PYTHONPATH=/opt/aprsbox/app
 ENV PYTHONUNBUFFERED=1
 ENV APRSBOX_CONTAINER=1
@@ -45,6 +46,7 @@ export APRSBOX_DB_PATH="${APRSBOX_DB_PATH:-/opt/aprsbox/data/aprsbox.db}"
 export APRSBOX_LOG_DIR="${APRSBOX_LOG_DIR:-/opt/aprsbox/logs}"
 export APRSBOX_CORE_HOST="${APRSBOX_CORE_HOST:-127.0.0.1}"
 export APRSBOX_CORE_PORT="${APRSBOX_CORE_PORT:-18081}"
+export APRSBOX_WEB_HTTP_PORT="${APRSBOX_WEB_HTTP_PORT:-8000}"
 export PYTHONPATH="${PYTHONPATH:-/opt/aprsbox/app}"
 export APRSBOX_CONTAINER="${APRSBOX_CONTAINER:-1}"
 
@@ -67,7 +69,7 @@ uvicorn app.core_main:app --host 127.0.0.1 --port 18081 --access-log &
 CORE_PID=$!
 
 echo "[APRSBox] Starting web..."
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --access-log &
+uvicorn app.main:app --host 0.0.0.0 --port "$APRSBOX_WEB_HTTP_PORT" --access-log &
 
 WEB_PID=$!
 

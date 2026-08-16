@@ -291,7 +291,7 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn("dashboard-v2-network-grid", template)
         self.assertNotIn('t("Network diagnostics")', template)
         self.assertIn("network_diagnostics.web_ui_url", template)
-        self.assertIn("network_diagnostics.ipv6_web_ui_url", template)
+        self.assertIn("network_diagnostics.ipv6 or", template)
         self.assertNotIn('t("Band Condition")', template)
         self.assertNotIn("dashboard_home.band_updated_at", template)
         self.assertNotIn("Current estimate for", template)
