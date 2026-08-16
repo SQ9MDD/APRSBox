@@ -551,7 +551,7 @@ verify_services() {
     if [ -f "$SSL_DIR/https-enabled" ]; then
         wait_for_http https://127.0.0.1:443/health aprsbox-web
     else
-        wait_for_http http://127.0.0.1:80/health aprsbox-web
+        wait_for_http http://127.0.0.1:8000/health aprsbox-web
     fi
     log "Health checks passed for aprsbox-core and aprsbox-web."
 }
@@ -603,7 +603,7 @@ main() {
     if [ -f "$SSL_DIR/https-enabled" ]; then
         log "Application URL: https://<your ip address>"
     else
-        log "Application URL: http://<your ip address>"
+        log "Application URL: http://<your ip address>:8000"
     fi
     log "Login: $ADMIN_USER"
     log "Password: $ADMIN_PASSWORD"

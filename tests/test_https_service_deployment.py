@@ -22,7 +22,7 @@ class HttpsServiceDeploymentTests(unittest.TestCase):
         self.assertIn("--port 443", web_launcher)
         self.assertIn('--ssl-certfile "$SSL_DIR/aprsbox.crt"', web_launcher)
         self.assertIn('--ssl-keyfile "$SSL_DIR/aprsbox.key"', web_launcher)
-        self.assertIn("--port 80", web_launcher)
+        self.assertIn("--port 8000", web_launcher)
         self.assertIn("-m uvicorn app.core_main:app", core_service)
         self.assertIn("AmbientCapabilities=CAP_NET_BIND_SERVICE", redirect_service)
         self.assertNotIn("gunicorn", web_service + core_service)
