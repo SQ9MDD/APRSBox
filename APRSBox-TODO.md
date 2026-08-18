@@ -5,7 +5,7 @@ Lista rozjazdów między obecną implementacją APRSBox a kopiami specyfikacji A
 ## P1
 
 ### 1. Query APRS są ACK-owane mimo wymagań specyfikacji
-- Status: rozjazd funkcjonalny
+- Status: ZROBIONE (2026-08-18) — usunięto ACK dla przychodzących query, deduplikacja i odpowiedzi bez zmian
 - Priorytet: P1
 - Problem:
   - Kod wysyła `ack-now` i `ack-delayed` dla zapytań APRS.
