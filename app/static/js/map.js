@@ -93,7 +93,7 @@
     });
     const coverageLayerGroup = window.L.layerGroup();
     const trackLayerGroup = window.L.layerGroup();
-    const markerLayerGroup = window.L.layerGroup();
+    const markerLayerGroup = buildStationMarkerLayerGroup();
     const rulerLayer = window.L.layerGroup();
     const maidenheadGridLayer = window.L.layerGroup();
     let alertAreaLayer = null;
@@ -114,6 +114,7 @@
     const initialMarkerBatchSize = 20;
     const markerBatchSize = 40;
     const markerBatchTimeBudgetMs = 8;
+    const markerClusterMaxCallsignsInTooltip = 12;
     const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
     const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
     const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
@@ -1959,6 +1960,101 @@
         return normalized.charAt(0);
     }
 
+    function buildStationMarkerLayerGroup() {
+        if (typeof window.L.markerClusterGroup !== "function") {
+            return window.L.layerGroup();
+        }
+        // Cluster only markers that visually overlap; the radius is close to the
+        // icon size so spread-out stations keep rendering as individual markers.
+        const clusterGroup = window.L.markerClusterGroup({
+            maxClusterRadius: 28,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            spiderfyOnMaxZoom: true,
+            spiderfyOnEveryZoom: false,
+            spiderfyDistanceMultiplier: 2.2,
+            removeOutsideVisibleBounds: true,
+            animate: true,
+            animateAddingMarkers: false,
+            chunkedLoading: false,
+            spiderLegPolylineOptions: { weight: 1.5, color: "#7a8a94", opacity: 0.85 },
+            iconCreateFunction: buildStationClusterIcon,
+        });
+        clusterGroup.on("clustermouseover", function (event) {
+            const cluster = event.propagatedFrom || event.layer;
+            if (!cluster || typeof cluster.getAllChildMarkers !== "function") {
+                return;
+            }
+            const tooltipContent = clusterTooltipHtml(cluster.getAllChildMarkers());
+            if (!tooltipContent) {
+                return;
+            }
+            if (cluster.getTooltip()) {
+                cluster.setTooltipContent(tooltipContent);
+            } else {
+                cluster.bindTooltip(tooltipContent, {
+                    direction: "top",
+                    className: "aprs-tooltip",
+                    opacity: 0.96,
+                    sticky: true,
+                });
+            }
+            cluster.openTooltip();
+        });
+        clusterGroup.on("clustermouseout", function (event) {
+            const cluster = event.propagatedFrom || event.layer;
+            if (cluster && typeof cluster.closeTooltip === "function") {
+                cluster.closeTooltip();
+            }
+        });
+        clusterGroup.on("clusterclick", function (event) {
+            const cluster = event.propagatedFrom || event.layer;
+            if (cluster && typeof cluster.closeTooltip === "function") {
+                cluster.closeTooltip();
+            }
+        });
+        return clusterGroup;
+    }
+
+    function buildStationClusterIcon(cluster) {
+        const childMarkers = cluster.getAllChildMarkers();
+        const count = childMarkers.length;
+        const allStale = count > 0 && childMarkers.every((marker) => Boolean(marker.aprsStation && marker.aprsStation.stale));
+        const staleClass = allStale ? " map-station-cluster-stale" : "";
+        return window.L.divIcon({
+            className: `map-station-cluster${staleClass}`,
+            html: `<span class="map-station-cluster-count">${count}</span>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+            tooltipAnchor: [0, -12],
+        });
+    }
+
+    function clusterTooltipHtml(childMarkers) {
+        const callsigns = [];
+        for (const marker of childMarkers || []) {
+            const station = marker.aprsStation;
+            const callsign = station ? String(station.display_callsign || station.callsign || "").trim() : "";
+            if (callsign) {
+                callsigns.push(callsign);
+            }
+        }
+        if (!callsigns.length) {
+            return "";
+        }
+        callsigns.sort((left, right) => left.localeCompare(right));
+        const visible = callsigns.slice(0, markerClusterMaxCallsignsInTooltip);
+        const hiddenCount = callsigns.length - visible.length;
+        const items = visible.map((callsign) => `<li>${escapeHtml(callsign)}</li>`).join("");
+        const more = hiddenCount > 0 ? `<li class="map-station-cluster-more">+${hiddenCount}</li>` : "";
+        return `
+            <div class="map-station-tooltip map-station-cluster-tooltip">
+                <strong>${callsigns.length}</strong>
+                <ul class="map-station-cluster-list">${items}${more}</ul>
+            </div>
+        `;
+    }
+
     function buildStationIcon(station) {
         const staleClass = station.stale ? " map-station-icon-stale" : "";
         const iconPath = station.symbol_icon ? `${staticRoot}${station.symbol_icon}` : `${staticRoot}${aprsSymbolIconFallback}`;
@@ -2339,6 +2435,7 @@
                 icon: buildStationIcon(station),
                 keyboard: false,
             });
+            marker.aprsStation = station;
             syncMarkerInteractions(marker, station, nextTooltipContent);
             markerLayerGroup.addLayer(marker);
             markerLayersByKey.set(key, {
@@ -2348,9 +2445,25 @@
             });
             return;
         }
+        existing.layer.aprsStation = station;
         if (existing.markerSignature !== nextMarkerSignature) {
-            existing.layer.setLatLng([station.latitude, station.longitude]);
-            existing.layer.setIcon(buildStationIcon(station));
+            const currentLatLng = existing.layer.getLatLng();
+            const positionChanged = !currentLatLng
+                || currentLatLng.lat !== station.latitude
+                || currentLatLng.lng !== station.longitude;
+            if (positionChanged) {
+                // The cluster group indexes markers by position, so a moved
+                // marker has to be re-added for clustering to stay correct.
+                markerLayerGroup.removeLayer(existing.layer);
+                existing.layer.setLatLng([station.latitude, station.longitude]);
+                existing.layer.setIcon(buildStationIcon(station));
+                markerLayerGroup.addLayer(existing.layer);
+            } else {
+                existing.layer.setIcon(buildStationIcon(station));
+                if (typeof markerLayerGroup.refreshClusters === "function") {
+                    markerLayerGroup.refreshClusters(existing.layer);
+                }
+            }
             existing.markerSignature = nextMarkerSignature;
             syncMarkerInteractions(existing.layer, station, nextTooltipContent);
             existing.tooltipSignature = nextTooltipSignature;

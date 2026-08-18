@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet-markercluster/MarkerCluster.css?v={{ app_version }}">
+{% endblock %}
+
 {% block content %}
 <section class="panel map-panel">
     <div class="panel-body">
@@ -205,7 +209,8 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ request.scope.root_path }}/static/vendor/leaflet-markercluster/leaflet.markercluster.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}-alerts-global-2"></script>
-<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-deferred-alerts-1"></script>
+<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-map-cluster-1"></script>
 {% endblock %}
