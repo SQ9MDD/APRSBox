@@ -137,6 +137,8 @@
     const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
     const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
     const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
+    const markerSpiderfyHoverEnabled = typeof window.matchMedia === "function"
+        && window.matchMedia("(any-hover: hover) and (any-pointer: fine)").matches;
     let refreshTimer = null;
     let alertRefreshTimer = null;
     let initialAlertLoadTimer = null;
@@ -165,6 +167,10 @@
     let firstStationRefreshSettled = false;
     let markerRenderGeneration = 0;
     let markerRenderFrame = null;
+    let markerSpiderfyHoverTimer = null;
+    let markerSpiderfyHoverMarker = null;
+    let markerSpiderfyCollapseTimer = null;
+    let markerSpiderfyHoverBounds = null;
     let lastAlertAreasSignature = "";
     let lastAlertPanelSignature = "";
     let latestAlertAreaCollection = { type: "FeatureCollection", features: [] };
@@ -2081,17 +2087,204 @@
                 window.location.href = station.detail_href;
             }
         });
+        spiderfier.addListener("spiderfy", function (markers) {
+            updateMarkerSpiderfyHoverBounds(markers);
+        });
+        spiderfier.addListener("unspiderfy", function () {
+            markerSpiderfyHoverBounds = null;
+            cancelMarkerSpiderfyCollapse();
+        });
+        if (markerSpiderfyHoverEnabled) {
+            const mapContainer = map.getContainer();
+            mapContainer.addEventListener("pointermove", handleMarkerSpiderfyPointerMove);
+            mapContainer.addEventListener("pointerleave", scheduleMarkerSpiderfyCollapse);
+            map.on("movestart", collapseHoverSpiderfyImmediately);
+        }
         return spiderfier;
+    }
+
+    function cancelMarkerSpiderfyHover() {
+        if (markerSpiderfyHoverTimer !== null) {
+            window.clearTimeout(markerSpiderfyHoverTimer);
+            markerSpiderfyHoverTimer = null;
+        }
+        markerSpiderfyHoverMarker = null;
+    }
+
+    function cancelMarkerSpiderfyCollapse() {
+        if (markerSpiderfyCollapseTimer !== null) {
+            window.clearTimeout(markerSpiderfyCollapseTimer);
+            markerSpiderfyCollapseTimer = null;
+        }
+    }
+
+    function collapseHoverSpiderfyImmediately() {
+        cancelMarkerSpiderfyHover();
+        cancelMarkerSpiderfyCollapse();
+        markerSpiderfyHoverBounds = null;
+        if (markerSpiderfier && markerSpiderfier.spiderfied) {
+            markerSpiderfier.unspiderfy();
+        }
+    }
+
+    function scheduleMarkerSpiderfyCollapse() {
+        if (!markerSpiderfyHoverEnabled || !markerSpiderfier || !markerSpiderfier.spiderfied) {
+            return;
+        }
+        cancelMarkerSpiderfyCollapse();
+        markerSpiderfyCollapseTimer = window.setTimeout(function () {
+            markerSpiderfyCollapseTimer = null;
+            markerSpiderfyHoverBounds = null;
+            markerSpiderfier.unspiderfy();
+        }, 400);
+    }
+
+    function updateMarkerSpiderfyHoverBounds(markers) {
+        if (!markerSpiderfyHoverEnabled || !Array.isArray(markers) || !markers.length) {
+            markerSpiderfyHoverBounds = null;
+            return;
+        }
+        const points = [];
+        for (const marker of markers) {
+            points.push(map.latLngToContainerPoint(marker.getLatLng()));
+            if (marker._omsData && marker._omsData.usualPosition) {
+                points.push(map.latLngToContainerPoint(marker._omsData.usualPosition));
+            }
+        }
+        const padding = Math.max(aprsIconSize[0], aprsIconSize[1]) / 2 + 28;
+        let minX = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+        for (const point of points) {
+            minX = Math.min(minX, point.x);
+            maxX = Math.max(maxX, point.x);
+            minY = Math.min(minY, point.y);
+            maxY = Math.max(maxY, point.y);
+        }
+        markerSpiderfyHoverBounds = {
+            minX: minX - padding,
+            maxX: maxX + padding,
+            minY: minY - padding,
+            maxY: maxY + padding,
+        };
+        cancelMarkerSpiderfyCollapse();
+    }
+
+    function handleMarkerSpiderfyPointerMove(event) {
+        if (!markerSpiderfyHoverBounds || !markerSpiderfier || !markerSpiderfier.spiderfied) {
+            return;
+        }
+        const point = map.mouseEventToContainerPoint(event);
+        const inside = point.x >= markerSpiderfyHoverBounds.minX
+            && point.x <= markerSpiderfyHoverBounds.maxX
+            && point.y >= markerSpiderfyHoverBounds.minY
+            && point.y <= markerSpiderfyHoverBounds.maxY;
+        if (inside) {
+            cancelMarkerSpiderfyCollapse();
+        } else {
+            scheduleMarkerSpiderfyCollapse();
+        }
+    }
+
+    function collectMarkersNearSpiderfyMarker(marker) {
+        if (!markerSpiderfier || !marker || !map.hasLayer(marker)) {
+            return { nearby: [], nonNearby: [] };
+        }
+        const markerPoint = map.latLngToLayerPoint(marker.getLatLng());
+        const maximumDistanceSquared = markerSpiderfyNearbyDistancePx * markerSpiderfyNearbyDistancePx;
+        const nearby = [];
+        const nonNearby = [];
+        for (const candidate of markerSpiderfier.getMarkers()) {
+            if (!map.hasLayer(candidate)) {
+                continue;
+            }
+            const candidatePoint = map.latLngToLayerPoint(candidate.getLatLng());
+            const deltaX = candidatePoint.x - markerPoint.x;
+            const deltaY = candidatePoint.y - markerPoint.y;
+            if (deltaX * deltaX + deltaY * deltaY < maximumDistanceSquared) {
+                nearby.push({ marker: candidate, markerPt: candidatePoint });
+            } else {
+                nonNearby.push(candidate);
+            }
+        }
+        return { nearby, nonNearby };
+    }
+
+    function scheduleMarkerSpiderfyOnHover(marker) {
+        if (!markerSpiderfyHoverEnabled || !markerSpiderfierActive || !markerSpiderfier) {
+            return;
+        }
+        if (markerSpiderfier.spiderfied) {
+            cancelMarkerSpiderfyCollapse();
+            return;
+        }
+        cancelMarkerSpiderfyHover();
+        markerSpiderfyHoverMarker = marker;
+        markerSpiderfyHoverTimer = window.setTimeout(function () {
+            markerSpiderfyHoverTimer = null;
+            const hoveredMarker = markerSpiderfyHoverMarker;
+            markerSpiderfyHoverMarker = null;
+            const candidates = collectMarkersNearSpiderfyMarker(hoveredMarker);
+            if (candidates.nearby.length > 1) {
+                markerSpiderfier.spiderfy(candidates.nearby, candidates.nonNearby);
+            }
+        }, 150);
+    }
+
+    function attachMarkerSpiderfyHover(marker) {
+        if (!markerSpiderfyHoverEnabled || marker.aprsboxSpiderfyMouseOverHandler) {
+            return;
+        }
+        marker.aprsboxSpiderfyMouseOverHandler = function () {
+            scheduleMarkerSpiderfyOnHover(marker);
+        };
+        marker.aprsboxSpiderfyMouseOutHandler = function () {
+            if (markerSpiderfyHoverMarker === marker) {
+                cancelMarkerSpiderfyHover();
+            }
+        };
+        marker.on("mouseover", marker.aprsboxSpiderfyMouseOverHandler);
+        marker.on("mouseout", marker.aprsboxSpiderfyMouseOutHandler);
+    }
+
+    function detachMarkerSpiderfyHover(marker) {
+        if (marker.aprsboxSpiderfyMouseOverHandler) {
+            marker.off("mouseover", marker.aprsboxSpiderfyMouseOverHandler);
+            marker.off("mouseout", marker.aprsboxSpiderfyMouseOutHandler);
+            delete marker.aprsboxSpiderfyMouseOverHandler;
+            delete marker.aprsboxSpiderfyMouseOutHandler;
+        }
+        if (markerSpiderfyHoverMarker === marker) {
+            cancelMarkerSpiderfyHover();
+        }
+    }
+
+    function detachMarkerSpiderfierClick(marker) {
+        if (!markerSpiderfyHoverEnabled || !markerSpiderfier || !marker || !marker._oms) {
+            return;
+        }
+        const markerIndex = markerSpiderfier.markers.indexOf(marker);
+        if (markerIndex < 0) {
+            return;
+        }
+        const clickListener = markerSpiderfier.markerListeners[markerIndex];
+        marker.removeEventListener("click", clickListener);
+        // Keep the arrays aligned so the upstream remove/clear methods remain safe.
+        markerSpiderfier.markerListeners[markerIndex] = window.L.Util.falseFn;
     }
 
     function addMarkerToSpiderfier(marker) {
         if (markerSpiderfier && markerSpiderfierActive && marker && !marker._oms) {
             markerSpiderfier.addMarker(marker);
+            detachMarkerSpiderfierClick(marker);
+            attachMarkerSpiderfyHover(marker);
         }
     }
 
     function removeMarkerFromSpiderfier(marker) {
         if (markerSpiderfier && marker && marker._oms) {
+            detachMarkerSpiderfyHover(marker);
             markerSpiderfier.removeMarker(marker);
         }
     }
@@ -2107,6 +2300,10 @@
         }
         markerSpiderfierActive = shouldBeActive;
         if (!shouldBeActive) {
+            collapseHoverSpiderfyImmediately();
+            for (const record of markerLayersByKey.values()) {
+                detachMarkerSpiderfyHover(record.layer);
+            }
             markerSpiderfier.clearMarkers();
             return;
         }
@@ -2419,7 +2616,7 @@
         }
         if (station.detail_href) {
             marker.aprsboxClickHandler = function () {
-                if (markerSpiderfierActive) {
+                if (markerSpiderfierActive && !markerSpiderfyHoverEnabled) {
                     return;
                 }
                 window.location.href = station.detail_href;

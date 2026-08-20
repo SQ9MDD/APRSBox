@@ -284,6 +284,15 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("nearbyDistance: markerSpiderfyNearbyDistancePx", map_script_source)
         self.assertIn("circleFootSeparation: isModernAprsSymbolSet ? 42 : 32", map_script_source)
         self.assertIn("spiralFootSeparation: isModernAprsSymbolSet ? 44 : 34", map_script_source)
+        self.assertIn('window.matchMedia("(any-hover: hover) and (any-pointer: fine)").matches', map_script_source)
+        self.assertIn("mapContainer.addEventListener(\"pointermove\", handleMarkerSpiderfyPointerMove)", map_script_source)
+        self.assertIn("mapContainer.addEventListener(\"pointerleave\", scheduleMarkerSpiderfyCollapse)", map_script_source)
+        self.assertIn("markerSpiderfyCollapseTimer = window.setTimeout(function ()", map_script_source)
+        self.assertIn("}, 400);", map_script_source)
+        self.assertIn("markerSpiderfyHoverTimer = window.setTimeout(function ()", map_script_source)
+        self.assertIn("}, 150);", map_script_source)
+        self.assertIn("marker.removeEventListener(\"click\", clickListener)", map_script_source)
+        self.assertIn("if (markerSpiderfierActive && !markerSpiderfyHoverEnabled)", map_script_source)
         self.assertIn('map.on("zoomend", syncMarkerSpiderfierActivation)', map_script_source)
         self.assertTrue(Path(
             "app/static/vendor/overlapping-marker-spiderfier-leaflet/oms.min.js"
