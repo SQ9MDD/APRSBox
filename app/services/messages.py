@@ -677,11 +677,38 @@ def mark_conversation_read(conversation_id: int) -> None:
 
 
 def delete_conversation(conversation_id: int) -> None:
-    message_ids = [int(row["id"]) for row in fetch_all("SELECT id FROM aprs_messages WHERE conversation_id = ?", (conversation_id,))]
+    delete_conversations([conversation_id])
+
+
+def delete_conversations(conversation_ids: list[int]) -> dict[str, int]:
+    normalized_ids = sorted(
+        {int(conversation_id) for conversation_id in conversation_ids if int(conversation_id) > 0}
+    )
+    if not normalized_ids:
+        return {"conversation_count": 0, "message_count": 0}
+    placeholders = ", ".join("?" for _ in normalized_ids)
+    message_ids = [
+        int(row["id"])
+        for row in fetch_all(
+            f"SELECT id FROM aprs_messages WHERE conversation_id IN ({placeholders}) ORDER BY id ASC",
+            tuple(normalized_ids),
+        )
+    ]
+    conversation_row = fetch_one(
+        f"SELECT COUNT(*) AS total FROM aprs_message_conversations WHERE id IN ({placeholders})",
+        tuple(normalized_ids),
+    )
     for message_id in message_ids:
         cancel_pending_message_jobs(message_id)
     with get_connection() as connection:
-        connection.execute("DELETE FROM aprs_message_conversations WHERE id = ?", (conversation_id,))
+        connection.execute(
+            f"DELETE FROM aprs_message_conversations WHERE id IN ({placeholders})",
+            tuple(normalized_ids),
+        )
+    return {
+        "conversation_count": int(conversation_row["total"] or 0) if conversation_row is not None else 0,
+        "message_count": len(message_ids),
+    }
 
 
 def clear_message_inbox() -> dict[str, int]:

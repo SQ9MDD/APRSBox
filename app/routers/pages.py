@@ -123,6 +123,7 @@ from app.services.messages import (
     clear_message_inbox,
     create_or_update_conversation,
     delete_conversation as delete_message_conversation,
+    delete_conversations as delete_message_conversations,
     get_messages_page_data as get_live_messages_page_data,
     get_effective_message_target_groups,
     get_unread_inbox_count,
@@ -4613,6 +4614,23 @@ def messages_delete(
 ) -> JSONResponse:
     delete_message_conversation(conversation_id)
     return JSONResponse({"ok": True, "messages_view": get_live_messages_page_data()})
+
+
+@router.post("/api/messages/selected-conversations/delete")
+async def messages_delete_selected(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    payload = await request.json()
+    raw_ids = payload.get("conversation_ids") if isinstance(payload, dict) else None
+    if not isinstance(raw_ids, list):
+        return JSONResponse({"error": "conversation_ids must be a list."}, status_code=status.HTTP_400_BAD_REQUEST)
+    try:
+        conversation_ids = [int(conversation_id) for conversation_id in raw_ids]
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "conversation_ids must contain integer IDs."}, status_code=status.HTTP_400_BAD_REQUEST)
+    deleted = delete_message_conversations(conversation_ids)
+    return JSONResponse({"ok": True, "deleted": deleted, "messages_view": get_live_messages_page_data()})
 
 
 @router.post("/api/messages/clear")

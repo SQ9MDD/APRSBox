@@ -25,6 +25,7 @@ from app.services.messages import (
     _format_heard_parts,
     _heard_recently_state,
     clear_message_inbox,
+    delete_conversations,
     get_message_settings,
     get_unread_inbox_count,
     get_messages_page_data,
@@ -96,6 +97,28 @@ def station_payload(interface_id: int, *, ssid: str = "4") -> dict[str, str]:
 
 
 class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
+    def test_delete_conversations_removes_only_selected_threads_and_cancels_their_jobs(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            queue_outgoing_message(callsign="SP8ABC", message_text="Delete me", path="")
+            queue_outgoing_message(callsign="DL1XYZ-9", message_text="Keep me", path="")
+            selected = fetch_one("SELECT id FROM aprs_message_conversations WHERE remote_callsign = 'SP8ABC'")
+            assert selected is not None
+
+            result = delete_conversations([int(selected["id"])])
+
+            self.assertEqual(result, {"conversation_count": 1, "message_count": 1})
+            remaining = fetch_all(
+                "SELECT remote_callsign, remote_ssid FROM aprs_message_conversations ORDER BY remote_callsign"
+            )
+            self.assertEqual(
+                [(str(row["remote_callsign"]), int(row["remote_ssid"])) for row in remaining],
+                [("DL1XYZ", 9)],
+            )
+            jobs = fetch_all("SELECT status FROM outbound_jobs WHERE kind = 'message' ORDER BY id ASC")
+            self.assertEqual([str(row["status"]) for row in jobs], ["cancelled", "queued"])
+
     def test_clear_message_inbox_removes_all_conversations_and_cancels_queued_jobs(self) -> None:
         with temporary_database():
             interface_id = insert_modem()

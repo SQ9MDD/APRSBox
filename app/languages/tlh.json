@@ -265,6 +265,7 @@
   "Clear inbox": "Clear inbox",
   "Messages: all / new": "Messages: all / new",
   "This will permanently delete all saved APRS conversations and their received and sent messages.": "This will permanently delete all saved APRS conversations and their received and sent messages.",
+  "This will permanently delete the selected APRS conversations and their received and sent messages.": "This will permanently delete the selected APRS conversations and their received and sent messages.",
   "{conversationCount} conversations · {messageCount} messages": "{conversationCount} conversations · {messageCount} messages",
   "This will permanently delete the conversation with {callsign} and all its messages.": "This will permanently delete the conversation with {callsign} and all its messages.",
   "Copyright SQ9MDD": "Copyright SQ9MDD",

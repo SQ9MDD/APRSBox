@@ -734,6 +734,7 @@
   "Clear inbox": "Wyczyść skrzynkę",
   "Messages: all / new": "Wiadomości: wszystkie / nowe",
   "This will permanently delete all saved APRS conversations and their received and sent messages.": "Spowoduje to trwałe usunięcie wszystkich zapisanych konwersacji APRS oraz odebranych i wysłanych wiadomości.",
+  "This will permanently delete the selected APRS conversations and their received and sent messages.": "Spowoduje to trwałe usunięcie zaznaczonych konwersacji APRS oraz ich odebranych i wysłanych wiadomości.",
   "{conversationCount} conversations · {messageCount} messages": "Konwersacje: {conversationCount} · wiadomości: {messageCount}",
   "This will permanently delete the conversation with {callsign} and all its messages.": "Spowoduje to trwałe usunięcie konwersacji z {callsign} i wszystkich jej wiadomości.",
   "Delete conversation": "Usuń konwersację",

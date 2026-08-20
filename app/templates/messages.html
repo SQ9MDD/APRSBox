@@ -35,12 +35,15 @@
                         </div>
                     </div>
                     <div class="messages-sidebar-actions">
+                        <label class="messages-select-all" title="{{ t('Select all') }}">
+                            <input id="messages-select-all" type="checkbox" aria-label="{{ t('Select all') }}">
+                        </label>
                         <button
                             class="table-icon-button table-icon-button-danger"
                             id="messages-clear-inbox-button"
                             type="button"
-                            title="{{ t('Clear inbox') }}"
-                            aria-label="{{ t('Clear inbox') }}"
+                            title="{{ t('Delete selected') }}"
+                            aria-label="{{ t('Delete selected') }}"
                         >
                             <img src="{{ request.scope.root_path }}/static/icons/delete-sweep-outline.svg" alt="">
                         </button>
@@ -185,6 +188,7 @@
     const settingsError = document.getElementById("messages-settings-error");
     const inboxCount = document.getElementById("messages-inbox-count");
     const clearInboxButton = document.getElementById("messages-clear-inbox-button");
+    const selectAllInput = document.getElementById("messages-select-all");
     const confirmModal = document.getElementById("messages-confirm-modal");
     const confirmDialog = confirmModal ? confirmModal.querySelector(".messages-confirm-dialog") : null;
     const confirmTitle = document.getElementById("messages-confirm-title");
@@ -233,8 +237,10 @@
         deleting: {{ t("Deleting...")|tojson }},
         clearInbox: {{ t("Clear inbox")|tojson }},
         clearInboxDescription: {{ t("This will permanently delete all saved APRS conversations and their received and sent messages.")|tojson }},
+        deleteSelectedDescription: {{ t("This will permanently delete the selected APRS conversations and their received and sent messages.")|tojson }},
         clearInboxSummary: {{ t("{conversationCount} conversations · {messageCount} messages")|tojson }},
         deleteConversationDescription: {{ t("This will permanently delete the conversation with {callsign} and all its messages.")|tojson }},
+        deleteSelected: {{ t("Delete selected")|tojson }},
         messagesAllNew: {{ t("Messages: all / new")|tojson }},
     });
 
@@ -243,6 +249,7 @@
     let pendingDeleteAction = null;
     let confirmReturnFocus = null;
     const messageDrafts = new Map();
+    const selectedConversationIds = new Set();
     const pathStorageKeyPrefix = "aprsbox.messages.path.";
 
     function conversationMessageSignature(conversation) {
@@ -553,6 +560,15 @@
         await applyServerState(payload.messages_view, null);
     }
 
+    async function deleteSelectedConversations(conversationIds) {
+        const payload = await apiRequest(`${messagesApi}/selected-conversations/delete`, {
+            method: "POST",
+            body: JSON.stringify({ conversation_ids: conversationIds }),
+        });
+        conversationIds.forEach((conversationId) => selectedConversationIds.delete(conversationId));
+        await applyServerState(payload.messages_view, null);
+    }
+
     function messageCounts(conversations = state.conversations) {
         let total = 0;
         let unread = 0;
@@ -588,6 +604,10 @@
     }
 
     function renderConversationList() {
+        const availableIds = new Set(state.conversations.map((conversation) => conversation.id));
+        Array.from(selectedConversationIds).forEach((conversationId) => {
+            if (!availableIds.has(conversationId)) selectedConversationIds.delete(conversationId);
+        });
         if (!state.conversations.length) {
             conversationList.innerHTML = `<div class="empty-state muted">${escapeHtml(i18n.noSavedConversations)}</div>`;
             return;
@@ -604,30 +624,47 @@
                 warn: "messages-heard-dot-warn",
                 stale: "messages-heard-dot-stale",
             }[conversation.heard_recently_state] || "";
+            const heardLabel = conversation.kind === "group"
+                ? i18n.groupConversationNoAck
+                : (conversation.recently_heard
+                    ? (conversation.heard_recently_label || i18n.heardRecently)
+                    : i18n.noRecentHeardStationEntry);
+            const heardIndicator = conversation.kind === "group"
+                ? `<span class="messages-group-mark">G</span>`
+                : (conversation.recently_heard
+                    ? `<span class="messages-heard-dot ${heardStateClass}"></span>`
+                    : `<span class="messages-heard-none" aria-hidden="true">–</span>`);
             return `
-                <div class="messages-conversation-row${isActive ? " active" : ""}" data-conversation-id="${escapeHtml(conversation.id)}">
+                <div class="messages-conversation-row${isActive ? " active" : ""}" data-conversation-id="${escapeHtml(conversation.id)}" title="${escapeHtml(heardLabel)}">
+                    <label class="messages-conversation-select" title="${escapeHtml(i18n.deleteSelected)}">
+                        <input type="checkbox" data-select-conversation="${escapeHtml(conversation.id)}" aria-label="${escapeHtml(i18n.deleteSelected)}: ${escapeHtml(conversation.callsign)}"${selectedConversationIds.has(conversation.id) ? " checked" : ""}>
+                    </label>
                     <button type="button" class="messages-conversation-button" data-open-conversation="${escapeHtml(conversation.id)}">
-                        <span class="messages-conversation-main">
-                            <span class="messages-conversation-title-row">
-                                <strong>${escapeHtml(conversation.callsign)}</strong>
-                                <span class="message-state-badge ${stateBadgeClass}">
-                                    <img src="${staticRoot}icons/${unreadCount > 0 ? "email-box.svg" : "email-open-outline.svg"}" alt="">
-                                    <span>${escapeHtml(stateBadgeLabel)}</span>
-                                </span>
-                            </span>
-                            <span class="messages-conversation-meta-row">
-                                ${conversation.kind === "group"
-                                    ? `<span class="muted">${escapeHtml(i18n.groupConversationNoAck)}</span>`
-                                    : (conversation.recently_heard ? `<span class="messages-heard-indicator"><span class="messages-heard-dot ${heardStateClass}"></span><span>${escapeHtml(conversation.heard_recently_label || i18n.heardRecently)}</span></span>` : `<span class="muted">${escapeHtml(i18n.noRecentHeardStationEntry)}</span>`)}
-                            </span>
-                        </span>
+                        <strong>${escapeHtml(conversation.callsign)}</strong>
                     </button>
+                    <span class="messages-conversation-heard" aria-label="${escapeHtml(heardLabel)}">
+                        ${heardIndicator}
+                    </span>
+                    <span class="messages-conversation-read-state ${stateBadgeClass}" title="${escapeHtml(stateBadgeLabel)}" aria-label="${escapeHtml(stateBadgeLabel)}">
+                        <img src="${staticRoot}icons/${unreadCount > 0 ? "email-box.svg" : "email-open-outline.svg"}" alt="">
+                    </span>
                     <button type="button" class="table-icon-button table-icon-button-danger messages-conversation-delete" data-delete-conversation="${escapeHtml(conversation.id)}" aria-label="${escapeHtml(formatText(i18n.deleteConversationWithCallsign, { callsign: conversation.callsign }))}" title="${escapeHtml(i18n.deleteConversation)}">
                         <img src="${staticRoot}icons/delete-outline.svg" alt="">
                     </button>
                 </div>
             `;
         }).join("");
+    }
+
+    function syncSelectionControls() {
+        const selectedCount = selectedConversationIds.size;
+        const conversationCount = state.conversations.length;
+        if (selectAllInput) {
+            selectAllInput.checked = conversationCount > 0 && selectedCount === conversationCount;
+            selectAllInput.indeterminate = selectedCount > 0 && selectedCount < conversationCount;
+            selectAllInput.disabled = conversationCount === 0;
+        }
+        if (clearInboxButton) clearInboxButton.disabled = selectedCount === 0;
     }
 
     function renderThreadHeader(conversation) {
@@ -766,7 +803,7 @@
             inboxCount.textContent = `${counts.total} / ${counts.unread}`;
             inboxCount.setAttribute("aria-label", `${i18n.messagesAllNew}: ${counts.total} / ${counts.unread}`);
         }
-        if (clearInboxButton) clearInboxButton.disabled = counts.total === 0 && state.conversations.length === 0;
+        syncSelectionControls();
         syncGlobalUnreadState();
     }
 
@@ -841,17 +878,39 @@
         }
     });
 
+    conversationList.addEventListener("change", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement) || !target.dataset.selectConversation) return;
+        if (target.checked) selectedConversationIds.add(target.dataset.selectConversation);
+        else selectedConversationIds.delete(target.dataset.selectConversation);
+        syncSelectionControls();
+    });
+
+    if (selectAllInput) {
+        selectAllInput.addEventListener("change", () => {
+            selectedConversationIds.clear();
+            if (selectAllInput.checked) {
+                state.conversations.forEach((conversation) => selectedConversationIds.add(conversation.id));
+            }
+            renderConversationList();
+            syncSelectionControls();
+        });
+    }
+
     if (clearInboxButton) {
         clearInboxButton.addEventListener("click", () => {
-            const counts = messageCounts();
+            const selectedConversations = state.conversations.filter((conversation) => selectedConversationIds.has(conversation.id));
+            if (!selectedConversations.length) return;
+            const counts = messageCounts(selectedConversations);
+            const selectedIds = selectedConversations.map((conversation) => conversation.id);
             openDeleteConfirmation({
-                title: i18n.clearInbox,
-                description: i18n.clearInboxDescription,
+                title: i18n.deleteSelected,
+                description: i18n.deleteSelectedDescription,
                 summary: formatText(i18n.clearInboxSummary, {
-                    conversationCount: state.conversations.length,
+                    conversationCount: selectedConversations.length,
                     messageCount: counts.total,
                 }),
-                action: clearInbox,
+                action: () => deleteSelectedConversations(selectedIds),
                 trigger: clearInboxButton,
             });
         });
