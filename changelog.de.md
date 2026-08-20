@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.10.16.dev - 2026-08-20
+- `APRS-Nachrichten / Konversationsliste`: Die Liste wurde als kompakte, einzeilige Datensätze mit festen Spalten für Auswahl, Rufzeichen, Hörstatus, Lesestatus und Löschen neu aufgebaut; die Zeit seit dem letzten Frame steht jetzt im Tooltip der Zeile, und die Statusanzeigen verwenden einheitliche Material-Design-Symbole.
+- `APRS-Nachrichten / Mehrfachlöschen`: Checkboxen pro Konversation sowie eine gemeinsame Checkbox mit Zwischenzustand wurden im Listenkopf ergänzt und über der Auswahlspalte ausgerichtet; die Aktion zum Löschen der Auswahl steht über der Papierkorbspalte und entfernt die gewählten Konversationen samt Nachrichten nach einer einzigen Bestätigung.
+
+## 1.10.15.dev - 2026-08-16
+- `Einstellungen / HTTPS`: Ein Panel zur Verwaltung von `aprsbox.crt`, `aprsbox.key` und der optionalen CA-Kette in `/opt/aprsbox/data/ssl` wurde ergänzt; die Oberfläche prüft das Zertifikat-Schlüssel-Paar, zeigt den Dateistatus, unterstützt Upload und sicheres Löschen und ermöglicht den Download der CA-Kette. Lokale PKI-Erzeugung und Root-CA-Download bleiben vorerst deaktiviert.
+- `HTTPS / Laufzeit`: Der Schalter speichert den HTTPS-Zustand und startet die Dienste neu; der HTTP-Modus lauscht auf Port `8000`, während der HTTPS-Modus diesen Listener deaktiviert, Uvicorn mit TLS auf `443` startet und einen separaten Dienst für die Weiterleitung von Port `80` zu HTTPS mit Status `308` verwendet.
+- `Installer / Aktualisierung`: Redirect-Dienst und Uvicorn-Units wurden für systemd und OpenRC ergänzt und ersetzen Gunicorn als Starter für Web und Core; außerdem wurden Unit-Migration, explizite Übergabe des HTTPS-Zustands, `CAP_NET_BIND_SERVICE` und nachfolgende Aktualisierungen aus der GUI korrigiert.
+- `HTTPS / Zuverlässigkeit und Hilfe`: Der abschließende Neustart läuft außerhalb der cgroup des Webdienstes und meldet seinen Abschluss, HTTP/HTTPS-Wechsel warten auf die Dienste und entfernen veraltete Jobzustände, und das SSL-Verzeichnis wird auf `aprsbox:aprsbox` mit Modus `0750` korrigiert; die lokalisierte Hilfe beschreibt mDNS, DNS-SAN-Einträge und Zertifikate für IP-Adressen.
+
+## 1.10.14.dev - 2026-08-16
+- `GUI / Alarme`: Der Eintrag `Alarme` in der Seitenleiste wird ausgeblendet, wenn `APRS-Alarme aktivieren` deaktiviert ist.
+
+## 1.10.12.dev - 2026-08-15
+- `Einstellungen / Dialoge`: Die nativen Browserdialoge `confirm` und `prompt` wurden für Anwendungsaktualisierung, Konfigurationsimport, Datenbankwartung, Dienstneustart und Host-Aktionen durch das gemeinsame APRSBox-Modal ersetzt; Bestätigungen für `REBOOT` und `POWER OFF` erfordern die exakte Eingabe, während die Schließen-Aktion des Fortschrittsmodals erst nach Abschluss des Vorgangs erscheint.
+- `Einstellungen / Kartenquellen`: Speichern und Bearbeiten, Umsortieren, Festlegen der Standardquelle, Löschen und Leeren des Caches verwenden jetzt denselben asynchronen Modalablauf mit Spinner, lokalisierter Ergebnismeldung und Fehlerbehandlung wie die übrigen Systemaktionen; die Formularvalidierung erfolgt weiterhin vor dem Absenden.
+
+## 1.10.11.dev - 2026-08-15
+- `GUI / Hilfe`: Das gemeinsame Modal für alle Hilfedokumente besitzt jetzt eine sichtbare, schmale und an das aktive Theme angepasste Bildlaufleiste; das Scrollen bleibt im Dialog und wird nicht an die dahinterliegende Seite weitergegeben.
+- `APRS / Symbolauswahl`: Die Symbollisten in `Meine Station`, `Objekte / Elemente` und im Symbolfilter von `Packet Flow` zeigen jetzt neben Symbol und Code die offizielle Beschreibung aus dem aprs.fi-Symbolindex; Beschreibung und Vorschau folgen der ausgewählten primären `/` beziehungsweise alternativen `\` Tabelle.
+- `APRS / Modern-Symbole`: Die fehlerhaften Symbole `/!` (Polizeistation), `\!` (Notfall) sowie `/q` und `\q` (Gitternetzvarianten) wurden korrigiert; falsche Dateien, darunter Dateien mit einem vollständigen Symbolblatt, wurden durch die richtigen Kacheln aus den Quell-Symbolblättern ersetzt.
+
+## 1.10.10.dev - 2026-08-14
+- `Packet Routing / Speichern`: Das Aktivieren und Deaktivieren von Regeln sowie das Speichern im Editor verwenden jetzt den APRSBox-Standarddialog mit Spinner, Ergebnismeldung und Fehlerbehandlung ohne Neuladen der Seite; nach erfolgreichem Speichern kehrt der Benutzer zur passenden Liste oder zur bearbeiteten Regel zurück.
+- `GUI / Hilfe`: Alle Hilfeschaltflächen verwenden jetzt ein um 50 % vergrößertes Symbol mit einem einheitlichen blauen Akzent für Symbol, Rahmen und Hintergrund, sodass Hilfeelemente in allen Ansichten und Farbpaletten sofort erkennbar sind.
+- `Karte / QTH-Gitter`: Die Beschriftungen vierstelliger Locator-Felder wurden bei Zoomstufe `6` verkleinert, damit sie in der dichten Gitteransicht nicht dominieren oder sich überlagern.
+
+## 1.10.9.dev - 2026-08-14
+- `APRS-Nachrichten / Kompatibilität`: Eingehende Nachrichten sowie `ack`-Bestätigungen und `rej`-Ablehnungen akzeptieren jetzt alphanumerische Kennungen mit 1 bis 5 Zeichen; eine erneut übertragene nummerierte Nachricht desselben Absenders wird auch bei geänderter Konversationszuordnung nicht dupliziert, aber weiterhin erneut bestätigt.
+
+## 1.10.8.dev - 2026-08-14
+- `Dashboard / Stationsbereitschaft`: Die Bewertung basiert jetzt auf der APRS-IS-Verbindung, dem Flow `Local TX → APRS-IS`, einer definierten Bake sowie vollständigen Richtungen `RF → APRS-IS`, `APRS-IS → RF` und `RF → RF` für aktive Schnittstellen; Zustände werden mit Symbolen dargestellt, während aktive Schnittstellen bei Vollständigkeit grün, bei teilweiser Aktivität dunkelgelb und bei null rot markiert sind.
+- `Dashboard / Layout`: Die Stationsbereitschaft wurde in den hervorgehobenen Bereich neben dem Diagramm verschoben; die Karte der letzten wichtigen Ereignisse sowie die doppelte Zusammenfassung von Schnittstellen und RF-Aktivität wurden entfernt und der verbleibende Inhalt an das aktuelle Fenster angepasst. Der irreführende Gesamtzähler, der deaktivierte Schnittstellen ausließ, wurde ebenfalls entfernt.
+- `Dashboard / Konfigurationshilfe`: Der Konfigurationslink der Bereitschaftskarte wurde durch das in die Karte eingebettete Standardsymbol für Hilfe ersetzt. Eine verständliche Anleitung in vier Sprachen führt durch `Schnittstellen → Meine Station → Packet Routing` und erklärt den Unterschied zwischen dem eigenen Flow `Local TX → APRS-IS` und dem Uplink von über RF empfangenen Frames. Die automatische Aktualisierung pausiert bei geöffneter Hilfe und startet nach dem Schließen wieder mit vollen 30 Sekunden.
+- `Einstellungen / Versionsprüfung`: `Version prüfen` lädt die GitHub-Datei `VERSION` jetzt direkt über HTTPS. Dadurch funktioniert die Prüfung auch im Docker-Image, in dem das Programm `git` nicht installiert ist; für andere Quellen bleibt der bisherige Git-Mechanismus als Fallback erhalten. Der Vergleich bietet eine neuere Entwicklungsversion nicht mehr als „Update“ auf eine ältere stabile Version an.
+
+## 1.10.7.dev - 2026-08-14
+- `Karte / Stations-Backend`: Die dauerhafte Projektion `map_station_state` wurde ergänzt; sie wird beim Empfang und Senden von APRS-Frames aktualisiert und kann aus dem Verlauf neu aufgebaut werden. Kartenendpunkte rekonstruieren den Zustand nicht mehr durch erneutes Parsen von `traffic_frames` (die gemessene TTFB von `stations-lite` sank von etwa `3,4 s` auf etwa `63 ms`).
+- `Stationen / Aktualisierung`: Karte und Stationsliste lesen die vorbereitete Projektion; revisionsbasiertes Polling lädt nur geänderte Datensätze und Löschungen. Auch die RF-Zusammenfassung durchsucht den Verlauf nicht mehr.
+- `Dashboard / Leistung`: Zuletzt gehörte Stationen und das anfängliche Diagramm verwenden vorhandene Projektionen; Verkehrs-KPIs werden mit einer Abfrage berechnet und Stationsschlüssel bei verfügbarem Stundenpuffer nicht erneut aus `traffic_frames` geparst.
+
 ## 1.10.6 - 2026-08-13
 - `Stabile Version`: Die Änderungen aus `1.10.2.dev–1.10.5.dev` wurden zusammengeführt, darunter die sicherere Konfigurationssicherung v2, vereinheitlichte GUI-Aktionen und Dialoge, Verbesserungen bei Scrollen und Bedienbarkeit, die automatische Aktualisierung von APRS Device Identification, das themeabhängige Maidenhead/QTH-Gitter mit adaptiver Genauigkeit, die korrigierte Weltwiederholung der Karte und der Standarddialog zur Bestätigung einer Anwendungsaktualisierung.
 

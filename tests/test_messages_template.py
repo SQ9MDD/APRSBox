@@ -67,6 +67,37 @@ class MessagesTemplateTests(unittest.TestCase):
         self.assertIn("resolveConversationPath(conversation)", template_source)
         self.assertNotIn("/conversations/${encodeURIComponent(conversation.id)}/path", template_source)
 
+    def test_conversation_rows_are_compact_selectable_and_delete_selected(self) -> None:
+        template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn('id="messages-select-all"', template_source)
+        self.assertIn('data-select-conversation=', template_source)
+        self.assertIn('/selected-conversations/delete', template_source)
+        self.assertIn('grid-template-columns: 1.25rem minmax(0, 1fr) 1.25rem 1.85rem 1.85rem;', stylesheet_source)
+        self.assertIn('url("../icons/checkbox-marked-outline.svg")', stylesheet_source)
+        self.assertIn('url("../icons/antenna.svg")', stylesheet_source)
+        self.assertIn('url("../icons/account-group-outline.svg")', stylesheet_source)
+        self.assertIn('url("../icons/email-alert-outline.svg")', stylesheet_source)
+        self.assertNotIn('class="messages-conversation-meta-row"', template_source)
+        self.assertNotIn('class="messages-group-mark"', template_source)
+        self.assertNotIn('class="messages-heard-none"', template_source)
+
+    def test_bulk_actions_are_aligned_in_the_conversation_list_header(self) -> None:
+        template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        sidebar_top_end = template_source.index('</div>\n            <div class="messages-conversation-list-header"')
+        list_header = template_source.index('class="messages-conversation-list-header"')
+        list_body = template_source.index('id="messages-conversation-list"')
+        select_all = template_source.index('id="messages-select-all"')
+        delete_selected = template_source.index('id="messages-clear-inbox-button"')
+        self.assertLess(sidebar_top_end, list_header)
+        self.assertLess(list_header, select_all)
+        self.assertLess(list_header, delete_selected)
+        self.assertLess(select_all, list_body)
+        self.assertLess(delete_selected, list_body)
+        self.assertIn("grid-template-rows: auto auto minmax(0, 1fr);", stylesheet_source)
+        self.assertIn(".messages-conversation-list-header {", stylesheet_source)
+
 
 if __name__ == "__main__":
     unittest.main()

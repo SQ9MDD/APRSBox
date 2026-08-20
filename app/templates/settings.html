@@ -204,6 +204,8 @@
                 class="form-stack"
                 data-settings-action-id="update-application"
                 data-settings-action-group="update-controls"
+                data-settings-confirm="{{ t('Start application update now?') }}"
+                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-application', group: 'update-controls', message: {{ t('Update started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Starting update...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button">{{ t("Update application") }}</button>
             </form>
@@ -213,6 +215,114 @@
     </div>
 </section>
 </div>
+
+<section class="panel" id="settings-panel-https" data-settings-panel="https">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("HTTPS") }}</h2>
+            </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_https"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('HTTPS') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
+        </div>
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/https"
+            class="form-grid"
+            data-settings-action-id="save-https-settings"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'save-https-settings', message: {{ t('Saving HTTPS settings and restarting services...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, redirectAfterStart: (this.elements.https_enabled.checked ? 'https://' + window.location.hostname + {{ web_https_port_suffix|tojson|forceescape }} : 'http://' + window.location.hostname + {{ web_http_port_suffix|tojson|forceescape }}) + {{ request.scope.root_path|tojson|forceescape }} + '/settings?https-transition=1#settings-panel-https'});"
+        >
+            <label class="full checkbox-row">
+                <input
+                    type="checkbox"
+                    name="https_enabled"
+                    value="1"
+                    {% if https_enabled %}checked{% endif %}
+                    {% if not https_ready and not https_enabled %}disabled{% endif %}
+                    onchange="this.form.querySelector('button[type=submit]').disabled = false;"
+                >
+                <span>{{ t("Enable HTTPS") }}</span>
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="button" disabled>{{ t("Save and restart") }}</button>
+            </div>
+        </form>
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/https/certificates"
+            enctype="multipart/form-data"
+            class="form-grid"
+            data-settings-action-id="upload-https-certificates"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'upload-https-certificates', message: {{ t('Uploading certificate files...')|tojson|forceescape }}, busyLabel: {{ t('Uploading certificate files...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
+        >
+            <label>
+                <span>{{ t("Certificate (.crt/.pem)") }}</span>
+                <input type="file" name="certificate_file" accept=".crt,.pem,application/x-pem-file,application/pem-certificate-chain">
+            </label>
+            <label>
+                <span>{{ t("Private key (.key/.pem)") }}</span>
+                <input type="file" name="private_key_file" accept=".key,.pem,application/x-pem-file">
+            </label>
+            <label class="full">
+                <span>{{ t("CA chain (.crt/.pem, optional)") }}</span>
+                <input type="file" name="ca_chain_file" accept=".crt,.pem,application/x-pem-file,application/pem-certificate-chain">
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="button">{{ t("Upload certificate files") }}</button>
+            </div>
+        </form>
+        <div class="settings-update-actions">
+            <button type="button" class="button" disabled>{{ t("Generate local PKI") }}</button>
+            <button type="button" class="button button-secondary" disabled>{{ t("Download Root CA") }}</button>
+        </div>
+        <dl class="details-grid">
+            <dt>{{ t("Certificate") }}</dt>
+            <dd class="https-file-status">
+                <code>{{ https_certificate_filename }}</code>
+                {% if certificate_available %}
+                <span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>
+                <form method="post" action="{{ request.scope.root_path }}/settings/https/certificates/certificate/delete" class="https-file-delete-form" data-settings-action-id="delete-https-certificate" data-settings-confirm="{{ t('Delete this HTTPS file?') }}" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'delete-https-certificate', message: {{ t('Deleting...')|tojson|forceescape }}, busyLabel: {{ t('Deleting...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
+                    <button type="submit" class="table-icon-button table-icon-button-danger https-file-delete-button" {% if https_enabled %}disabled{% endif %} title="{{ t('Disable HTTPS before deleting the certificate or private key.') if https_enabled else t('Delete') }}" aria-label="{{ t('Delete') }} {{ t('Certificate') }}"><img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt=""></button>
+                </form>
+                {% else %}<span class="muted">{{ t("Missing") }}</span>{% endif %}
+            </dd>
+            <dt>{{ t("Private key") }}</dt>
+            <dd class="https-file-status">
+                <code>{{ https_private_key_filename }}</code>
+                {% if private_key_available %}
+                <span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>
+                <form method="post" action="{{ request.scope.root_path }}/settings/https/certificates/private-key/delete" class="https-file-delete-form" data-settings-action-id="delete-https-private-key" data-settings-confirm="{{ t('Delete this HTTPS file?') }}" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'delete-https-private-key', message: {{ t('Deleting...')|tojson|forceescape }}, busyLabel: {{ t('Deleting...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
+                    <button type="submit" class="table-icon-button table-icon-button-danger https-file-delete-button" {% if https_enabled %}disabled{% endif %} title="{{ t('Disable HTTPS before deleting the certificate or private key.') if https_enabled else t('Delete') }}" aria-label="{{ t('Delete') }} {{ t('Private key') }}"><img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt=""></button>
+                </form>
+                {% else %}<span class="muted">{{ t("Missing") }}</span>{% endif %}
+            </dd>
+            <dt>{{ t("CA chain") }}</dt>
+            <dd class="https-file-status">
+                <code>{{ https_ca_chain_filename }}</code>
+                {% if ca_chain_available %}
+                <span class="tnc-status-icon tnc-status-icon-enabled" title="{{ t('Available') }}" aria-label="{{ t('Available') }}"><img src="{{ request.scope.root_path }}/static/icons/check-circle.svg" alt=""></span>
+                <a href="{{ request.scope.root_path }}/settings/https/certificates/ca-chain/download" class="table-icon-button https-file-delete-button" title="{{ t('Download CA chain') }}" aria-label="{{ t('Download CA chain') }}"><img src="{{ request.scope.root_path }}/static/icons/download-outline.svg" alt=""></a>
+                <form method="post" action="{{ request.scope.root_path }}/settings/https/certificates/ca-chain/delete" class="https-file-delete-form" data-settings-action-id="delete-https-ca-chain" data-settings-confirm="{{ t('Delete this HTTPS file?') }}" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'delete-https-ca-chain', message: {{ t('Deleting...')|tojson|forceescape }}, busyLabel: {{ t('Deleting...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
+                    <button type="submit" class="table-icon-button table-icon-button-danger https-file-delete-button" title="{{ t('Delete') }}" aria-label="{{ t('Delete') }} {{ t('CA chain') }}"><img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt=""></button>
+                </form>
+                {% else %}<span class="muted">{{ t("Missing") }}</span>{% endif %}
+            </dd>
+            <dt>{{ t("Hostname") }}</dt>
+            <dd><code>{{ request.url.hostname or t("Unknown") }}</code></dd>
+            <dt>{{ t("HTTPS") }}</dt>
+            <dd>{{ t("Enabled") if https_enabled else t("Disabled") }}</dd>
+            <dt>{{ t("HTTP redirect") }}</dt>
+            <dd>{{ t("Enabled") if https_enabled else t("Disabled") }}</dd>
+        </dl>
+    </div>
+</section>
 
 <section class="panel" id="settings-panel-alarms" data-settings-panel="alarms">
     <div class="panel-body">
@@ -373,19 +483,19 @@
                             {% if can_manage_map_sources %}
                             <td class="map-sources-actions-cell">
                                 <div class="table-actions table-actions-start">
-                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form" data-settings-action-id="move-map-source" data-settings-action-group="map-sources" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'move-map-source', group: 'map-sources', message: {{ t('Updating...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
                                         <input type="hidden" name="direction" value="up">
                                         <button type="submit" class="table-icon-button" {% if loop.first %}disabled{% endif %} title="{{ t('Move map source up') }}" aria-label="{{ t('Move map source up') }} {{ source.name }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/arrow-up.svg" alt="">
                                         </button>
                                     </form>
-                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/move" class="table-action-form" data-settings-action-id="move-map-source" data-settings-action-group="map-sources" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'move-map-source', group: 'map-sources', message: {{ t('Updating...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
                                         <input type="hidden" name="direction" value="down">
                                         <button type="submit" class="table-icon-button" {% if loop.last %}disabled{% endif %} title="{{ t('Move map source down') }}" aria-label="{{ t('Move map source down') }} {{ source.name }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/arrow-down.svg" alt="">
                                         </button>
                                     </form>
-                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/default" class="table-action-form">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/default" class="table-action-form" data-settings-action-id="default-map-source" data-settings-action-group="map-sources" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'default-map-source', group: 'map-sources', message: {{ t('Updating...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
                                         <button type="submit" class="table-icon-button" {% if source.is_default or not source.enabled %}disabled{% endif %} title="{{ t('Set as default') }}" aria-label="{{ t('Set as default') }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/star-outline.svg" alt="">
                                         </button>
@@ -393,13 +503,13 @@
                                     <a href="{{ request.scope.root_path }}/settings?edit_map_source={{ source.id }}#settings-panel-map-sources" class="table-icon-button" title="{{ t('Edit') }}" aria-label="{{ t('Edit') }}">
                                         <img src="{{ request.scope.root_path }}/static/icons/pencil.svg" alt="">
                                     </a>
-                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/delete" class="table-action-form">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/delete" class="table-action-form" data-settings-action-id="delete-map-source" data-settings-action-group="map-sources" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'delete-map-source', group: 'map-sources', message: {{ t('Deleting...')|tojson|forceescape }}, busyLabel: {{ t('Deleting...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
                                         <button type="submit" class="table-icon-button table-icon-button-danger" {% if map_sources|length <= 1 or source.is_default %}disabled{% endif %} title="{{ t('Delete') }}" aria-label="{{ t('Delete') }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                         </button>
                                     </form>
-                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/cache/clear" class="table-action-form">
-                                        <button type="submit" class="table-icon-button" title="{{ t('Clear cache') }}" aria-label="{{ t('Clear cache') }} {{ source.name }}" onclick="return confirm({{ t('Clear local tile cache for this map source?')|tojson|forceescape }});">
+                                    <form method="post" action="{{ request.scope.root_path }}/settings/map-sources/{{ source.id }}/cache/clear" class="table-action-form" data-settings-action-id="clear-map-source-cache" data-settings-action-group="map-sources" onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'clear-map-source-cache', group: 'map-sources', message: {{ t('Clearing...')|tojson|forceescape }}, busyLabel: {{ t('Clearing...')|tojson|forceescape }}, mode: 'json', minSpinnerMs: 500, reloadOnSuccess: true});">
+                                        <button type="submit" class="table-icon-button" title="{{ t('Clear cache') }}" aria-label="{{ t('Clear cache') }} {{ source.name }}" data-settings-confirm="{{ t('Clear local tile cache for this map source?') }}">
                                             <img src="{{ request.scope.root_path }}/static/icons/broom.svg" alt="">
                                         </button>
                                     </form>
@@ -417,7 +527,7 @@
             </div>
 
             {% if can_manage_map_sources %}
-            <form method="post" action="{{ request.scope.root_path }}/settings/map-sources" class="form-grid map-source-form" id="map-source-form">
+            <form method="post" action="{{ request.scope.root_path }}/settings/map-sources" class="form-grid map-source-form" id="map-source-form" data-settings-action-id="save-map-source" data-settings-action-group="map-sources">
                 {% if map_source_form.record_id %}
                 <input type="hidden" name="record_id" value="{{ map_source_form.record_id }}">
                 {% endif %}
@@ -550,7 +660,8 @@
             enctype="multipart/form-data"
             class="form-grid"
             data-settings-action-id="import-config-backup"
-            onsubmit="return confirm({{ t('Import configuration backup now? Current settings will be replaced.')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'import-config-backup', message: {{ t('Importing configuration backup...')|tojson|forceescape }}, busyLabel: {{ t('Importing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500, reloadOnSuccess: true, errorAutoHideMs: 12000});"
+            data-settings-confirm="{{ t('Import configuration backup now? Current settings will be replaced.') }}"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'import-config-backup', message: {{ t('Importing configuration backup...')|tojson|forceescape }}, busyLabel: {{ t('Importing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500, reloadOnSuccess: true, errorAutoHideMs: 12000});"
         >
             <label class="full">
                 <span>{{ t("Backup file") }}</span>
@@ -651,7 +762,8 @@
                 action="{{ request.scope.root_path }}/settings/vacuum-db"
                 class="form-stack"
                 data-settings-action-id="vacuum-db"
-                onsubmit="return confirm({{ t('Run database vacuum now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Running...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+                data-settings-confirm="{{ t('Run database vacuum now?') }}"
+                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'vacuum-db', message: {{ t('Running database vacuum, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Running...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before running database vacuum.') }}"{% endif %}>{{ t("Run VACUUM") }}</button>
             </form>
@@ -660,7 +772,8 @@
                 action="{{ request.scope.root_path }}/settings/reset-runtime-data"
                 class="form-stack"
                 data-settings-action-id="reset-runtime-data"
-                onsubmit="return confirm({{ t('Clear runtime logs and traffic history now? Configuration tables will not be changed.')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'reset-runtime-data', message: {{ t('Clearing runtime logs and traffic history...')|tojson|forceescape }}, busyLabel: {{ t('Clearing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+                data-settings-confirm="{{ t('Clear runtime logs and traffic history now? Configuration tables will not be changed.') }}"
+                onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'reset-runtime-data', message: {{ t('Clearing runtime logs and traffic history...')|tojson|forceescape }}, busyLabel: {{ t('Clearing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
             >
                 <button type="submit" class="button button-secondary" {% if database_vacuum_blocked %}disabled title="{{ t('Disable all TNC interfaces before clearing runtime logs and traffic history.') }}"{% endif %}>{{ t("Reset runtime logs/data") }}</button>
             </form>
@@ -699,7 +812,8 @@
                     class="form-stack"
                     data-settings-action-id="restart-services"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return confirm({{ t('Restart services now?')|tojson|forceescape }}) && aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, reloadOnSuccess: true, reloadDelayMs: 3000});"
+                    data-settings-confirm="{{ t('Restart services now?') }}"
+                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'restart-services', group: 'danger-actions', message: {{ t('Service restart started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Restarting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 300000, recoveryHealthTimeoutMs: 300000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary">{{ t("Restart services") }}</button>
                 </form>
@@ -713,7 +827,10 @@
                     class="form-stack"
                     data-settings-action-id="reboot-host"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type REBOOT to confirm host reboot.')|tojson|forceescape }}, '') || '').trim() === 'REBOOT') && aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, reloadOnSuccess: true});"
+                    data-settings-confirm="{{ t('Type REBOOT to confirm host reboot.') }}"
+                    data-settings-confirm-value="REBOOT"
+                    data-settings-confirm-danger="true"
+                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'reboot-host', group: 'danger-actions', message: {{ t('Host reboot started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Rebooting...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 900000, recoveryHealthTimeoutMs: 600000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Reboot host") }}</button>
                 </form>
@@ -727,7 +844,10 @@
                     class="form-stack"
                     data-settings-action-id="poweroff-host"
                     data-settings-action-group="danger-actions"
-                    onsubmit="return ((window.prompt({{ t('Type POWER OFF to confirm host shutdown.')|tojson|forceescape }}, '') || '').trim() === 'POWER OFF') && aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Shutting down...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
+                    data-settings-confirm="{{ t('Type POWER OFF to confirm host shutdown.') }}"
+                    data-settings-confirm-value="POWER OFF"
+                    data-settings-confirm-danger="true"
+                    onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'poweroff-host', group: 'danger-actions', message: {{ t('Host shutdown started. Please wait...')|tojson|forceescape }}, busyLabel: {{ t('Shutting down...')|tojson|forceescape }}, mode: 'job', lockTimeoutMs: 1200000, reloadOnSuccess: true});"
                 >
                     <button type="submit" class="button button-secondary button-danger">{{ t("Power off host") }}</button>
                 </form>
@@ -739,26 +859,26 @@
     </div>
 </section>
 
-{% if can_manage_updates and not is_container_mode %}
-<div class="settings-progress-backdrop" id="application-update-confirm-modal" hidden>
+<div class="settings-progress-backdrop" id="settings-action-confirm-modal" hidden>
     <div
         class="settings-progress-modal"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="application-update-confirm-title"
-        aria-describedby="application-update-confirm-question"
+        aria-labelledby="settings-action-confirm-title"
+        aria-describedby="settings-action-confirm-question"
+        tabindex="-1"
     >
         <div class="settings-progress-header">
-            <h3 class="settings-progress-title" id="application-update-confirm-title">{{ t("Are you sure?") }}</h3>
+            <h3 class="settings-progress-title" id="settings-action-confirm-title">{{ t("Are you sure?") }}</h3>
         </div>
-        <p class="settings-progress-message" id="application-update-confirm-question">{{ t("Start application update now?") }}</p>
+        <p class="settings-progress-message" id="settings-action-confirm-question"></p>
+        <input class="settings-confirm-input" id="settings-action-confirm-input" type="text" autocomplete="off" spellcheck="false" hidden>
         <div class="settings-progress-actions">
-            <button type="button" class="button button-secondary" data-close-application-update-confirm>{{ t("Cancel") }}</button>
-            <button type="button" class="button" id="application-update-confirm-accept">{{ t("Update application") }}</button>
+            <button type="button" class="button button-secondary" data-close-settings-confirm>{{ t("Cancel") }}</button>
+            <button type="button" class="button" id="settings-action-confirm-accept">{{ t("OK") }}</button>
         </div>
     </div>
 </div>
-{% endif %}
 
 {% include "partials/help_modal.html" %}
 {% endblock %}
@@ -872,12 +992,12 @@
         }
 
         const ensureFallbackBackdrop = () => {
-            const existing = document.querySelector(".settings-progress-backdrop");
+            const existing = document.querySelector(".settings-action-progress-backdrop");
             if (existing instanceof HTMLElement) {
                 return existing;
             }
             const backdrop = document.createElement("div");
-            backdrop.className = "settings-progress-backdrop";
+            backdrop.className = "settings-progress-backdrop settings-action-progress-backdrop";
             backdrop.hidden = true;
             backdrop.innerHTML = `
                 <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
@@ -895,7 +1015,7 @@
                         </div>
                     </div>
                     <p class="settings-progress-message"></p>
-                    <div class="settings-progress-actions">
+                    <div class="settings-progress-actions" hidden>
                         <button type="button" class="button button-secondary settings-progress-close">${fallbackCloseLabel}</button>
                     </div>
                 </div>
@@ -1064,7 +1184,14 @@
             unsupportedActionMode: {{ t("Unsupported action mode.")|tojson }},
             updateTitle: {{ t("Application update")|tojson }},
             restartTitle: {{ t("Service restart")|tojson }},
+            rebootTitle: {{ t("Reboot host")|tojson }},
+            poweroffTitle: {{ t("Power off host")|tojson }},
             takingLonger: {{ t("This operation is taking longer than usual. Status monitoring is still active.")|tojson }},
+            systemActionMessages: {
+                "restart-services": {{ t("Service restart started. Please wait...")|tojson }},
+                "reboot-host": {{ t("Host reboot started. Please wait...")|tojson }},
+                "poweroff-host": {{ t("Host shutdown started. Please wait...")|tojson }},
+            },
             jobStages: {
                 queued: {{ t("Waiting for the update process to start...")|tojson }},
                 starting: {{ t("Starting the update process...")|tojson }},
@@ -1088,7 +1215,7 @@
         const versionResultNode = document.getElementById("settings-version-result");
 
         const backdrop = document.createElement("div");
-        backdrop.className = "settings-progress-backdrop";
+        backdrop.className = "settings-progress-backdrop settings-action-progress-backdrop";
         backdrop.hidden = true;
         backdrop.innerHTML = `
             <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
@@ -1106,7 +1233,7 @@
                     </div>
                 </div>
                 <p class="settings-progress-message"></p>
-                <div class="settings-progress-actions">
+                <div class="settings-progress-actions" hidden>
                     <button type="button" class="button button-secondary settings-progress-close">${labels.closeButton}</button>
                 </div>
             </div>
@@ -1120,6 +1247,7 @@
         const progressPercentNode = backdrop.querySelector(".settings-progress-percent");
         const progressTrackNode = backdrop.querySelector(".settings-progress-track");
         const progressBarNode = backdrop.querySelector(".settings-progress-bar");
+        const actionsNode = backdrop.querySelector(".settings-progress-actions");
         const closeButton = backdrop.querySelector(".settings-progress-close");
 
         let hideTimer = null;
@@ -1168,13 +1296,23 @@
             const normalized = String(actionId || "");
             if (normalized === "update-application") return labels.updateTitle;
             if (normalized === "restart-services") return labels.restartTitle;
+            if (normalized === "reboot-host") return labels.rebootTitle;
+            if (normalized === "poweroff-host") return labels.poweroffTitle;
             return labels.defaultTitle;
         };
 
-        const messageForJobStage = (stage, fallback = "") => {
-            const normalized = String(stage || "").trim();
-            if (normalized && Object.prototype.hasOwnProperty.call(labels.jobStages, normalized)) {
-                return String(labels.jobStages[normalized]);
+        const messageForJobStage = (actionId, stage, fallback = "") => {
+            const normalizedAction = String(actionId || "");
+            const normalizedStage = String(stage || "").trim();
+            if (
+                normalizedAction === "update-application"
+                && normalizedStage
+                && Object.prototype.hasOwnProperty.call(labels.jobStages, normalizedStage)
+            ) {
+                return String(labels.jobStages[normalizedStage]);
+            }
+            if (Object.prototype.hasOwnProperty.call(labels.systemActionMessages, normalizedAction)) {
+                return String(labels.systemActionMessages[normalizedAction]);
             }
             return String(fallback || labels.defaultMessage);
         };
@@ -1222,6 +1360,9 @@
             }
             renderProgress(message, options);
             progressLocked = Boolean(options.locked);
+            if (actionsNode instanceof HTMLElement) {
+                actionsNode.hidden = progressLocked;
+            }
             if (progressLocked && progressDismissed) {
                 return true;
             }
@@ -1242,6 +1383,9 @@
             if (timeoutMs > 0) {
                 lockTimeoutTimer = window.setTimeout(() => {
                     progressLocked = false;
+                    if (actionsNode instanceof HTMLElement) {
+                        actionsNode.hidden = false;
+                    }
                     if (messageNode instanceof HTMLElement) {
                         messageNode.textContent = labels.timeout;
                     }
@@ -1442,12 +1586,115 @@
         };
 
         const jobStatusUrl = (jobId) => `${rootPath}/api/settings/jobs/${encodeURIComponent(String(jobId || ""))}`;
+        const healthUrl = `${rootPath}/health`;
+
+        const clearActiveJob = () => {
+            try {
+                window.sessionStorage.removeItem(activeJobStorageKey);
+            } catch (_error) {
+                // Ignore storage errors.
+            }
+        };
+
+        const rememberHealthOutage = (jobId) => {
+            try {
+                const raw = window.sessionStorage.getItem(activeJobStorageKey);
+                const stored = raw ? JSON.parse(raw) : null;
+                if (!stored || Number(stored.jobId || 0) !== Number(jobId || 0)) return;
+                stored.healthOutageObserved = true;
+                window.sessionStorage.setItem(activeJobStorageKey, JSON.stringify(stored));
+            } catch (_error) {
+                // Ignore storage errors.
+            }
+        };
+
+        const finishHealthRecovery = () => {
+            stopPolling();
+            clearActiveJob();
+            progressLocked = false;
+            restoreControls();
+            hideBackdrop(true);
+            window.aprsboxRememberSettingsPosition?.();
+            window.setTimeout(() => {
+                window.location.reload();
+            }, 100);
+        };
+
+        const pollHealthRecovery = (jobId, startedAt, options) => {
+            const actionId = String(options.actionId || "");
+            const timeoutMs = Math.max(1000, Number(options.recoveryHealthTimeoutMs || 300000));
+            const title = titleForAction(actionId);
+            const waitingMessage = String(
+                options.message || labels.systemActionMessages[actionId] || labels.defaultMessage
+            );
+            let outageObserved = Boolean(options.healthOutageObserved);
+            const acceptHealthyAfterMs = Math.max(0, Number(options.acceptHealthyAfterMs || 0));
+            const healthyFallbackAt = Date.now() + acceptHealthyAfterMs;
+
+            const pollOnce = async () => {
+                if (Date.now() - Number(startedAt || Date.now()) >= timeoutMs) {
+                    clearActiveJob();
+                    finishAction(labels.timeout, {
+                        reload: false,
+                        autoHideMs: 0,
+                        title,
+                    });
+                    return;
+                }
+
+                const controller = new AbortController();
+                const requestTimeout = window.setTimeout(() => controller.abort(), 5000);
+                try {
+                    const response = await window.fetch(healthUrl, {
+                        cache: "no-store",
+                        credentials: "same-origin",
+                        headers: { "Accept": "application/json" },
+                        signal: controller.signal,
+                    });
+                    if (response.status === 200) {
+                        if (outageObserved || (acceptHealthyAfterMs > 0 && Date.now() >= healthyFallbackAt)) {
+                            finishHealthRecovery();
+                            return;
+                        }
+                        showSettingsProgress(waitingMessage, {
+                            locked: true,
+                            title,
+                            stageLabel: waitingMessage,
+                        });
+                    } else {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                } catch (_error) {
+                    if (!outageObserved) {
+                        outageObserved = true;
+                        rememberHealthOutage(jobId);
+                    }
+                    showSettingsProgress(waitingMessage, {
+                        locked: true,
+                        title,
+                        stageLabel: waitingMessage,
+                        detail: labels.reconnecting,
+                    });
+                } finally {
+                    window.clearTimeout(requestTimeout);
+                }
+
+                activePollTimer = window.setTimeout(pollOnce, 2000);
+            };
+
+            pollOnce();
+        };
 
         const pollJobStatus = async (jobId, startedAt, options) => {
             const lockTimeoutMs = Number(options.lockTimeoutMs || 120000);
             const reloadAfterFinish = Boolean(options.reloadOnSuccess);
             const actionId = String(options.actionId || "");
+            if (actionId === "reboot-host") {
+                pollHealthRecovery(jobId, startedAt, options);
+                return;
+            }
             const reloadDelayMs = Number(options.reloadDelayMs || 0);
+            const redirectAfterStart = String(options.redirectAfterStart || "").trim();
             const title = titleForAction(actionId);
             let lastProgressPercent = 0;
             let lastStageLabel = String(options.message || labels.defaultMessage);
@@ -1475,18 +1722,19 @@
                         lastProgressPercent = Math.max(0, Math.min(100, parsedProgress));
                     }
                     lastStageLabel = messageForJobStage(
+                        actionId,
                         stage,
                         message || String(options.message || labels.defaultMessage)
                     );
 
                     if (status === "success") {
-                        try {
-                            window.sessionStorage.removeItem(activeJobStorageKey);
-                        } catch (_error) {
-                            // Ignore storage errors.
+                        clearActiveJob();
+                        if (redirectAfterStart) {
+                            window.location.assign(redirectAfterStart);
+                            return;
                         }
                         const successLabel = actionId === "update-application"
-                            ? messageForJobStage("completed", labels.completed)
+                            ? messageForJobStage(actionId, "completed", labels.completed)
                             : (message || labels.completed);
                         finishAction(successLabel, {
                             reload: reloadAfterFinish,
@@ -1499,13 +1747,9 @@
                     }
 
                     if (status === "error") {
-                        try {
-                            window.sessionStorage.removeItem(activeJobStorageKey);
-                        } catch (_error) {
-                            // Ignore storage errors.
-                        }
+                        clearActiveJob();
                         const failedLabel = actionId === "update-application"
-                            ? messageForJobStage("failed", labels.failed)
+                            ? messageForJobStage(actionId, "failed", labels.failed)
                             : labels.failed;
                         finishAction(failedLabel, {
                             reload: false,
@@ -1513,6 +1757,17 @@
                             progressPercent: lastProgressPercent,
                             stageLabel: failedLabel,
                             detail: message && message !== failedLabel ? message : "",
+                        });
+                        return;
+                    }
+
+                    if (
+                        actionId === "restart-services"
+                        && (stage === "restarting-web" || lastProgressPercent >= 75)
+                    ) {
+                        pollHealthRecovery(jobId, startedAt, {
+                            ...options,
+                            acceptHealthyAfterMs: 5000,
                         });
                         return;
                     }
@@ -1525,6 +1780,11 @@
                         detail: overdueDetail,
                     });
                 } catch (_error) {
+                    if (redirectAfterStart) {
+                        clearActiveJob();
+                        window.setTimeout(() => window.location.assign(redirectAfterStart), 10000);
+                        return;
+                    }
                     const reconnectDetail = overdueDetail
                         ? `${labels.reconnecting}\n${overdueDetail}`
                         : labels.reconnecting;
@@ -1577,6 +1837,8 @@
                             message: String(options.message || ""),
                             reloadOnSuccess: Boolean(options.reloadOnSuccess),
                             reloadDelayMs: Number(options.reloadDelayMs || 0),
+                            recoveryHealthTimeoutMs: Number(options.recoveryHealthTimeoutMs || 0),
+                            redirectAfterStart: String(options.redirectAfterStart || ""),
                         })
                     );
                 } catch (_error) {
@@ -1640,6 +1902,16 @@
         };
 
         const resumeActiveJob = () => {
+            const transitionUrl = new URL(window.location.href);
+            if (transitionUrl.searchParams.delete("https-transition")) {
+                clearActiveJob();
+                window.history.replaceState(
+                    {},
+                    "",
+                    `${transitionUrl.pathname}${transitionUrl.search}${transitionUrl.hash}`
+                );
+                return;
+            }
             let stored = null;
             try {
                 const raw = window.sessionStorage.getItem(activeJobStorageKey);
@@ -1652,6 +1924,13 @@
             if (!Number.isFinite(jobId) || jobId <= 0) return;
 
             const actionId = String(stored.actionId || "").trim();
+            if (
+                (actionId === "reboot-host" || actionId === "restart-services")
+                && Boolean(stored.healthOutageObserved)
+            ) {
+                clearActiveJob();
+                return;
+            }
             const form = actionId
                 ? actionForms.find((candidate) => String(candidate.dataset.settingsActionId || "") === actionId)
                 : null;
@@ -1665,6 +1944,8 @@
             const message = String(stored.message || labels.defaultMessage);
             const reloadOnSuccess = Boolean(stored.reloadOnSuccess);
             const reloadDelayMs = Number(stored.reloadDelayMs || 0);
+            const recoveryHealthTimeoutMs = Number(stored.recoveryHealthTimeoutMs || 0);
+            const redirectAfterStart = String(stored.redirectAfterStart || "");
 
             progressDismissed = false;
             showSettingsProgress(message, {
@@ -1673,7 +1954,15 @@
                 progressPercent: 0,
                 stageLabel: message,
             });
-            pollJobStatus(jobId, startedAt, { actionId, lockTimeoutMs, message, reloadOnSuccess, reloadDelayMs });
+            pollJobStatus(jobId, startedAt, {
+                actionId,
+                lockTimeoutMs,
+                message,
+                reloadOnSuccess,
+                reloadDelayMs,
+                recoveryHealthTimeoutMs,
+                redirectAfterStart,
+            });
         };
 
         window.__aprsboxSettingsSubmit = submitSettingsAction;
@@ -1730,15 +2019,16 @@
         resumeActiveJob();
     })();
     (() => {
-        const form = document.getElementById("application-update-form");
-        const modal = document.getElementById("application-update-confirm-modal");
-        const acceptButton = document.getElementById("application-update-confirm-accept");
-        const closeButtons = modal
-            ? modal.querySelectorAll("[data-close-application-update-confirm]")
-            : [];
+        const modal = document.getElementById("settings-action-confirm-modal");
+        const question = document.getElementById("settings-action-confirm-question");
+        const confirmationInput = document.getElementById("settings-action-confirm-input");
+        const acceptButton = document.getElementById("settings-action-confirm-accept");
+        const closeButtons = modal ? modal.querySelectorAll("[data-close-settings-confirm]") : [];
+        const bypassConfirmation = new WeakSet();
+        let pendingAction = null;
         let returnFocus = null;
 
-        if (!(form instanceof HTMLFormElement) || !(modal instanceof HTMLElement)) return;
+        if (!(modal instanceof HTMLElement)) return;
 
         const closeModal = ({ restoreFocus = true } = {}) => {
             modal.hidden = true;
@@ -1747,21 +2037,68 @@
                 returnFocus.focus();
             }
             returnFocus = null;
+            pendingAction = null;
+            if (confirmationInput instanceof HTMLInputElement) {
+                confirmationInput.value = "";
+                confirmationInput.hidden = true;
+            }
         };
 
-        const openModal = () => {
+        const openModal = (form, submitter, message, requiredValue, danger) => {
+            pendingAction = { form, submitter };
             returnFocus = document.activeElement instanceof HTMLElement
                 ? document.activeElement
                 : form.querySelector("button[type='submit']");
+            if (question instanceof HTMLElement) {
+                question.textContent = message;
+            }
+            if (acceptButton instanceof HTMLButtonElement) {
+                const submitterLabel = submitter instanceof HTMLElement
+                    ? String(submitter.textContent || submitter.getAttribute("aria-label") || "").trim()
+                    : "";
+                acceptButton.textContent = submitterLabel || {{ t("OK")|tojson }};
+                acceptButton.classList.toggle("button-danger", danger);
+                acceptButton.disabled = Boolean(requiredValue);
+            }
+            if (confirmationInput instanceof HTMLInputElement) {
+                confirmationInput.value = "";
+                confirmationInput.hidden = !requiredValue;
+                confirmationInput.placeholder = requiredValue;
+                confirmationInput.setAttribute("aria-label", message);
+                confirmationInput.dataset.requiredValue = requiredValue;
+            }
             modal.hidden = false;
             document.body.classList.add("modal-open");
-            acceptButton?.focus();
+            if (requiredValue && confirmationInput instanceof HTMLInputElement) {
+                confirmationInput.focus();
+            } else {
+                acceptButton?.focus();
+            }
         };
 
-        form.addEventListener("submit", (event) => {
+        document.addEventListener("submit", (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement)) return;
+            if (bypassConfirmation.has(form)) {
+                bypassConfirmation.delete(form);
+                return;
+            }
+            const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
+            const message = String(
+                submitter?.dataset.settingsConfirm || form.dataset.settingsConfirm || ""
+            ).trim();
+            if (!message) return;
+
             event.preventDefault();
-            openModal();
-        });
+            event.stopImmediatePropagation();
+            const requiredValue = String(
+                submitter?.dataset.settingsConfirmValue || form.dataset.settingsConfirmValue || ""
+            ).trim();
+            const danger = String(
+                submitter?.dataset.settingsConfirmDanger || form.dataset.settingsConfirmDanger || ""
+            ) === "true";
+            openModal(form, submitter, message, requiredValue, danger);
+        }, true);
 
         closeButtons.forEach((button) => button.addEventListener("click", () => closeModal()));
         modal.addEventListener("click", (event) => {
@@ -1773,17 +2110,23 @@
                 closeModal();
             }
         });
+        confirmationInput?.addEventListener("input", () => {
+            if (!(confirmationInput instanceof HTMLInputElement) || !(acceptButton instanceof HTMLButtonElement)) return;
+            acceptButton.disabled = confirmationInput.value.trim() !== String(confirmationInput.dataset.requiredValue || "");
+        });
         acceptButton?.addEventListener("click", () => {
+            const action = pendingAction;
+            if (!action || !(action.form instanceof HTMLFormElement)) {
+                closeModal();
+                return;
+            }
             closeModal({ restoreFocus: false });
-            window.aprsboxSubmitSettingsAction(form, {
-                actionId: 'update-application',
-                group: 'update-controls',
-                message: {{ t("Update started. Please wait...")|tojson }},
-                busyLabel: {{ t("Starting update...")|tojson }},
-                mode: 'job',
-                lockTimeoutMs: 1200000,
-                reloadOnSuccess: true,
-            });
+            bypassConfirmation.add(action.form);
+            if (action.submitter instanceof HTMLButtonElement || action.submitter instanceof HTMLInputElement) {
+                action.form.requestSubmit(action.submitter);
+            } else {
+                action.form.requestSubmit();
+            }
         });
     })();
 </script>
@@ -1874,12 +2217,22 @@
             }
             urlInput.setCustomValidity("");
             const error = validateBeforeSubmit();
-            if (!error) {
+            if (error) {
+                event.preventDefault();
+                urlInput.setCustomValidity(error);
+                urlInput.reportValidity();
                 return;
             }
             event.preventDefault();
-            urlInput.setCustomValidity(error);
-            urlInput.reportValidity();
+            window.aprsboxSubmitSettingsAction(form, {
+                actionId: "save-map-source",
+                group: "map-sources",
+                message: {{ t("Saving...")|tojson }},
+                busyLabel: {{ t("Saving...")|tojson }},
+                mode: "json",
+                minSpinnerMs: 500,
+                reloadOnSuccess: true,
+            });
         });
     })();
 </script>

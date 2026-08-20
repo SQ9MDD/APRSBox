@@ -9,9 +9,10 @@ from app import get_version
 from app.datetime_utils import format_display_datetime
 from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
 from app.ui_palette import normalize_ui_palette
-from app.services.content import get_aprs_symbol_icon_fallback_path, get_aprs_symbol_set
+from app.services.alarm_groups import get_aprs_alarm_enabled
 from app.services.alerts import attention_alert_count
 from app.services.band_condition import is_band_condition_enabled
+from app.services.content import get_aprs_symbol_icon_fallback_path, get_aprs_symbol_set
 from app.services.map_service import get_map_page_config
 from app.services.messages import get_unread_inbox_count
 
@@ -84,7 +85,8 @@ def build_template_context(
     current_aprs_symbol_set = get_aprs_symbol_set()
     aprs_symbol_icon_fallback = get_aprs_symbol_icon_fallback_path()
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
-    current_alert_count = attention_alert_count() if current_user else 0
+    aprs_alarm_enabled = get_aprs_alarm_enabled() if current_user else False
+    current_alert_count = attention_alert_count() if current_user and aprs_alarm_enabled else 0
     band_condition_enabled = is_band_condition_enabled() if current_user else False
     alert_modal_map_config = (
         get_map_page_config(root_path=request.scope.get("root_path", ""))
@@ -95,6 +97,8 @@ def build_template_context(
     for item in PRIMARY_NAV:
         visible_roles = tuple(item.get("visible_roles") or ())
         if item["key"] == "band-condition" and not band_condition_enabled:
+            continue
+        if item["key"] == "alerts" and not aprs_alarm_enabled:
             continue
         if current_user and (current_user.role in item["roles"] or current_user.role in visible_roles):
             translated_item = dict(item)

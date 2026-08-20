@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.10.16.dev - 2026-08-20
+- `Mensajes APRS / lista de conversaciones`: la lista se rediseñó como registros compactos de una sola línea con columnas fijas para selección, indicativo, estado de recepción, estado de lectura y eliminación; el tiempo transcurrido desde la última trama pasó al tooltip de la fila y los indicadores usan ahora un conjunto uniforme de iconos Material Design.
+- `Mensajes APRS / eliminación múltiple`: se añadieron casillas por conversación y una casilla común de tres estados en la cabecera de la lista, alineada sobre la columna de selección; la acción para eliminar lo seleccionado se sitúa sobre la columna de papeleras y borra las conversaciones elegidas junto con sus mensajes tras una única confirmación.
+
+## 1.10.15.dev - 2026-08-16
+- `Ajustes / HTTPS`: se añadió un panel para administrar `aprsbox.crt`, `aprsbox.key` y la cadena de CA opcional en `/opt/aprsbox/data/ssl`; la interfaz verifica el par certificado/clave, muestra el estado de los archivos, permite subirlos y eliminarlos de forma segura y descargar la cadena de CA. La generación de PKI local y la descarga de la CA raíz siguen desactivadas por ahora.
+- `HTTPS / ejecución`: el selector guarda el estado HTTPS y reinicia los servicios; el modo HTTP escucha en el puerto `8000`, mientras que el modo HTTPS desactiva ese listener, inicia Uvicorn con TLS en `443` y ejecuta un servicio separado que redirige el puerto `80` a HTTPS con el estado `308`.
+- `Instalador / actualizador`: se añadió compatibilidad con el redirector y las unidades Uvicorn para systemd y OpenRC, sustituyendo Gunicorn como ejecutor de web y core; también se corrigieron la migración de unidades, la entrega explícita del estado HTTPS, `CAP_NET_BIND_SERVICE` y las actualizaciones posteriores iniciadas desde la GUI.
+- `HTTPS / fiabilidad y ayuda`: el reinicio final se ejecuta fuera del cgroup del servicio web y registra su finalización, las transiciones HTTP/HTTPS esperan la recuperación de los servicios y limpian estados de tareas antiguos, y el directorio SSL se corrige a `aprsbox:aprsbox` con modo `0750`; la ayuda localizada explica mDNS, SAN para nombres DNS y certificados emitidos para direcciones IP.
+
+## 1.10.14.dev - 2026-08-16
+- `GUI / alarmas`: la opción `Alarmas` de la barra lateral se oculta cuando `Activar alarmas APRS` está deshabilitado.
+
+## 1.10.12.dev - 2026-08-15
+- `Ajustes / diálogos`: los cuadros nativos del navegador `confirm` y `prompt` se sustituyeron por el modal compartido de APRSBox para la actualización de la aplicación, la importación de configuración, el mantenimiento de la base de datos, el reinicio de servicios y las operaciones del host; las confirmaciones `REBOOT` y `POWER OFF` exigen escribir la frase exacta, y la acción de cierre del modal de progreso solo aparece al finalizar la operación.
+- `Ajustes / fuentes de mapas`: guardar y editar una fuente, cambiar el orden, seleccionar la fuente predeterminada, eliminar y limpiar la caché usan ahora el mismo modal asíncrono con indicador de progreso, mensaje de resultado localizado y gestión de errores que las demás acciones del sistema; la validación del formulario se conserva antes del envío.
+
+## 1.10.11.dev - 2026-08-15
+- `GUI / ayuda`: el modal compartido por todos los documentos de ayuda tiene ahora una barra de desplazamiento fina y visible, adaptada al tema activo; el desplazamiento permanece dentro del diálogo y no se propaga a la página situada detrás.
+- `APRS / selección de símbolos`: las listas de símbolos de `Mi estación`, `Objetos / Elementos` y el filtro de iconos de `Packet Flow` muestran ahora, junto al icono y el código, la descripción oficial del índice de símbolos de aprs.fi; la descripción y la vista previa siguen la tabla primaria `/` o alternativa `\` seleccionada.
+- `APRS / iconos modernos`: se corrigieron los símbolos dañados `/!` (comisaría de policía), `\!` (emergencia), `/q` y `\q` (variantes de cuadrícula), sustituyendo los archivos incorrectos —incluidos los que contenían una hoja completa— por las celdas adecuadas de las hojas de iconos originales.
+
+## 1.10.10.dev - 2026-08-14
+- `Packet Routing / guardado`: activar y desactivar reglas, así como guardar desde el editor, utiliza ahora el diálogo estándar de APRSBox con indicador de progreso, mensaje de resultado y gestión de errores sin recargar la página; tras guardar correctamente, el usuario vuelve a la lista correspondiente o a la regla editada.
+- `GUI / ayuda`: todos los botones de ayuda usan ahora un icono ampliado un 50 % con un acento azul uniforme en el icono, el borde y el fondo, lo que permite reconocer inmediatamente los controles de ayuda en todas las vistas y paletas de colores.
+- `Mapa / cuadrícula QTH`: se redujo el tamaño de las etiquetas de localizadores de cuatro caracteres en el nivel de zoom `6` para evitar que dominen o se solapen en la vista densa de la cuadrícula.
+
+## 1.10.9.dev - 2026-08-14
+- `Mensajes APRS / compatibilidad`: los mensajes entrantes, las confirmaciones `ack` y los rechazos `rej` admiten ahora identificadores alfanuméricos de 1 a 5 caracteres; un mensaje numerado retransmitido por el mismo remitente no se duplica aunque cambie su asignación de conversación, pero sigue recibiendo una nueva confirmación.
+
+## 1.10.8.dev - 2026-08-14
+- `Panel / preparación de la estación`: la evaluación ahora se basa en la conexión APRS-IS, el flujo `Local TX → APRS-IS`, una baliza definida y las rutas completas `RF → APRS-IS`, `APRS-IS → RF` y `RF → RF` para las interfaces activas; los estados usan iconos y la disponibilidad de interfaces activas se muestra en verde cuando está completa, amarillo oscuro cuando es parcial y rojo cuando es cero.
+- `Panel / diseño`: se movió Preparación de la estación a la zona destacada junto al gráfico, se eliminaron la tarjeta de eventos importantes recientes y el resumen duplicado de interfaces/actividad RF, y el contenido restante se ajustó a la ventana actual; también se eliminó el contador global engañoso que omitía las interfaces desactivadas.
+- `Panel / ayuda de configuración`: se sustituyó el enlace de configuración de la tarjeta por el icono de ayuda estándar integrado en la propia tarjeta y se añadió una guía accesible en cuatro idiomas con la secuencia `Interfaces → Mi estación → Packet Routing`, incluida la diferencia entre el flujo propio `Local TX → APRS-IS` y el uplink de tramas recibidas por RF. La actualización automática se pausa mientras la ayuda está abierta y vuelve a contar 30 segundos completos al cerrarla.
+- `Ajustes / comprobación de versión`: `Comprobar versión` obtiene ahora el archivo `VERSION` de GitHub directamente mediante HTTPS, por lo que también funciona en la imagen Docker, donde no está instalado el programa `git`; para otras fuentes se conserva el mecanismo Git anterior como alternativa. La comparación ya no propone «actualizar» una compilación de desarrollo más reciente a una versión estable anterior.
+
+## 1.10.7.dev - 2026-08-14
+- `Mapa / backend de estaciones`: se añadió la proyección persistente `map_station_state`, actualizada al recibir o transmitir tramas APRS y reconstruible desde el historial; los endpoints del mapa ya no reconstruyen el estado volviendo a analizar `traffic_frames` (el TTFB medido de `stations-lite` bajó de unos `3,4 s` a unos `63 ms`).
+- `Estaciones / actualización`: el mapa y la lista de estaciones leen la proyección preparada, mientras que el sondeo por revisión obtiene solo los registros modificados y las eliminaciones; el resumen RF tampoco recorre ya el historial.
+- `Panel / rendimiento`: las estaciones escuchadas recientemente y el gráfico inicial reutilizan las proyecciones existentes, los KPI de tráfico se calculan con una sola consulta y las estaciones escuchadas no se vuelven a analizar desde `traffic_frames` cuando está disponible el búfer horario.
+
 ## 1.10.6 - 2026-08-13
 - `Versión estable`: se integraron los cambios de las versiones `1.10.2.dev–1.10.5.dev`, que incluyen la copia de configuración v2 más segura, acciones y diálogos de GUI unificados, mejoras de desplazamiento y usabilidad, actualización automática de APRS Device Identification, la cuadrícula Maidenhead/QTH adaptada al tema y con precisión variable, la corrección de la repetición mundial del mapa y el diálogo estándar de confirmación de actualización de la aplicación.
 

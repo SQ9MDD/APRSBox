@@ -33,6 +33,7 @@ _event_log_debug_enabled_cache: bool | None = None
 RUNTIME_MAINTENANCE_RESET_TABLES: tuple[str, ...] = (
     "event_logs",
     "traffic_frames",
+    "map_station_state",
     "digi_flow_event_log",
     "aprsis_igate_rf_heard",
     "aprsis_igate_station_state",
@@ -590,6 +591,26 @@ CREATE TABLE IF NOT EXISTS traffic_frames (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS map_station_state (
+    station_key TEXT PRIMARY KEY COLLATE NOCASE,
+    snapshot_json TEXT,
+    rf_snapshot_json TEXT,
+    aprsis_snapshot_json TEXT,
+    tx_snapshot_json TEXT,
+    is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+    revision INTEGER NOT NULL,
+    last_heard_at TEXT,
+    last_seen_any_at TEXT,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS map_station_state_meta (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    revision INTEGER NOT NULL DEFAULT 0,
+    is_ready INTEGER NOT NULL DEFAULT 0 CHECK (is_ready IN (0, 1)),
+    rebuilt_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS aprs_alerts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     identity_key TEXT NOT NULL,
@@ -979,6 +1000,10 @@ CREATE TABLE IF NOT EXISTS radio_activity_aggregator_state (
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_map_station_state_revision ON map_station_state(revision);
+CREATE INDEX IF NOT EXISTS idx_map_station_state_last_heard ON map_station_state(is_deleted, last_heard_at DESC, station_key);
+CREATE INDEX IF NOT EXISTS idx_map_station_state_last_seen ON map_station_state(is_deleted, last_seen_any_at, station_key);
+INSERT OR IGNORE INTO map_station_state_meta(id, revision, is_ready) VALUES (1, 0, 0);
 CREATE INDEX IF NOT EXISTS idx_aprs_alerts_last_seen_at ON aprs_alerts(last_seen_at DESC, id DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aprs_alert_parts_identity
     ON aprs_alert_parts(part_identity_key);
@@ -3882,6 +3907,14 @@ def reset_runtime_operational_data(*, table_names: tuple[str, ...] = RUNTIME_MAI
             if before_total > 0:
                 connection.execute(f'DELETE FROM "{table_name}"')
             deleted_by_table[table_name] = before_total
+        if "traffic_frames" in table_names and "map_station_state_meta" in existing_tables:
+            connection.execute(
+                """
+                UPDATE map_station_state_meta
+                SET revision = 0, is_ready = 0, rebuilt_at = NULL
+                WHERE id = 1
+                """
+            )
     return deleted_by_table
 
 

@@ -1,0 +1,21 @@
+[Unit]
+Description=APRSBox HTTP to HTTPS redirect
+After=local-fs.target network-online.target
+Wants=network-online.target
+Before=aprsbox-web.service
+
+[Service]
+Type=simple
+User=aprsbox
+Group=aprsbox
+WorkingDirectory=/opt/aprsbox/app
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+ExecStart=/opt/aprsbox/venv/bin/python /opt/aprsbox/app/scripts/http-redirect.py
+Restart=on-failure
+RestartSec=2
+StandardOutput=append:/opt/aprsbox/logs/aprsbox-http-redirect.log
+StandardError=append:/opt/aprsbox/logs/aprsbox-http-redirect.error.log
+
+[Install]
+WantedBy=multi-user.target

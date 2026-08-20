@@ -2,9 +2,10 @@
 
 name="APRSBox Web"
 description="APRSBox FastAPI web GUI"
-command="/opt/aprsbox/venv/bin/python"
-command_args="-m gunicorn --bind 0.0.0.0:8000 --workers 1 --worker-class uvicorn.workers.UvicornWorker --access-logfile - --error-logfile - app.main:app"
+command="/opt/aprsbox/app/scripts/start-web.sh"
+command_args=""
 command_user="aprsbox:aprsbox"
+capabilities="^cap_net_bind_service"
 directory="/opt/aprsbox/app"
 pidfile="/run/aprsbox-web.pid"
 command_background="yes"

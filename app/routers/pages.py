@@ -10,6 +10,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
+from app.aprs_symbols import get_aprs_symbol_description
 from app.dependencies import get_current_user, require_roles
 from app.db import (
     DEFAULT_EVENT_LOG_KEEP_ROWS,
@@ -61,17 +62,16 @@ from app.services.content import (
     get_aprs_symbol_icon_path,
     get_aprs_symbol_set,
     get_recent_station_packets,
-    heard_stations,
+    projected_station_list,
     has_enabled_modem_interface,
     get_section_row,
     get_section_rows,
     get_related_ssids,
-    get_rf_heard_station_snapshots,
-    get_visible_station_snapshots,
     recent_station_outbound_jobs,
     recent_object_outbound_jobs,
     recent_bulletin_outbound_jobs,
     get_station_detail,
+    get_visible_station_snapshots,
     get_station_settings,
     recent_event_logs,
     safe_update_station_settings,
@@ -123,6 +123,7 @@ from app.services.messages import (
     clear_message_inbox,
     create_or_update_conversation,
     delete_conversation as delete_message_conversation,
+    delete_conversations as delete_message_conversations,
     get_messages_page_data as get_live_messages_page_data,
     get_effective_message_target_groups,
     get_unread_inbox_count,
@@ -165,6 +166,7 @@ from app.services.band_condition import (
     get_band_condition_page_data,
     get_band_condition_snapshot,
 )
+from app.services.network_diagnostics import get_network_diagnostics
 from app.services.aprsis import (
     aprsis_runtime_badge,
     get_aprsis_config,
@@ -191,6 +193,16 @@ from app.services.config_backup import (
     export_configuration_backup_bytes,
     safe_import_configuration_backup,
 )
+from app.services.https_files import (
+    HTTPS_CA_CHAIN_FILENAME,
+    HTTPS_CERTIFICATE_FILENAME,
+    HTTPS_FILE_MAX_BYTES,
+    HTTPS_PRIVATE_KEY_FILENAME,
+    delete_https_file,
+    https_file_status,
+    save_https_enabled,
+    save_https_file,
+)
 from app.services.map_service import (
     COVERAGE_FILL_OPACITY_SETTING_KEY,
     DEFAULT_COVERAGE_FILL_OPACITY_PERCENT,
@@ -212,6 +224,7 @@ from app.services.map_service import (
     get_station_detail_track_payload,
     normalize_coverage_fill_opacity_percent,
 )
+from app.services.map_station_state import read_map_station_rf_snapshots, read_map_station_state
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
 from app.services.outbound import enqueue_beacon_job, enqueue_message_job, enqueue_object_job, enqueue_status_job
 from app.services.system import (
@@ -282,6 +295,25 @@ DATABASE_MAINTENANCE_TABLE_LABELS: dict[str, str] = {
 
 def _translate(message: object) -> str:
     return get_translator(get_app_language())(message)
+
+
+async def _read_https_upload(upload: UploadFile | None, allowed_suffixes: set[str]) -> bytes | None:
+    if upload is None:
+        return None
+    if not upload.filename:
+        await upload.close()
+        return None
+    try:
+        if Path(upload.filename).suffix.lower() not in allowed_suffixes:
+            raise ValueError("Unsupported certificate file type.")
+        payload = await upload.read(HTTPS_FILE_MAX_BYTES + 1)
+    finally:
+        await upload.close()
+    if not payload:
+        raise ValueError("Certificate file is empty.")
+    if len(payload) > HTTPS_FILE_MAX_BYTES:
+        raise ValueError("Certificate file is too large (limit: 1 MB).")
+    return payload
 
 
 def _system_job_process_is_running(pid: object) -> bool:
@@ -386,15 +418,7 @@ def _section_template_context(
                     {"value": "/", "label": "Primary (/)"},
                     {"value": "\\", "label": "Alternate (\\)"},
                 ],
-                "symbol_code_options": [
-                    {
-                        "value": chr(code),
-                        "label": chr(code),
-                        "primary_icon": get_aprs_symbol_icon_path(f"/{chr(code)}"),
-                        "alternate_icon": get_aprs_symbol_icon_path(f"\\{chr(code)}"),
-                    }
-                    for code in range(33, 127)
-                ],
+                "symbol_code_options": _symbol_code_options(),
             }
         )
     if slug == "objects":
@@ -411,8 +435,19 @@ def _section_edit_redirect(request: Request, slug: str, record_id: int) -> Redir
     )
 
 
-def _station_detail_context(callsign: str, unit_system: str, *, root_path: str = "") -> dict | None:
-    snapshots = get_visible_station_snapshots()
+def _station_detail_context(
+    callsign: str,
+    unit_system: str,
+    *,
+    root_path: str = "",
+    station_settings: dict | None = None,
+    use_projected_state: bool = True,
+) -> dict | None:
+    snapshots = (
+        read_map_station_state(station_settings=station_settings)["snapshots"]
+        if use_projected_state
+        else get_visible_station_snapshots()
+    )
     detail = get_station_detail(callsign, unit_system=unit_system, snapshots=snapshots)
     if detail is None:
         return None
@@ -629,9 +664,13 @@ def _digi_flow_editor_context(
     )
 
 
-def _dashboard_band_condition_card() -> dict | None:
+def _dashboard_band_condition_cards() -> list[dict]:
     snapshot = get_band_condition_snapshot()
-    bands = snapshot.get("bands") or []
+    return list(snapshot.get("bands") or [])
+
+
+def _dashboard_band_condition_card(bands: list[dict] | None = None) -> dict | None:
+    bands = bands if bands is not None else _dashboard_band_condition_cards()
     if not bands:
         return None
     preferred = next((item for item in bands if item.get("band") == "2m"), None)
@@ -661,21 +700,27 @@ def _station_form_options(
             + [{"value": str(value), "label": str(value)} for value in range(10)]
             + [{"value": chr(code), "label": chr(code)} for code in range(ord("A"), ord("Z") + 1)]
         ),
-        "symbol_code_options": [
-            {
-                "value": chr(code),
-                "label": chr(code),
-                "primary_icon": get_aprs_symbol_icon_path(f"/{chr(code)}"),
-                "alternate_icon": get_aprs_symbol_icon_path(f"\\{chr(code)}"),
-            }
-            for code in range(33, 127)
-        ],
+        "symbol_code_options": _symbol_code_options(),
         "beacon_interval_options": [{"value": value, "label": f"{value}m"} for value in (15, 30, 45, 60)],
         "beacon_position_interval_options": (
             [{"value": str(value), "label": f"{value}m"} for value in (15, 30, 45, 60)]
             + [{"value": BEACON_INTERVAL_MODE_PROPORTIONAL, "label": "Proportional Path"}]
         ),
     }
+
+
+def _symbol_code_options() -> list[dict[str, str]]:
+    return [
+        {
+            "value": symbol_code,
+            "label": symbol_code,
+            "primary_icon": get_aprs_symbol_icon_path(f"/{symbol_code}"),
+            "alternate_icon": get_aprs_symbol_icon_path(f"\\{symbol_code}"),
+            "primary_description": get_aprs_symbol_description("/", symbol_code),
+            "alternate_description": get_aprs_symbol_description("\\", symbol_code),
+        }
+        for symbol_code in (chr(code) for code in range(33, 127))
+    ]
 
 
 def _station_page_context(
@@ -959,6 +1004,7 @@ def _settings_page_context(
         }
         for category in ALERT_EVENT_CATEGORIES
     ]
+    https_status = https_file_status(request.app.state.settings.ssl_dir)
     return build_template_context(
         request,
         page_title="Settings",
@@ -974,6 +1020,16 @@ def _settings_page_context(
         can_manage_global_settings=current_user.role in {"admin", "operator"},
         can_manage_database_maintenance=current_user.role in {"admin", "operator"},
         can_manage_config_backup=current_user.role in {"admin", "operator"},
+        https_certificate_filename=HTTPS_CERTIFICATE_FILENAME,
+        https_private_key_filename=HTTPS_PRIVATE_KEY_FILENAME,
+        https_ca_chain_filename=HTTPS_CA_CHAIN_FILENAME,
+        web_http_port_suffix=(
+            "" if request.app.state.settings.web_http_port == 80 else f":{request.app.state.settings.web_http_port}"
+        ),
+        web_https_port_suffix=(
+            "" if request.app.state.settings.web_https_port == 443 else f":{request.app.state.settings.web_https_port}"
+        ),
+        **https_status,
         current_language=current_language if current_language is not None else get_app_language(),
         current_default_units=current_default_units if current_default_units is not None else station_settings.get("default_units", "metric"),
         current_ui_palette=resolved_ui_palette,
@@ -1053,15 +1109,29 @@ def dashboard(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
-    dashboard_band = _dashboard_band_condition_card()
+    dashboard_bands = _dashboard_band_condition_cards()
+    dashboard_band = _dashboard_band_condition_card(dashboard_bands)
     dashboard_activity = get_dashboard_radio_activity(range_value="24h")
+    https_enabled = bool(https_file_status(request.app.state.settings.ssl_dir)["https_enabled"])
+    direct_scheme = "https" if https_enabled else "http"
+    direct_port = (
+        request.app.state.settings.web_https_port
+        if https_enabled
+        else request.app.state.settings.web_http_port
+    )
     context = build_template_context(
         request,
         page_title="Dashboard",
         current_user=current_user,
         active_nav="dashboard",
         dashboard_band=dashboard_band,
+        dashboard_bands=dashboard_bands,
         dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
+        network_diagnostics=get_network_diagnostics(
+            scheme=direct_scheme,
+            port=direct_port,
+            root_path=request.scope.get("root_path", ""),
+        ),
     )
     return templates.TemplateResponse("dashboard.html", context)
 
@@ -1106,14 +1176,19 @@ def stations_page(
 ) -> object:
     templates = request.app.state.templates
     station_settings = get_station_settings()
-    stations = heard_stations(unit_system=station_settings.get("default_units", "metric"))
+    station_state = projected_station_list(
+        unit_system=station_settings.get("default_units", "metric"),
+        station_settings=station_settings,
+    )
+    stations = station_state["stations"]
     context = build_template_context(
         request,
         page_title="Stations",
         current_user=current_user,
         active_nav="stations",
         stations=stations,
-        station_summary=station_summary(get_rf_heard_station_snapshots()),
+        stations_revision=station_state["revision"],
+        station_summary=station_summary(read_map_station_rf_snapshots()),
         default_units=station_settings.get("default_units", "metric"),
     )
     return templates.TemplateResponse("stations.html", context)
@@ -1131,6 +1206,7 @@ def station_detail_page(
         callsign,
         station_settings.get("default_units", "metric"),
         root_path=request.scope.get("root_path", ""),
+        station_settings=station_settings,
     )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
@@ -1164,6 +1240,7 @@ def station_detail_message(
         callsign,
         station_settings.get("default_units", "metric"),
         root_path=request.scope.get("root_path", ""),
+        station_settings=station_settings,
     )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
@@ -1198,6 +1275,7 @@ def station_detail_snapshot(
         callsign,
         station_settings.get("default_units", "metric"),
         root_path=request.scope.get("root_path", ""),
+        station_settings=station_settings,
     )
     if station_context is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Station not found")
@@ -1206,14 +1284,22 @@ def station_detail_snapshot(
 
 @router.get("/api/stations")
 def stations_snapshot(
+    since_revision: int | None = None,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     station_settings = get_station_settings()
-    stations = heard_stations(unit_system=station_settings.get("default_units", "metric"))
+    station_state = projected_station_list(
+        unit_system=station_settings.get("default_units", "metric"),
+        since_revision=since_revision,
+        station_settings=station_settings,
+    )
     return JSONResponse(
         {
-            "stations": stations,
-            "summary": station_summary(get_rf_heard_station_snapshots()),
+            "revision": station_state["revision"],
+            "full_snapshot": station_state["full_snapshot"],
+            "removed_station_keys": station_state["removed_station_keys"],
+            "stations": station_state["stations"],
+            "summary": station_summary(read_map_station_rf_snapshots()),
             "default_units": station_settings.get("default_units", "metric"),
         }
     )
@@ -1699,6 +1785,148 @@ async def settings_import_configuration_backup(
     )
 
 
+@router.post("/settings/https/certificates")
+async def settings_upload_https_certificates(
+    request: Request,
+    certificate_file: UploadFile | None = File(None),
+    private_key_file: UploadFile | None = File(None),
+    ca_chain_file: UploadFile | None = File(None),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    payloads: list[bytes | None] = []
+    validation_error: ValueError | None = None
+    for upload, allowed_suffixes in (
+        (certificate_file, {".crt", ".pem"}),
+        (private_key_file, {".key", ".pem"}),
+        (ca_chain_file, {".crt", ".pem"}),
+    ):
+        try:
+            payloads.append(await _read_https_upload(upload, allowed_suffixes))
+        except ValueError as exc:
+            validation_error = validation_error or exc
+            payloads.append(None)
+    if validation_error is not None:
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(validation_error))},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    certificate_payload, private_key_payload, ca_chain_payload = payloads
+    uploads = (
+        (HTTPS_CERTIFICATE_FILENAME, certificate_payload, False),
+        (HTTPS_PRIVATE_KEY_FILENAME, private_key_payload, True),
+        (HTTPS_CA_CHAIN_FILENAME, ca_chain_payload, False),
+    )
+    if not any(payload is not None for _, payload, _ in uploads):
+        return JSONResponse(
+            {"ok": False, "error": _translate("Select at least one certificate file.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        for filename, payload, private in uploads:
+            if payload is not None:
+                save_https_file(request.app.state.settings.ssl_dir, filename, payload, private=private)
+    except OSError:
+        return JSONResponse(
+            {"ok": False, "error": _translate("Failed to store certificate files.")},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    return JSONResponse(
+        {"ok": True, "message": _translate("Certificate files uploaded."), "reload": True}
+    )
+
+
+@router.post("/settings/https/certificates/{file_kind}/delete")
+def settings_delete_https_file(
+    file_kind: str,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    filenames = {
+        "certificate": HTTPS_CERTIFICATE_FILENAME,
+        "private-key": HTTPS_PRIVATE_KEY_FILENAME,
+        "ca-chain": HTTPS_CA_CHAIN_FILENAME,
+    }
+    filename = filenames.get(file_kind)
+    if filename is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="HTTPS file not found")
+    if file_kind != "ca-chain" and https_file_status(request.app.state.settings.ssl_dir)["https_enabled"]:
+        return JSONResponse(
+            {"ok": False, "error": _translate("Disable HTTPS before deleting the certificate or private key.")},
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    try:
+        delete_https_file(request.app.state.settings.ssl_dir, filename)
+    except OSError:
+        return JSONResponse(
+            {"ok": False, "error": _translate("Failed to delete HTTPS file.")},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    return JSONResponse({"ok": True, "message": _translate("HTTPS file deleted."), "reload": True})
+
+
+@router.get("/settings/https/certificates/ca-chain/download")
+def settings_download_https_ca_chain(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> FileResponse:
+    path = request.app.state.settings.ssl_dir / HTTPS_CA_CHAIN_FILENAME
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CA chain not found")
+    return FileResponse(path=path, filename=HTTPS_CA_CHAIN_FILENAME, media_type="application/x-pem-file")
+
+
+@router.post("/settings/https")
+def settings_update_https(
+    request: Request,
+    https_enabled: str | None = Form(None),
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    if is_container_mode():
+        return _container_mode_system_action_denied_response()
+
+    ssl_dir = request.app.state.settings.ssl_dir
+    current_status = https_file_status(ssl_dir)
+    requested_enabled = https_enabled is not None
+    if requested_enabled and not current_status["https_ready"]:
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": _translate(
+                    "A matching certificate and private key are required before enabling HTTPS."
+                ),
+            },
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+    previous_enabled = bool(current_status["https_enabled"])
+    try:
+        save_https_enabled(ssl_dir, requested_enabled)
+    except OSError:
+        return JSONResponse(
+            {"ok": False, "error": _translate("Failed to save HTTPS setting.")},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    job_id = create_system_job("restart-services", message=_translate("Queued."))
+    result = start_service_restart_job(job_id=job_id, https_enabled=requested_enabled)
+    if not result.get("ok"):
+        save_https_enabled(ssl_dir, previous_enabled)
+        mark_system_job_error(job_id, message=_translate(str(result.get("error") or "Failed to start restart script.")))
+        return JSONResponse(
+            {"ok": False, "error": _translate(str(result.get("error") or "Failed to start service restart."))},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    mark_system_job_running(
+        job_id,
+        pid=int(result.get("pid") or 0) or None,
+        log_file=str(result.get("log_file") or "") or None,
+        message=_translate("Running."),
+    )
+    return JSONResponse({"ok": True, "job_id": job_id, "status": "queued"}, status_code=status.HTTP_202_ACCEPTED)
+
+
 @router.post("/settings/global")
 def settings_update_global(
     request: Request,
@@ -1912,6 +2140,7 @@ def settings_map_sources_save(
     notes: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "name": name.strip(),
         "url_template": url_template.strip(),
@@ -1925,6 +2154,11 @@ def settings_map_sources_save(
     }
     success, error, saved_id = safe_save_map_source(payload, source_id=record_id)
     if not success:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error or "Failed to save map source.")},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _settings_page_context(
             request,
             current_user,
@@ -1935,6 +2169,15 @@ def settings_map_sources_save(
         )
         return templates.TemplateResponse("settings.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Map source saved."),
+                "reload": True,
+                "saved_id": saved_id,
+            }
+        )
     context = _settings_page_context(
         request,
         current_user,
@@ -1952,7 +2195,19 @@ def settings_map_sources_set_default(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_set_default_map_source(source_id)
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(
+                    "Default map source updated." if success else (error or "Failed to change default map source.")
+                ),
+                "reload": success,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _settings_page_context(
         request,
         current_user,
@@ -1971,7 +2226,19 @@ def settings_map_sources_move(
     direction: str = Form(...),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_move_map_source(source_id, direction)
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(
+                    "Map source order updated." if success else (error or "Failed to reorder map source.")
+                ),
+                "reload": success,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _settings_page_context(
         request,
         current_user,
@@ -1988,7 +2255,19 @@ def settings_map_sources_delete(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_delete_map_source(source_id)
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(
+                    "Map source deleted." if success else (error or "Failed to delete map source.")
+                ),
+                "reload": success,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _settings_page_context(
         request,
         current_user,
@@ -2005,7 +2284,19 @@ def settings_map_sources_clear_cache(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     success, error = safe_clear_map_source_cache(source_id)
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": success,
+                "message" if success else "error": _translate(
+                    "Map source cache cleared." if success else (error or "Failed to clear map source cache.")
+                ),
+                "reload": success,
+            },
+            status_code=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST,
+        )
     context = _settings_page_context(
         request,
         current_user,
@@ -2278,19 +2569,39 @@ async def digi_flow_create(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     form = await request.form()
     try:
         payload = _parse_digi_flow_form_payload(form)
     except ValueError as exc:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(str(exc))},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _digi_flow_editor_context(request, current_user, form_data=build_digi_flow_editor_payload(), flash=str(exc))
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     flow_id, error = safe_create_digi_flow(payload)
     if error:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error)},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _digi_flow_editor_context(request, current_user, form_data=payload, flash=error)
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     assert flow_id is not None
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Packet Routing flow created."),
+                "reload": True,
+                "redirect": _path(request, f"/digi-flows/{flow_id}"),
+            }
+        )
     flow = get_digi_flow(flow_id)
     context = _digi_flow_editor_context(
         request,
@@ -2310,6 +2621,7 @@ async def digi_flow_update(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     templates = request.app.state.templates
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     if get_digi_flow(flow_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DIGI Flow not found")
 
@@ -2317,14 +2629,33 @@ async def digi_flow_update(
     try:
         payload = _parse_digi_flow_form_payload(form)
     except ValueError as exc:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(str(exc))},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _digi_flow_editor_context(request, current_user, flow_id=flow_id, form_data=build_digi_flow_editor_payload(), flash=str(exc))
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     error = safe_update_digi_flow(flow_id, payload)
     if error:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(error)},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         context = _digi_flow_editor_context(request, current_user, flow_id=flow_id, form_data=payload, flash=error)
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Packet Routing flow updated."),
+                "reload": True,
+                "redirect": _path(request, f"/digi-flows/{flow_id}"),
+            }
+        )
     flow = get_digi_flow(flow_id)
     context = _digi_flow_editor_context(
         request,
@@ -2343,13 +2674,28 @@ def digi_flow_toggle(
     request: Request,
     _: UserIdentity = Depends(require_roles("admin", "operator")),
     enabled: int = Form(...),
-) -> RedirectResponse:
+) -> object:
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     try:
         set_digi_flow_enabled(flow_id, bool(enabled))
     except ValueError as exc:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(str(exc))},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         return RedirectResponse(
             url=_path(request, f"/digi-flows?flash={quote(str(exc))}&success=0"),
             status_code=status.HTTP_303_SEE_OTHER,
+        )
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Packet Routing flow status updated."),
+                "reload": True,
+                "redirect": _path(request, "/digi-flows"),
+            }
         )
     return RedirectResponse(
         url=_path(request, f"/digi-flows?flash={'Packet%20Routing%20flow%20status%20updated.'}&success=1"),
@@ -2837,9 +3183,10 @@ def map_page(
 
 @router.get("/api/map/stations-lite")
 def map_stations_lite(
+    since_revision: int | None = None,
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
-    return JSONResponse(get_map_station_markers_payload())
+    return JSONResponse(get_map_station_markers_payload(since_revision=since_revision))
 
 
 @router.get("/api/map/alert-areas")
@@ -3970,6 +4317,7 @@ def alert_detail_page(
             related_label or str(alert.get("source_callsign") or ""),
             station_settings.get("default_units", "metric"),
             root_path=root_path,
+            use_projected_state=False,
         )
         if station_context is not None:
             station_map_config = dict(station_context["station_map_config"])
@@ -4266,6 +4614,23 @@ def messages_delete(
 ) -> JSONResponse:
     delete_message_conversation(conversation_id)
     return JSONResponse({"ok": True, "messages_view": get_live_messages_page_data()})
+
+
+@router.post("/api/messages/selected-conversations/delete")
+async def messages_delete_selected(
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+) -> JSONResponse:
+    payload = await request.json()
+    raw_ids = payload.get("conversation_ids") if isinstance(payload, dict) else None
+    if not isinstance(raw_ids, list):
+        return JSONResponse({"error": "conversation_ids must be a list."}, status_code=status.HTTP_400_BAD_REQUEST)
+    try:
+        conversation_ids = [int(conversation_id) for conversation_id in raw_ids]
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "conversation_ids must contain integer IDs."}, status_code=status.HTTP_400_BAD_REQUEST)
+    deleted = delete_message_conversations(conversation_ids)
+    return JSONResponse({"ok": True, "deleted": deleted, "messages_view": get_live_messages_page_data()})
 
 
 @router.post("/api/messages/clear")

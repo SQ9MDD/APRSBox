@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.10.16.dev - 2026-08-20
+- `APRS messages / conversation list`: rebuilt the list as compact single-line records with fixed columns for selection, callsign, heard status, read state, and deletion; time since the last frame moved to the row tooltip, and status indicators now use a consistent set of Material Design icons.
+- `APRS messages / bulk deletion`: added per-conversation checkboxes and a shared tri-state checkbox in the list header, aligned above the selection column; the delete-selected action sits above the trash-button column and removes the chosen conversations together with their messages after one confirmation.
+
+## 1.10.15.dev - 2026-08-16
+- `Settings / HTTPS`: added a panel for managing `aprsbox.crt`, `aprsbox.key`, and the optional CA chain in `/opt/aprsbox/data/ssl`; the UI verifies the certificate/key pair, displays file status, supports upload and safe removal, and allows the CA chain to be downloaded. Local PKI generation and Root CA download remain disabled for now.
+- `HTTPS / runtime`: the switch persists HTTPS state and restarts services; HTTP mode listens on port `8000`, while HTTPS mode disables that listener, starts Uvicorn with TLS on `443`, and runs a separate service that redirects port `80` to HTTPS with status `308`.
+- `Installer / updater`: added redirect-service and Uvicorn-unit support for both systemd and OpenRC, replacing Gunicorn as the web and core service runner; fixed unit migration, explicit HTTPS-state handoff, `CAP_NET_BIND_SERVICE`, and subsequent GUI-driven updates.
+- `HTTPS / reliability and help`: the final restart now runs outside the web service cgroup and reports completion, HTTP/HTTPS transitions wait for service recovery and clear stale job state, and the SSL directory is repaired to `aprsbox:aprsbox` mode `0750`; localized help covers mDNS, DNS SAN entries, and certificates issued for IP addresses.
+
+## 1.10.14.dev - 2026-08-16
+- `GUI / alerts`: the `Alerts` sidebar item is hidden when `Enable APRS alarms` is turned off.
+
+## 1.10.12.dev - 2026-08-15
+- `Settings / dialogs`: native browser `confirm` and `prompt` dialogs were replaced with the shared APRSBox modal for application updates, configuration import, database maintenance, service restart, and host operations; `REBOOT` and `POWER OFF` confirmations require the exact phrase, while the progress modal's close action appears only after the operation finishes.
+- `Settings / map sources`: saving and editing a source, reordering, selecting the default source, deleting, and clearing the cache now use the same asynchronous spinner modal, localized result message, and error handling as other system actions; form validation still runs before submission.
+
+## 1.10.11.dev - 2026-08-15
+- `GUI / help`: the shared modal used by every help document now has a visible thin scrollbar styled for the active theme; scrolling remains contained inside the dialog instead of propagating to the page behind it.
+- `APRS / symbol selection`: symbol lists in `My Station`, `Objects / Items`, and the `Packet Flow` icon filter now show the official aprs.fi symbol-index description beside each icon and code; the description and preview follow the selected primary `/` or alternate `\` table.
+- `APRS / modern icons`: fixed the broken `/!` (Police station), `\!` (Emergency), and `/q` and `\q` (grid-square variants) symbols by replacing incorrect files, including files containing an entire sprite sheet, with the proper tiles from the source icon sheets.
+
+## 1.10.10.dev - 2026-08-14
+- `Packet Routing / save`: enabling and disabling rules and saving in the editor now use the standard APRSBox dialog with a spinner, result message, and inline error handling without a page reload; after a successful save, the user returns to the appropriate list or edited rule.
+- `GUI / help`: every help button now uses an icon enlarged by 50% with a consistent blue accent on the icon, border, and background, making help controls immediately recognizable across all views and color palettes.
+- `Map / QTH grid`: reduced four-character locator label size at zoom level `6` to keep labels from dominating or overlapping in the dense grid view.
+
+## 1.10.9.dev - 2026-08-14
+- `APRS messages / compatibility`: incoming messages, `ack` acknowledgements, and `rej` rejections now accept alphanumeric identifiers from 1 to 5 characters long; a retransmitted numbered message from the same sender is not duplicated even if its conversation assignment changes, while it is still acknowledged again.
+
+## 1.10.8.dev - 2026-08-14
+- `Dashboard / station readiness`: rebuilt the assessment around the APRS-IS connection, the `Local TX → APRS-IS` flow, a defined beacon, and complete `RF → APRS-IS`, `APRS-IS → RF`, and `RF → RF` directions for active interfaces; states now use icons, while active-interface availability is green when complete, dark yellow when partial, and red at zero.
+- `Dashboard / layout`: moved Station Readiness into the prominent area beside the chart, removed the recent-important-events card and the duplicated interfaces/RF-activity summary, and fitted the remaining content to the current viewport; the misleading aggregate readiness counter that excluded disabled interfaces was also removed.
+- `Dashboard / configuration help`: replaced the readiness card's configuration link with the standard help icon embedded in the card and added an approachable four-language guide through `Interfaces → My Station → Packet Routing`, including the difference between the station's own `Local TX → APRS-IS` flow and the uplink of frames received over RF. Dashboard auto-refresh pauses while help is open and restarts with a full 30-second delay after it closes.
+- `Settings / version check`: `Check version` now fetches the GitHub `VERSION` file directly over HTTPS, so it also works in the Docker image where the `git` executable is not installed; the existing Git mechanism remains as a fallback for other sources. Version comparison no longer offers to “update” a newer development build to an older stable release.
+
+## 1.10.7.dev - 2026-08-14
+- `Map / station backend`: added the durable `map_station_state` projection, updated while APRS frames are received or transmitted and rebuildable from history; map endpoints no longer reconstruct state by reparsing `traffic_frames` (measured `stations-lite` TTFB dropped from about `3.4 s` to about `63 ms`).
+- `Stations / refresh`: the map and station list read the prepared projection, while revision-based polling fetches only changed records and removals; the RF summary no longer scans history either.
+- `Dashboard / performance`: recently heard stations and the initial chart now reuse existing projections, traffic KPIs use one query, and heard-station keys are no longer reparsed from `traffic_frames` when the hourly buffer is available.
+
 ## 1.10.6 - 2026-08-13
 - `Stable release`: merged changes from versions `1.10.2.dev–1.10.5.dev`, including safer configuration backup v2, standardized GUI actions and dialogs, scrolling and usability improvements, automatic APRS Device Identification refresh, the theme-aware Maidenhead/QTH grid with adaptive precision, corrected map world wrapping, and the standard application-update confirmation dialog.
 

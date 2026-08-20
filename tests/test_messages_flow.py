@@ -25,6 +25,7 @@ from app.services.messages import (
     _format_heard_parts,
     _heard_recently_state,
     clear_message_inbox,
+    delete_conversations,
     get_message_settings,
     get_unread_inbox_count,
     get_messages_page_data,
@@ -96,6 +97,28 @@ def station_payload(interface_id: int, *, ssid: str = "4") -> dict[str, str]:
 
 
 class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
+    def test_delete_conversations_removes_only_selected_threads_and_cancels_their_jobs(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            queue_outgoing_message(callsign="SP8ABC", message_text="Delete me", path="")
+            queue_outgoing_message(callsign="DL1XYZ-9", message_text="Keep me", path="")
+            selected = fetch_one("SELECT id FROM aprs_message_conversations WHERE remote_callsign = 'SP8ABC'")
+            assert selected is not None
+
+            result = delete_conversations([int(selected["id"])])
+
+            self.assertEqual(result, {"conversation_count": 1, "message_count": 1})
+            remaining = fetch_all(
+                "SELECT remote_callsign, remote_ssid FROM aprs_message_conversations ORDER BY remote_callsign"
+            )
+            self.assertEqual(
+                [(str(row["remote_callsign"]), int(row["remote_ssid"])) for row in remaining],
+                [("DL1XYZ", 9)],
+            )
+            jobs = fetch_all("SELECT status FROM outbound_jobs WHERE kind = 'message' ORDER BY id ASC")
+            self.assertEqual([str(row["status"]) for row in jobs], ["cancelled", "queued"])
+
     def test_clear_message_inbox_removes_all_conversations_and_cancels_queued_jobs(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
@@ -1104,6 +1127,58 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(ack_jobs), 2)
             self.assertTrue(all('"message_text":"ack8"' in str(job["payload_json"]) for job in ack_jobs))
+
+    def test_incoming_message_accepts_one_to_five_character_message_ids(self) -> None:
+        for message_id, stored_id in (("1", "01"), ("12A", "12A"), ("E4CA6", "E4CA6")):
+            with self.subTest(message_id=message_id), temporary_database():
+                interface_id = insert_modem()
+                update_station_settings(station_payload(interface_id))
+
+                inbound_line = f"SP8ABC>APRS::SQ9MDD-4 :Do niedzieli rano{{{message_id}"
+                process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+
+                row = fetch_one(
+                    "SELECT message_text, message_number FROM aprs_messages WHERE direction = 'rx'"
+                )
+                assert row is not None
+                self.assertEqual(row["message_text"], "Do niedzieli rano")
+                self.assertEqual(row["message_number"], stored_id)
+
+                ack_jobs = fetch_all(
+                    "SELECT payload_json FROM outbound_jobs WHERE kind = 'message' ORDER BY id ASC"
+                )
+                self.assertEqual(len(ack_jobs), 2)
+                self.assertTrue(
+                    all(
+                        f'"message_text":"ack{message_id}"' in str(job["payload_json"])
+                        for job in ack_jobs
+                    )
+                )
+
+    def test_retransmitted_numbered_message_is_stored_once_and_acked_again(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            inbound_line = "SP8ABC>APRS::SQ9MDD-4 :Do niedzieli rano{E4CA6"
+
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:01:00+00:00")
+            process_incoming_tnc2_message(inbound_line, timestamp="2026-01-01T00:02:00+00:00")
+
+            rows = fetch_all(
+                "SELECT sender, message_text, message_number FROM aprs_messages WHERE direction = 'rx'"
+            )
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["sender"], "SP8ABC")
+            self.assertEqual(rows[0]["message_text"], "Do niedzieli rano")
+            self.assertEqual(rows[0]["message_number"], "E4CA6")
+
+            ack_jobs = fetch_all(
+                "SELECT payload_json FROM outbound_jobs WHERE kind = 'message' ORDER BY id ASC"
+            )
+            self.assertEqual(len(ack_jobs), 4)
+            self.assertTrue(
+                all('"message_text":"ackE4CA6"' in str(job["payload_json"]) for job in ack_jobs)
+            )
 
     def test_incoming_third_party_message_uses_inner_sender(self) -> None:
         with temporary_database():

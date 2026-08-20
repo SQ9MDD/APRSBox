@@ -7,6 +7,27 @@ from app.routers import pages
 
 
 class HelpMarkdownTests(unittest.TestCase):
+    def test_station_readiness_has_beginner_checklist_in_supported_languages(self) -> None:
+        expected_headings = {
+            "en": "# Station Readiness",
+            "pl": "# Gotowość stacji",
+            "de": "# Stationsbereitschaft",
+            "es": "# Preparación de la estación",
+        }
+        for language, heading in expected_headings.items():
+            with self.subTest(language=language):
+                resolved = pages._read_help_markdown(
+                    page="application/dashboard_readiness",
+                    language=language,
+                )
+                self.assertIsNotNone(resolved)
+                assert resolved is not None
+                self.assertEqual(resolved[0], f"application/dashboard_readiness.{language}.md")
+                self.assertTrue(resolved[1].startswith(heading))
+                self.assertIn("Local TX → TX APRS-IS", resolved[1])
+                self.assertIn("Receiver RF → TX APRS-IS", resolved[1])
+                self.assertIn("Internal TX", resolved[1])
+
     def test_alerts_have_dedicated_localized_help_with_autoplay_guidance(self) -> None:
         expected_headings = {
             "en": "# APRS emergency alerts",

@@ -205,6 +205,7 @@ def process_normalized_tnc2_rx(
         rx_to_igate_enqueue_ms = None
 
     alert_result: dict[str, Any] | None = None
+    map_projection_error: str | None = None
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -247,6 +248,31 @@ def process_normalized_tnc2_rx(
                 "created_at": occurred_at,
             },
         )
+        from app.services.map_station_state import update_map_station_state_for_frame
+
+        connection.execute("SAVEPOINT map_station_projection")
+        try:
+            update_map_station_state_for_frame(
+                connection,
+                frame_id=frame_id,
+                frame_format="TNC2",
+                frame_row={
+                    "source": str(source or "").strip() or "Unknown source",
+                    "source_kind": normalized_kind,
+                    "interface_id": source_interface_id,
+                    "line": normalized_line,
+                    "created_at": occurred_at,
+                },
+                parsed=parsed_frame,
+            )
+        except Exception as exc:
+            connection.execute("ROLLBACK TO map_station_projection")
+            map_projection_error = str(exc).strip() or exc.__class__.__name__
+        finally:
+            connection.execute("RELEASE map_station_projection")
+
+    if map_projection_error:
+        log_event("WARNING", "map", f"Failed to update map station projection: {map_projection_error}")
 
     if alert_result and alert_result.get("created"):
         warning_kind = str(alert_result.get("warning_kind") or "warning").strip()

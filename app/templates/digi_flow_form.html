@@ -119,6 +119,18 @@
                 </div>
             </section>
         </form>
+        <div class="settings-progress-backdrop" id="digi-flow-save-progress" hidden>
+            <div class="settings-progress-modal" role="status" aria-live="polite" aria-busy="true">
+                <div class="settings-progress-header">
+                    <span class="settings-progress-spinner" aria-hidden="true"></span>
+                    <h3 class="settings-progress-title">{{ t("Please wait") }}</h3>
+                </div>
+                <p class="settings-progress-message">{{ t("Saving...") }}</p>
+                <div class="settings-progress-actions" hidden>
+                    <button type="button" class="button button-secondary settings-progress-close">{{ t("OK") }}</button>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
 
@@ -1293,14 +1305,21 @@
                     const selected = symbolCodeOptions.find((option) => option.value === pickerState.symbolCode) || symbolCodeOptions[0];
                     const useAlternate = pickerState.symbolTable === "\\";
                     const icon = useAlternate ? selected.alternate_icon : selected.primary_icon;
+                    const description = useAlternate ? selected.alternate_description : selected.primary_description;
                     triggerImage.src = `${rootPath}/static/${icon || window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif"}`;
-                    triggerText.textContent = selected.label || i18n.selectSymbol;
+                    triggerText.textContent = [selected.label || i18n.selectSymbol, description].filter(Boolean).join(" — ");
                     for (const optionButton of symbolMenu.querySelectorAll(".station-symbol-option")) {
                         const useAlt = pickerState.symbolTable === "\\";
                         const image = optionButton.querySelector(".station-symbol-option-image");
                         const optionIcon = useAlt ? optionButton.dataset.alternateIcon : optionButton.dataset.primaryIcon;
                         if (image) {
                             image.src = optionIcon || `${rootPath}/static/${window.APRSBOX_APRS_SYMBOL_ICON_FALLBACK || "icons/verG/x.gif"}`;
+                        }
+                        const descriptionNode = optionButton.querySelector(".station-symbol-option-description");
+                        if (descriptionNode) {
+                            descriptionNode.textContent = (useAlt
+                                ? optionButton.dataset.alternateDescription
+                                : optionButton.dataset.primaryDescription) || "";
                         }
                         const isActive = optionButton.dataset.value === selected.value;
                         optionButton.classList.toggle("active", isActive);
@@ -1315,6 +1334,8 @@
                     optionButton.dataset.value = optionValue.value;
                     optionButton.dataset.primaryIcon = `${rootPath}/static/${optionValue.primary_icon}`;
                     optionButton.dataset.alternateIcon = `${rootPath}/static/${optionValue.alternate_icon}`;
+                    optionButton.dataset.primaryDescription = optionValue.primary_description || "";
+                    optionButton.dataset.alternateDescription = optionValue.alternate_description || "";
                     optionButton.setAttribute("role", "option");
                     optionButton.setAttribute("aria-selected", "false");
 
@@ -1325,8 +1346,12 @@
                     const optionLabel = document.createElement("span");
                     optionLabel.className = "station-symbol-option-label";
                     optionLabel.textContent = optionValue.label;
+                    const optionDescription = document.createElement("span");
+                    optionDescription.className = "station-symbol-option-description";
+                    optionDescription.textContent = optionValue.primary_description || "";
                     optionButton.appendChild(optionImage);
                     optionButton.appendChild(optionLabel);
+                    optionButton.appendChild(optionDescription);
                     optionButton.addEventListener("click", () => {
                         pickerState.symbolCode = optionValue.value || ">";
                         syncIconPickerPreview();
@@ -2077,6 +2102,94 @@
             toggleButton.textContent = frozen ? i18n.release : i18n.freeze;
             if (!frozen) {
                 refreshExecutions();
+            }
+        });
+    })();
+</script>
+<script>
+    (() => {
+        const form = document.getElementById("digi-flow-form");
+        const progressModal = document.getElementById("digi-flow-save-progress");
+        const progressMessage = progressModal?.querySelector(".settings-progress-message");
+        const progressActions = progressModal?.querySelector(".settings-progress-actions");
+        const progressClose = progressModal?.querySelector(".settings-progress-close");
+        const savingMessage = {{ t("Saving...")|tojson }};
+        const failedMessage = {{ t("Operation failed.")|tojson }};
+
+        if (!(form instanceof HTMLFormElement) || !progressModal) return;
+
+        const submitControls = Array.from(form.querySelectorAll("button[type='submit'], input[type='submit']"));
+        const setBusy = (busy) => {
+            form.toggleAttribute("aria-busy", busy);
+            submitControls.forEach((control) => {
+                control.disabled = busy;
+            });
+        };
+
+        const showProgress = (message, finished = false) => {
+            if (progressMessage) progressMessage.textContent = String(message || savingMessage);
+            if (progressActions) progressActions.hidden = !finished;
+            progressModal.hidden = false;
+        };
+
+        const hideProgress = () => {
+            progressModal.hidden = true;
+        };
+
+        progressClose?.addEventListener("click", hideProgress);
+        progressModal.addEventListener("click", (event) => {
+            if (event.target === progressModal && progressActions && !progressActions.hidden) hideProgress();
+        });
+
+        form.addEventListener("submit", (event) => {
+            if (event.defaultPrevented) return;
+            event.preventDefault();
+            setBusy(true);
+            showProgress(savingMessage);
+            const startedAt = Date.now();
+
+            void window.fetch(form.action, {
+                method: "POST",
+                body: new FormData(form),
+                credentials: "same-origin",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Accept": "application/json",
+                },
+            }).then(async (response) => {
+                let payload = null;
+                try {
+                    payload = await response.json();
+                } catch (_error) {
+                    payload = null;
+                }
+                const remaining = Math.max(0, 500 - (Date.now() - startedAt));
+                if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+                if (!response.ok || !payload || payload.ok !== true) {
+                    const detail = payload && (payload.error || payload.detail)
+                        ? ` ${payload.error || payload.detail}`
+                        : ` HTTP ${response.status}`;
+                    throw new Error(detail.trim());
+                }
+
+                setBusy(false);
+                showProgress(payload.message, true);
+                if (payload.reload) {
+                    window.setTimeout(() => {
+                        if (payload.redirect) window.location.assign(payload.redirect);
+                        else window.location.reload();
+                    }, 1200);
+                }
+            }).catch((error) => {
+                setBusy(false);
+                const detail = error && error.message ? ` ${error.message}` : "";
+                showProgress(`${failedMessage}${detail}`, true);
+            });
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !progressModal.hidden && progressActions && !progressActions.hidden) {
+                hideProgress();
             }
         });
     })();

@@ -1,4 +1,5 @@
 import contextlib
+import json
 import os
 import sqlite3
 import tempfile
@@ -188,6 +189,51 @@ class DigiFlowsTests(unittest.TestCase):
         create_action_index = template_source.index('{{ t("New routing flow") }}')
         self.assertGreater(create_action_index, table_index)
 
+    def test_digi_flow_toggle_uses_shared_progress_modal(self) -> None:
+        template_source = Path("app/templates/digi_flows.html").read_text(encoding="utf-8")
+        self.assertIn('id="digi-flow-toggle-progress"', template_source)
+        self.assertIn("settings-progress-backdrop", template_source)
+        self.assertIn("settings-progress-modal", template_source)
+        self.assertIn("data-digi-flow-toggle-action", template_source)
+        self.assertIn('"X-Requested-With": "XMLHttpRequest"', template_source)
+        self.assertIn('"Accept": "application/json"', template_source)
+
+    def test_digi_flow_toggle_ajax_returns_modal_result_payload(self) -> None:
+        with temporary_database():
+            from fastapi.testclient import TestClient
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                insert_aprsis_interface()
+                flow_id = create_digi_flow(sample_local_tx_flow_payload(name="Toggle modal", enabled=0))
+                response = TestClient(app).post(
+                    f"/digi-flows/{flow_id}/toggle",
+                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                    data={"enabled": "1"},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response.json(),
+                    {
+                        "ok": True,
+                        "message": "Packet Routing flow status updated.",
+                        "reload": True,
+                        "redirect": "/digi-flows",
+                    },
+                )
+                self.assertEqual(int(get_digi_flow(flow_id)["enabled"]), 1)
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
+
     def test_digi_flow_form_template_includes_detailed_help(self) -> None:
         template_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
         self.assertIn("static/css/help-viewer.css", template_source)
@@ -199,6 +245,58 @@ class DigiFlowsTests(unittest.TestCase):
 
         script_source = Path("app/static/js/help-viewer.js").read_text(encoding="utf-8")
         self.assertNotIn('data-help-autoload="1"', script_source)
+
+    def test_digi_flow_editor_save_uses_shared_progress_modal(self) -> None:
+        template_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
+        self.assertIn('id="digi-flow-save-progress"', template_source)
+        self.assertIn("settings-progress-backdrop", template_source)
+        self.assertIn("settings-progress-modal", template_source)
+        self.assertIn('"X-Requested-With": "XMLHttpRequest"', template_source)
+        self.assertIn('"Accept": "application/json"', template_source)
+
+    def test_digi_flow_update_ajax_returns_modal_result_payload(self) -> None:
+        with temporary_database():
+            from fastapi.testclient import TestClient
+
+            from app.dependencies import get_current_user
+            from app.main import app
+            from app.models import UserIdentity
+
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1,
+                username="admin",
+                role="admin",
+                is_active=True,
+            )
+            try:
+                insert_aprsis_interface()
+                payload = sample_local_tx_flow_payload(name="Edit modal", enabled=0)
+                flow_id = create_digi_flow(payload)
+                payload["description"] = "Updated through modal"
+                response = TestClient(app).post(
+                    f"/digi-flows/{flow_id}",
+                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                    data={
+                        "name": payload["name"],
+                        "description": payload["description"],
+                        "source_selector": f'{payload["source_kind"]}::{payload["source_ref"]}',
+                        "target_selector": f'{payload["target_kind"]}::{payload["target_ref"]}',
+                        "steps_json": json.dumps(payload["steps"]),
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response.json(),
+                    {
+                        "ok": True,
+                        "message": "Packet Routing flow updated.",
+                        "reload": True,
+                        "redirect": f"/digi-flows/{flow_id}",
+                    },
+                )
+                self.assertEqual(get_digi_flow(flow_id)["description"], "Updated through modal")
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
 
     def test_digi_flow_form_keeps_instructional_copy_in_help(self) -> None:
         template_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")

@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import execute, fetch_one, init_db
 from app.services.content import dashboard_home_data, dashboard_traffic_summary, update_station_settings
@@ -25,16 +26,16 @@ def temporary_database() -> Path:
                 os.environ["APRSBOX_DB_PATH"] = previous
 
 
-def insert_modem(*, name: str, enabled: int = 1, tx_blocked: int = 0) -> int:
+def insert_modem(*, name: str, enabled: int = 1, tx_blocked: int = 0, modem_type: str = "TCP") -> int:
     execute(
         """
         INSERT INTO modems(
             name, modem_type, band, device_path, baud_rate, enabled, tx_blocked,
             expose_port_enabled, expose_bind_address, expose_port, expose_whitelist, notes, created_at, updated_at
         )
-        VALUES (?, 'TCP', '2m', '127.0.0.1:8001', NULL, ?, ?, 0, '0.0.0.0', 8002, '', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+        VALUES (?, ?, '2m', '127.0.0.1:8001', NULL, ?, ?, 0, '0.0.0.0', 8002, '', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
         """,
-        (name, enabled, tx_blocked),
+        (name, modem_type, enabled, tx_blocked),
     )
     row = fetch_one("SELECT id FROM modems WHERE name = ?", (name,))
     assert row is not None
@@ -48,15 +49,16 @@ def insert_digi_flow(
     target_kind: str,
     target_ref: str,
     enabled: int = 1,
+    source_kind: str = "receiver_rf",
 ) -> None:
     execute(
         """
         INSERT INTO digi_flows(
             name, description, source_kind, source_ref, target_kind, target_ref, enabled, sort_order, created_at, updated_at
         )
-        VALUES (?, '', 'receiver_rf', ?, ?, ?, ?, 0, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+        VALUES (?, '', ?, ?, ?, ?, ?, 0, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
         """,
-        (name, source_ref, target_kind, target_ref, enabled),
+        (name, source_kind, source_ref, target_kind, target_ref, enabled),
     )
 
 
@@ -146,6 +148,46 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertEqual(stats["Heard stations"]["value"], "17")
             self.assertEqual(stats["APRS frames"]["value"], "1234")
 
+    def test_dashboard_reuses_station_and_activity_projections(self) -> None:
+        with temporary_database():
+            activity = {
+                "range_minutes": 60,
+                "output_bucket_minutes": 5,
+                "window_start_utc": "2026-01-01T00:00:00+00:00",
+                "window_end_utc": "2026-01-01T01:00:00+00:00",
+                "labels": ["00:00", "00:05"],
+                "series": {
+                    "rx_total": [3, 4],
+                    "tx_total": [1, 2],
+                    "digipeated_total": [0, 1],
+                    "mobile_total": [1, 0],
+                    "messages_total": [0, 1],
+                    "queries_total": [0, 0],
+                },
+                "kpis": {"heard_stations": 1, "aprs_frames": 7},
+            }
+            snapshot = {
+                "display_callsign": "SP5ABC-1",
+                "last_heard_at": "2026-01-01T00:05:00+00:00",
+                "last_heard_rf_at": "2026-01-01T00:05:00+00:00",
+                "origin": "heard",
+                "entity_class": "fixed",
+                "frame_type": "P",
+                "symbol": "/>",
+            }
+            with (
+                patch("app.services.map_station_state.read_map_station_rf_snapshots", return_value=[snapshot]),
+                patch("app.services.content.get_rf_heard_station_snapshots", side_effect=AssertionError("raw rebuild")),
+                patch("app.services.content.dashboard_activity_series", side_effect=AssertionError("raw chart")),
+            ):
+                view = dashboard_home_data(dashboard_activity=activity)
+
+            chart = view["activity_chart"]
+            self.assertEqual(chart["series"]["total"], [4, 6])
+            self.assertEqual(chart["series"]["repeated_tx"], [0, 1])
+            self.assertEqual(chart["totals"]["rx"], 7)
+            self.assertEqual(view["last_rf_activity"][0]["value"], "SP5ABC-1")
+
     def test_dashboard_exposes_compact_station_readiness_lists(self) -> None:
         with temporary_database():
             interface_id = insert_modem(name="Main TNC", enabled=1, tx_blocked=0)
@@ -181,6 +223,59 @@ class DashboardHomeTests(unittest.TestCase):
             self.assertEqual(runtime_entries["TX queue"]["status_key"], "Idle")
             self.assertEqual(runtime_entries["TX queue"]["status_params"], {})
 
+            readiness_overview = {
+                entry["label"]: entry for entry in view["station_readiness"]["overview"]
+            }
+            self.assertEqual(readiness_overview["Radio interfaces"]["tone"], "partial")
+
+            execute("UPDATE modems SET enabled = 0")
+            no_active_overview = {
+                entry["label"]: entry for entry in dashboard_home_data()["station_readiness"]["overview"]
+            }
+            self.assertEqual(no_active_overview["Radio interfaces"]["tone"], "error")
+
+    def test_dashboard_station_readiness_exposes_flow_matrix_per_radio_interface(self) -> None:
+        with temporary_database():
+            main_id = insert_modem(name="Main TNC")
+            insert_modem(name="Backup TNC")
+            insert_modem(name="APRS-IS", modem_type="APRSIS")
+            update_station_settings(station_payload(main_id))
+
+            insert_digi_flow(
+                name="Local TX uplink",
+                source_kind="receiver_local_tx",
+                source_ref="local_tx",
+                target_kind="tx_aprsis",
+                target_ref="aprsis",
+            )
+            insert_digi_flow(name="Main uplink", source_ref="Main TNC", target_kind="tx_aprsis", target_ref="aprsis")
+            insert_digi_flow(name="Main repeat", source_ref="Main TNC", target_kind="tx_rf", target_ref="Main TNC")
+            insert_digi_flow(name="Main crossband", source_ref="Main TNC", target_kind="tx_rf", target_ref="Backup TNC")
+            insert_digi_flow(
+                name="APRS-IS to main",
+                source_kind="receiver_aprsis",
+                source_ref="APRS-IS",
+                target_kind="tx_rf",
+                target_ref="Main TNC",
+            )
+
+            readiness = dashboard_home_data()["station_readiness"]
+            overview = {entry["label"]: entry for entry in readiness["overview"]}
+            interfaces = {entry["name"]: entry for entry in readiness["interfaces"]}
+
+            self.assertEqual(overview["Local TX → APRS-IS"]["tone"], "ok")
+            self.assertEqual(overview["Radio interfaces"]["status_params"], {"active": 2, "total": 2})
+            self.assertEqual(overview["Radio interfaces"]["tone"], "ok")
+            self.assertEqual(overview["Beacon defined"]["tone"], "ok")
+            self.assertTrue(interfaces["Main TNC"]["to_aprsis"])
+            self.assertTrue(interfaces["Main TNC"]["from_aprsis"])
+            self.assertEqual(interfaces["Main TNC"]["rf_target_count"], 2)
+            self.assertEqual(interfaces["Main TNC"]["rf_target_total"], 2)
+            self.assertTrue(interfaces["Main TNC"]["rf_ready"])
+            self.assertFalse(interfaces["Backup TNC"]["to_aprsis"])
+            self.assertFalse(interfaces["Backup TNC"]["from_aprsis"])
+            self.assertFalse(interfaces["Backup TNC"]["rf_ready"])
+
     def test_dashboard_template_uses_visual_first_pack(self) -> None:
         template = Path("app/templates/dashboard.html").read_text(encoding="utf-8")
         stylesheet = Path("app/static/css/style.css").read_text(encoding="utf-8")
@@ -193,12 +288,35 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn("dashboard-kpi-aprs-frames", template)
         self.assertIn("rawPayload?.kpis?.heard_stations", template)
         self.assertIn('`${rangePrefix}: ${rangeLabel}`', template)
-        self.assertIn("dashboard-v2-band-meter", template)
-        self.assertIn('aria-current="true"', template)
+        self.assertIn("dashboard-v2-network-grid", template)
+        self.assertNotIn('t("Network diagnostics")', template)
+        self.assertIn("network_diagnostics.web_ui_url", template)
+        self.assertIn("network_diagnostics.ipv6 or", template)
+        self.assertIn("{% if dashboard_bands %}", template)
+        self.assertIn("dashboard-v2-band-indicators", template)
+        self.assertIn("dashboard-v2-band-indicator-{{ item.diagnosis_tone }}", template)
+        self.assertIn("{% for level in [5, 4, 3, 2, 1, 0] %}", template)
+        self.assertIn('href="{{ request.scope.root_path }}/band-condition"', template)
         self.assertNotIn("dashboard_home.band_updated_at", template)
         self.assertNotIn("Current estimate for", template)
         self.assertNotIn("dashboard-v2-band-meter-current", template)
-        self.assertIn("dashboard-v2-event-marker", template)
+        self.assertIn("dashboard-v2-readiness-matrix", template)
+        self.assertNotIn("dashboard-v2-readiness-score", template)
+        self.assertNotIn("station_readiness.ready_count", template)
+        self.assertIn('data-help-page="application/dashboard_readiness"', template)
+        self.assertIn('class="help-icon-button dashboard-v2-readiness-help-button"', template)
+        self.assertNotIn('class="help-icon-button page-help-button"', template)
+        self.assertIn('{% include "partials/help_modal.html" %}', template)
+        self.assertIn('static/js/help-viewer.js', template)
+        self.assertNotIn('dashboard-subtle-link', template)
+        self.assertIn('const helpViewerModal = document.getElementById("help-viewer-modal")', template)
+        self.assertIn('helpViewerObserver.observe(helpViewerModal', template)
+        self.assertIn('window.clearTimeout(dashboardRefreshTimer)', template)
+        self.assertNotIn('const dashboardRefreshTimer = window.setInterval', template)
+        self.assertNotIn("dashboard-v2-events-panel", template)
+        self.assertNotIn("dashboard-v2-summary-panel", template)
+        self.assertNotIn("Recent important events", template)
+        self.assertIn("height: calc(100dvh - 1.78rem)", stylesheet)
         self.assertIn("Open detailed statistics", template)
         self.assertIn("point: { radius: 0", template)
         self.assertNotIn("dashboard_home.hero.title", template)
@@ -206,7 +324,10 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertNotIn("last_rf=", template)
         self.assertIn(".dashboard-v2-station-panel::before", stylesheet)
         self.assertIn("min-height: 7.6rem", stylesheet)
-        self.assertIn(".dashboard-v2-band-meter .is-current", stylesheet)
+        self.assertIn(".dashboard-v2-network-grid", stylesheet)
+        self.assertIn(".dashboard-v2-top-grid.has-band-indicators", stylesheet)
+        self.assertIn(".dashboard-v2-top-grid.has-band-indicators {\n        grid-template-columns: 1fr;", stylesheet)
+        self.assertIn(".dashboard-v2-band-step.is-active", stylesheet)
         self.assertIn(".dashboard-v2-event-item:not(:last-child)", stylesheet)
 
     def test_dashboard_does_not_expose_traffic_monitor_check(self) -> None:

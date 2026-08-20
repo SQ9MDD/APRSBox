@@ -1097,6 +1097,10 @@ def persist_outbound_frame(
     normalized_source_kind = str(source_kind or "rf").strip().lower() or "rf"
     normalized_band = str(band or "").strip()
     normalized_command = str(command or "TX")
+    from app.services.content import parse_tnc2_frame
+
+    parsed = parse_tnc2_frame(line)
+    map_projection_error: str | None = None
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -1120,14 +1124,37 @@ def persist_outbound_frame(
             ),
         )
         frame_id = int(cursor.lastrowid)
+        if parsed is not None:
+            from app.services.map_station_state import update_map_station_state_for_frame
+
+            connection.execute("SAVEPOINT map_station_projection")
+            try:
+                update_map_station_state_for_frame(
+                    connection,
+                    frame_id=frame_id,
+                    frame_format="TNC2-TX",
+                    frame_row={
+                        "source": source,
+                        "source_kind": normalized_source_kind,
+                        "interface_id": interface_id,
+                        "line": line,
+                        "created_at": occurred_at,
+                    },
+                    parsed=parsed,
+                )
+            except Exception as exc:
+                connection.execute("ROLLBACK TO map_station_projection")
+                map_projection_error = str(exc).strip() or exc.__class__.__name__
+            finally:
+                connection.execute("RELEASE map_station_projection")
+
+    if map_projection_error:
+        log_event("WARNING", "map", f"Failed to update map station projection: {map_projection_error}")
 
     if normalized_command.upper().startswith("TX-SKIP"):
         return
     try:
         from app.services.alerts import process_alert_frame
-        from app.services.content import parse_tnc2_frame
-
-        parsed = parse_tnc2_frame(line)
         if parsed is None:
             return
         with get_connection() as connection:

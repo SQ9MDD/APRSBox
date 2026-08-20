@@ -61,7 +61,7 @@ STATION_TX_INTERNAL_MODE_SETTING_KEY = "station.tx.internal_mode"
 
 _TNC2_RE = re.compile(r"^(?P<source>[^>]+?)\s*>\s*(?P<destination>[^,:]+?)(?:\s*,\s*(?P<path>[^:]+))?\s*:(?P<info>.*)$")
 _CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,6}(?:-(?:[0-9]|1[0-5]))?$")
-_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?)?$")
+_MESSAGE_SUFFIX_RE = re.compile(r"^(?P<text>.*?)(?:\{(?P<number>[0-9A-Z]{1,5})(?:}(?P<reply_ack>[0-9A-Z]{1,5})?)?)?$")
 SUPPORTED_QUERY_TYPES = ("?APRS", "?APRSP", "?APRSS", "?APRSD", "?DX", "?APRSV", "?VER")
 APRS_SERVICE_DESTINATIONS = (
     "ANSRVR",
@@ -677,11 +677,38 @@ def mark_conversation_read(conversation_id: int) -> None:
 
 
 def delete_conversation(conversation_id: int) -> None:
-    message_ids = [int(row["id"]) for row in fetch_all("SELECT id FROM aprs_messages WHERE conversation_id = ?", (conversation_id,))]
+    delete_conversations([conversation_id])
+
+
+def delete_conversations(conversation_ids: list[int]) -> dict[str, int]:
+    normalized_ids = sorted(
+        {int(conversation_id) for conversation_id in conversation_ids if int(conversation_id) > 0}
+    )
+    if not normalized_ids:
+        return {"conversation_count": 0, "message_count": 0}
+    placeholders = ", ".join("?" for _ in normalized_ids)
+    message_ids = [
+        int(row["id"])
+        for row in fetch_all(
+            f"SELECT id FROM aprs_messages WHERE conversation_id IN ({placeholders}) ORDER BY id ASC",
+            tuple(normalized_ids),
+        )
+    ]
+    conversation_row = fetch_one(
+        f"SELECT COUNT(*) AS total FROM aprs_message_conversations WHERE id IN ({placeholders})",
+        tuple(normalized_ids),
+    )
     for message_id in message_ids:
         cancel_pending_message_jobs(message_id)
     with get_connection() as connection:
-        connection.execute("DELETE FROM aprs_message_conversations WHERE id = ?", (conversation_id,))
+        connection.execute(
+            f"DELETE FROM aprs_message_conversations WHERE id IN ({placeholders})",
+            tuple(normalized_ids),
+        )
+    return {
+        "conversation_count": int(conversation_row["total"] or 0) if conversation_row is not None else 0,
+        "message_count": len(message_ids),
+    }
 
 
 def clear_message_inbox() -> dict[str, int]:
@@ -1091,8 +1118,8 @@ def process_incoming_tnc2_message(
                 automatic_response_internal_tx_only=automatic_response_internal_tx_only,
             )
         return
-    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
-    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,2})(?:}(?P<reply_ack>[0-9A-Z]{1,2})?)?", text_field, flags=re.IGNORECASE)
+    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,5})(?:}(?P<reply_ack>[0-9A-Z]{1,5})?)?", text_field, flags=re.IGNORECASE)
+    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,5})(?:}(?P<reply_ack>[0-9A-Z]{1,5})?)?", text_field, flags=re.IGNORECASE)
     if ack_match:
         message_number = _normalize_message_number(ack_match.group("number"))
         if not message_number:
@@ -1418,14 +1445,13 @@ def store_incoming_message(
             """
             SELECT id
             FROM aprs_messages
-            WHERE conversation_id = ?
-              AND direction = ?
+            WHERE direction = ?
               AND sender = ?
               AND message_number = ?
             ORDER BY id DESC
             LIMIT 1
             """,
-            (int(conversation["id"]), MESSAGE_DIRECTION_RX, sender, message_number),
+            (MESSAGE_DIRECTION_RX, sender, message_number),
         )
     if existing is None and not duplicate_unnumbered:
         with get_connection() as connection:
@@ -1684,7 +1710,7 @@ def _normalize_ack_number(value: str | None) -> str | None:
     normalized = str(value or "").strip().upper()
     if not normalized:
         return None
-    if not re.fullmatch(r"[0-9A-Z]{1,2}", normalized):
+    if not re.fullmatch(r"[0-9A-Z]{1,5}", normalized):
         return None
     return normalized
 

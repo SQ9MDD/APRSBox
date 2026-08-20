@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.db import execute, init_db
+from app.services.alarm_groups import save_aprs_alarm_enabled
 
 FASTAPI_AVAILABLE = importlib.util.find_spec("fastapi") is not None
 
@@ -35,6 +36,7 @@ def temporary_database() -> Path:
 class RoleAccessTests(unittest.TestCase):
     def test_viewer_navigation_is_limited_to_monitoring_pages(self) -> None:
         with temporary_database():
+            save_aprs_alarm_enabled(True)
             execute(
                 """
                 INSERT INTO modems(name, modem_type, band, device_path, enabled, notes, created_at, updated_at)
@@ -97,6 +99,34 @@ class RoleAccessTests(unittest.TestCase):
                 self.assertIn(key, navigation)
                 self.assertTrue(bool(navigation[key].get("disabled")), key)
             self.assertNotIn("igate", navigation)
+
+    def test_alerts_navigation_is_hidden_when_aprs_alarms_are_disabled(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_enabled(False)
+            request = Request(
+                {
+                    "type": "http",
+                    "method": "GET",
+                    "path": "/dashboard",
+                    "root_path": "",
+                    "headers": [],
+                    "query_string": b"",
+                    "client": ("127.0.0.1", 12345),
+                    "server": ("testserver", 80),
+                    "scheme": "http",
+                }
+            )
+            current_user = SimpleNamespace(role="admin", username="admin")
+
+            context = build_template_context(
+                request,
+                page_title="Dashboard",
+                current_user=current_user,
+                active_nav="dashboard",
+            )
+
+            navigation_keys = {item["key"] for item in context["navigation"]}
+            self.assertNotIn("alerts", navigation_keys)
 
     def test_band_condition_navigation_is_hidden_without_an_enabled_assessed_interface(self) -> None:
         with temporary_database():

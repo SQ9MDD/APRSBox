@@ -16,7 +16,7 @@ Environment=PYTHONPATH=/opt/aprsbox/app
 Environment=APRSBOX_PRIVILEGED_RUNNER=sudo -n
 Environment=APRSBOX_CORE_HOST=127.0.0.1
 Environment=APRSBOX_CORE_PORT=18081
-ExecStart=/opt/aprsbox/venv/bin/python -m gunicorn --bind 127.0.0.1:18081 --workers 1 --worker-class uvicorn.workers.UvicornWorker --access-logfile - --error-logfile - app.core_main:app
+ExecStart=/opt/aprsbox/venv/bin/python -m uvicorn app.core_main:app --host 127.0.0.1 --port 18081 --access-log
 Restart=on-failure
 RestartSec=2
 StandardOutput=append:/opt/aprsbox/logs/aprsbox-core.log

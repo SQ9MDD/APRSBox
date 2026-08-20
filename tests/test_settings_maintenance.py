@@ -1,5 +1,6 @@
 import contextlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -20,8 +21,11 @@ from app.db import (
 )
 from app.services.content import has_enabled_modem_interface
 from app.services.system import (
+    _compare_gui_versions,
+    _github_raw_version_url,
     _start_background_script,
     container_system_actions_disabled_message,
+    latest_gui_version,
     save_update_channel,
     start_application_update_job,
     start_host_poweroff_job,
@@ -59,6 +63,45 @@ def insert_modem(*, enabled: int) -> None:
 
 
 class SettingsMaintenanceTests(unittest.TestCase):
+    def test_version_comparison_does_not_offer_older_stable_release(self) -> None:
+        self.assertEqual(_compare_gui_versions("1.10.8.dev", "1.10.6"), 1)
+        self.assertEqual(_compare_gui_versions("1.10.8.dev", "1.10.8"), -1)
+        self.assertEqual(_compare_gui_versions("1.10.8", "1.10.8"), 0)
+
+    def test_version_check_reads_github_version_without_git(self) -> None:
+        with (
+            patch("app.services.system.current_update_channel", return_value="main"),
+            patch("app.services.system.current_gui_version", return_value="1.10.8.dev"),
+            patch("app.services.system.urlopen", return_value=io.BytesIO(b"1.10.9\n")) as urlopen_mock,
+            patch("app.services.system.subprocess.run") as subprocess_mock,
+        ):
+            result = latest_gui_version()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["current_version"], "1.10.8.dev")
+        self.assertEqual(result["latest_version"], "1.10.9")
+        self.assertEqual(result["channel"], "main")
+        self.assertFalse(result["up_to_date"])
+        self.assertIn("raw.githubusercontent.com", result["source"])
+        urlopen_mock.assert_called_once()
+        subprocess_mock.assert_not_called()
+
+    def test_version_check_marks_newer_installed_build_as_up_to_date(self) -> None:
+        with (
+            patch("app.services.system.current_update_channel", return_value="main"),
+            patch("app.services.system.current_gui_version", return_value="1.10.8.dev"),
+            patch("app.services.system.urlopen", return_value=io.BytesIO(b"1.10.6\n")),
+        ):
+            result = latest_gui_version()
+
+        self.assertTrue(result["up_to_date"])
+
+    def test_github_version_url_supports_channel_with_slash(self) -> None:
+        self.assertEqual(
+            _github_raw_version_url("https://github.com/SQ9MDD/APRSBox.git", "release/1.10"),
+            "https://raw.githubusercontent.com/SQ9MDD/APRSBox/release/1.10/VERSION",
+        )
+
     def test_enabled_tnc_helper_matches_modem_configuration(self) -> None:
         with temporary_database():
             self.assertFalse(has_enabled_modem_interface())
@@ -94,6 +137,26 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('href="{{ request.scope.root_path }}/settings/config/export"', template_source)
         self.assertIn('action="{{ request.scope.root_path }}/settings/config/import"', template_source)
         self.assertIn('name="backup_file"', template_source)
+
+    def test_settings_https_upload_requires_certificate_and_key_before_enable(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+
+        self.assertIn('action="{{ request.scope.root_path }}/settings/https/certificates"', template_source)
+        self.assertIn('{% if not https_ready and not https_enabled %}disabled{% endif %}', template_source)
+        self.assertIn('action="{{ request.scope.root_path }}/settings/https"', template_source)
+        self.assertIn('{{ t("Save and restart") }}', template_source)
+        self.assertIn('class="tnc-status-icon tnc-status-icon-enabled"', template_source)
+        self.assertIn('/static/icons/check-circle.svg', template_source)
+        self.assertNotIn('{{ t("HTTPS only") }}', template_source)
+        self.assertIn('@router.post("/settings/https/certificates")', router_source)
+        self.assertIn('@router.post("/settings/https/certificates/{file_kind}/delete")', router_source)
+        self.assertIn('@router.get("/settings/https/certificates/ca-chain/download")', router_source)
+        self.assertIn('/static/icons/download-outline.svg', template_source)
+        self.assertIn("Disable HTTPS before deleting the certificate or private key.", router_source)
+        self.assertIn('@router.post("/settings/https")', router_source)
+        self.assertIn("HTTPS_CERTIFICATE_FILENAME", router_source)
+        self.assertIn("HTTPS_PRIVATE_KEY_FILENAME", router_source)
 
     def test_settings_template_contains_event_log_controls(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
@@ -204,6 +267,23 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("?edit_map_source={{ source.id }}#settings-panel-map-sources", template_source)
         self.assertIn('/settings#settings-panel-map-sources', template_source)
 
+    def test_map_source_actions_use_shared_settings_progress_modal(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+        for action_id in (
+            "save-map-source",
+            "move-map-source",
+            "default-map-source",
+            "delete-map-source",
+            "clear-map-source-cache",
+        ):
+            self.assertIn(f'data-settings-action-id="{action_id}"', template_source)
+        self.assertIn('data-settings-action-group="map-sources"', template_source)
+        self.assertIn("window.aprsboxSubmitSettingsAction(form", template_source)
+        self.assertIn('"Map source cache cleared."', router_source)
+        self.assertIn('"Map source order updated."', router_source)
+        self.assertGreaterEqual(router_source.count('request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"'), 5)
+
     def test_settings_template_contains_container_mode_guards(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("{% if is_container_mode %}", template_source)
@@ -215,6 +295,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
         help_pages = (
             "settings_global",
             "settings_update",
+            "settings_https",
             "settings_alarms",
             "settings_map_sources",
             "settings_device_identification",
@@ -238,6 +319,20 @@ class SettingsMaintenanceTests(unittest.TestCase):
         help_viewer_source = Path("app/static/js/help-viewer.js").read_text(encoding="utf-8")
         self.assertIn('target="_blank" rel="noopener noreferrer"', help_viewer_source)
         self.assertIn("/^https?:\\/\\//i.test(rawHref)", help_viewer_source)
+
+        help_viewer_style = Path("app/static/css/help-viewer.css").read_text(encoding="utf-8")
+        self.assertIn("--help-icon-accent: #3b82f6;", help_viewer_style)
+        self.assertIn("width: 1.38rem;", help_viewer_style)
+        self.assertIn("height: 1.38rem;", help_viewer_style)
+
+        https_help = Path("help/application/settings_https.en.md").read_text(encoding="utf-8")
+        self.assertIn("mDNS hostname", https_help)
+        self.assertIn("Subject Alternative Name (SAN)", https_help)
+        self.assertIn("IP:192.168.1.20", https_help)
+        self.assertIn('mask: url("../icons/help-circle-outline.svg")', help_viewer_style)
+        self.assertIn(".help-viewer-body::-webkit-scrollbar {", help_viewer_style)
+        self.assertIn("scrollbar-width: thin;", help_viewer_style)
+        self.assertIn("overscroll-behavior: contain;", help_viewer_style)
 
     def test_alarm_help_links_to_localized_cawf_and_nws_warn_guides(self) -> None:
         languages = ("en", "de", "pl", "es", "tlh")
@@ -323,14 +418,23 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("settings-progress-track", template_source)
         self.assertIn("progress_percent", template_source)
 
-    def test_job_modal_waits_for_terminal_job_state_instead_of_health_recovery(self) -> None:
+    def test_job_modal_uses_health_recovery_for_disruptive_system_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertNotIn("canFinalizeRunningJobFromHealth", template_source)
         self.assertNotIn("canReloadOnHealthRecovery", template_source)
-        self.assertNotIn('const healthUrl = `${rootPath}/health`', template_source)
+        self.assertIn('const healthUrl = `${rootPath}/health`', template_source)
+        self.assertIn('if (actionId === "reboot-host") {', template_source)
+        self.assertIn("pollHealthRecovery(jobId, startedAt, options);", template_source)
+        self.assertIn('actionId === "restart-services"', template_source)
+        self.assertIn('stage === "restarting-web" || lastProgressPercent >= 75', template_source)
+        self.assertIn("acceptHealthyAfterMs: 5000", template_source)
+        self.assertIn("if (response.status === 200)", template_source)
+        self.assertIn("finishHealthRecovery();", template_source)
+        self.assertIn("healthOutageObserved", template_source)
         self.assertIn('if (status === "success")', template_source)
         self.assertIn('if (status === "error")', template_source)
         self.assertIn("window.sessionStorage.removeItem(activeJobStorageKey)", template_source)
+        self.assertIn('transitionUrl.searchParams.delete("https-transition")', template_source)
 
     def test_settings_styles_include_busy_state_spinner(self) -> None:
         style_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
@@ -374,19 +478,47 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn("actionId: 'update-application'", template_source)
         self.assertIn("lockTimeoutMs: 1200000", template_source)
 
-    def test_update_application_uses_styled_confirmation_modal(self) -> None:
+    def test_settings_actions_use_shared_styled_confirmation_modal(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
-        self.assertIn('id="application-update-confirm-modal"', template_source)
-        self.assertIn('aria-labelledby="application-update-confirm-title"', template_source)
-        self.assertIn('id="application-update-confirm-accept"', template_source)
-        self.assertIn('data-close-application-update-confirm', template_source)
-        self.assertNotIn("return confirm({{ t('Start application update now?')", template_source)
+        self.assertIn('id="settings-action-confirm-modal"', template_source)
+        self.assertIn('aria-labelledby="settings-action-confirm-title"', template_source)
+        self.assertIn('id="settings-action-confirm-accept"', template_source)
+        self.assertIn('data-close-settings-confirm', template_source)
+        self.assertIn('data-settings-confirm="{{ t(\'Start application update now?\') }}"', template_source)
+        self.assertIn('data-settings-confirm-value="REBOOT"', template_source)
+        self.assertIn('data-settings-confirm-value="POWER OFF"', template_source)
+        self.assertNotIn("return confirm(", template_source)
+        self.assertNotIn("window.prompt(", template_source)
+
+    def test_settings_progress_modal_hides_close_action_while_busy(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('class="settings-progress-actions" hidden', template_source)
+        self.assertIn("actionsNode.hidden = progressLocked", template_source)
+
+    def test_system_action_progress_does_not_use_update_stage_messages(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn('rebootTitle: {{ t("Reboot host")|tojson }}', template_source)
+        self.assertIn('poweroffTitle: {{ t("Power off host")|tojson }}', template_source)
+        self.assertIn('"reboot-host": {{ t("Host reboot started. Please wait...")|tojson }}', template_source)
+        self.assertIn('"poweroff-host": {{ t("Host shutdown started. Please wait...")|tojson }}', template_source)
+        self.assertIn('const messageForJobStage = (actionId, stage, fallback = "") => {', template_source)
+        self.assertIn('normalizedAction === "update-application"', template_source)
+        self.assertIn('if (normalized === "reboot-host") return labels.rebootTitle;', template_source)
+        self.assertIn('if (normalized === "poweroff-host") return labels.poweroffTitle;', template_source)
+
+    def test_system_recovery_health_wait_has_timeout_and_manual_refresh_message(self) -> None:
+        template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
+        self.assertIn("recoveryHealthTimeoutMs: 600000", template_source)
+        self.assertIn("recoveryHealthTimeoutMs: 300000", template_source)
+        self.assertIn("controller.abort(), 5000", template_source)
+        self.assertIn("finishAction(labels.timeout", template_source)
+        self.assertIn("autoHideMs: 0", template_source)
 
     def test_restart_services_has_reload_delay(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         self.assertIn("actionId: 'restart-services'", template_source)
         self.assertIn("lockTimeoutMs: 300000", template_source)
-        self.assertIn("reloadDelayMs: 3000", template_source)
+        self.assertIn("recoveryHealthTimeoutMs: 300000", template_source)
 
     def test_system_jobs_store_progress_and_stage(self) -> None:
         with temporary_database():
@@ -503,7 +635,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('APRSBOX_JOB_ID="" "$RESTART_SCRIPT"', update_source)
         self.assertIn('"100" "completed"', restart_source)
         self.assertIn('systemctl restart aprsbox-web.service', web_restart_source)
-        self.assertIn('"success" "Application update finished successfully."', web_restart_source)
+        self.assertIn("APRSBOX_JOB_SUCCESS_MESSAGE:-Application update finished successfully.", web_restart_source)
+        self.assertIn('"success" "$SUCCESS_MESSAGE"', web_restart_source)
 
     def test_maintenance_scripts_accept_tracking_arguments(self) -> None:
         for script_name in (
@@ -560,6 +693,13 @@ class SettingsMaintenanceTests(unittest.TestCase):
             self.assertTrue(result["ok"])
             kwargs = runner.call_args.kwargs
             self.assertEqual(kwargs.get("extra_args"), ["--git-branch", "dev"])
+
+    def test_https_restart_passes_requested_state_as_cli_argument(self) -> None:
+        with patch("app.services.system._start_background_script", return_value={"ok": True}) as runner:
+            result = start_service_restart_job(job_id=123, https_enabled=True)
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(runner.call_args.kwargs.get("extra_args"), ["--https-enabled", "1"])
 
     def test_system_actions_are_rejected_in_container_mode_without_starting_scripts(self) -> None:
         with patch("app.services.system.is_container_mode", return_value=True), patch(

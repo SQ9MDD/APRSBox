@@ -108,6 +108,20 @@ class UiConsistencyTemplateTests(unittest.TestCase):
         self.assertNotIn("scrollbar-gutter: stable;", stylesheet_source)
         self.assertNotIn("scrollbar-gutter: stable both-edges;", stylesheet_source)
 
+    def test_symbol_pickers_show_table_specific_official_descriptions(self) -> None:
+        station_source = Path("app/templates/station.html").read_text(encoding="utf-8")
+        section_source = Path("app/templates/section.html").read_text(encoding="utf-8")
+        digi_flow_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+
+        for template_source in (station_source, section_source):
+            self.assertIn('data-primary-description="{{ option.primary_description }}"', template_source)
+            self.assertIn('data-alternate-description="{{ option.alternate_description }}"', template_source)
+            self.assertIn("station-symbol-option-description", template_source)
+        self.assertIn("optionValue.primary_description", digi_flow_source)
+        self.assertIn("optionValue.alternate_description", digi_flow_source)
+        self.assertIn(".station-symbol-option-description {", stylesheet_source)
+
     def test_top_level_layout_wrappers_do_not_duplicate_content_gap_with_extra_margin(self) -> None:
         stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
         band_condition_block = stylesheet_source.partition(".band-condition-layout {")[2].split("}", 1)[0]

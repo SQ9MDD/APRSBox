@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.10.16.dev - 20.08.2026
+- `Wiadomości APRS / lista konwersacji`: listę przebudowano na zwarte, jednowierszowe rekordy ze stałymi kolumnami dla zaznaczenia, znaku, stanu słyszalności, stanu przeczytania i usuwania; czas od ostatniej ramki przeniesiono do tooltipa wiersza, a wskaźniki ujednolicono za pomocą ikon Material Design.
+- `Wiadomości APRS / usuwanie zbiorcze`: dodano checkboxy przy konwersacjach oraz wspólny checkbox ze stanem pośrednim w nagłówku listy, wyrównany nad kolumną zaznaczeń; przycisk usuwania zaznaczonych znajduje się nad kolumną koszy i usuwa wybrane konwersacje wraz z ich wiadomościami po jednym potwierdzeniu.
+
+## 1.10.15.dev - 16.08.2026
+- `Ustawienia / HTTPS`: dodano panel zarządzania certyfikatem `aprsbox.crt`, kluczem `aprsbox.key` i opcjonalnym łańcuchem CA w `/opt/aprsbox/data/ssl`; interfejs sprawdza zgodność certyfikatu z kluczem, pokazuje statusy plików, obsługuje upload i bezpieczne usuwanie oraz pozwala pobrać łańcuch CA. Generator lokalnego PKI i pobieranie Root CA pozostają na razie nieaktywne.
+- `HTTPS / uruchamianie`: przełącznik zapisuje stan HTTPS i restartuje usługi; tryb HTTP działa na porcie `8000`, natomiast tryb HTTPS wyłącza ten listener, uruchamia Uvicorn z TLS na `443` i osobną usługę przekierowującą port `80` do HTTPS kodem `308`.
+- `Instalator / aktualizator`: dodano obsługę redirectora i nowych jednostek Uvicorn dla systemd oraz OpenRC, rezygnując z uruchamiania web i core przez Gunicorna; poprawiono migrację jednostek, przekazywanie stanu HTTPS, uprawnienie `CAP_NET_BIND_SERVICE` oraz działanie kolejnych aktualizacji uruchamianych z GUI.
+- `HTTPS / niezawodność i pomoc`: restart końcowy jest wykonywany poza cgroup usługi web i raportuje pełny postęp, przejście między HTTP i HTTPS czeka na podniesienie usług i czyści stary stan zadania, a katalog SSL jest naprawiany do `aprsbox:aprsbox` z trybem `0750`; dodano lokalizowaną pomoc opisującą mDNS, SAN dla nazw DNS i certyfikaty wystawiane dla adresów IP.
+
+## 1.10.14.dev - 16.08.2026
+- `GUI / alarmy`: pozycja `Alarmy` w sidebarze jest ukrywana, gdy opcja `Włącz alarmy APRS` jest wyłączona.
+
+## 1.10.12.dev - 15.08.2026
+- `Ustawienia / modale`: natywne okna przeglądarki `confirm` i `prompt` zastąpiono wspólnym modalem APRSBox dla aktualizacji aplikacji, importu konfiguracji, konserwacji bazy, restartu usług oraz operacji na hoście; potwierdzenia `REBOOT` i `POWER OFF` wymagają wpisania właściwej frazy, a przycisk zamknięcia modala postępu pojawia się dopiero po zakończeniu operacji.
+- `Ustawienia / źródła map`: zapis i edycja źródła, zmiana kolejności, ustawienie domyślnego źródła, usuwanie oraz czyszczenie cache używają teraz tego samego asynchronicznego modala ze spinnerem, lokalizowanym komunikatem wyniku i obsługą błędów jak pozostałe akcje systemu; zachowano walidację formularza przed wysłaniem.
+
+## 1.10.11.dev - 15.08.2026
+- `GUI / pomoc`: wspólny modal wszystkich plików pomocy ma teraz widoczny, cienki pasek przewijania dopasowany kolorystycznie do aktywnego motywu; przewijanie pozostaje wewnątrz okna i nie przenosi się na stronę pod modalem.
+- `APRS / wybór symbolu`: listy symboli w `Mojej stacji`, `Obiektach / Elementach` oraz filtrze ikon `Packet Flow` pokazują teraz obok ikony i kodu oficjalny opis z indeksu symboli aprs.fi; opis oraz podgląd zmieniają się zgodnie z wybraną tablicą podstawową `/` lub alternatywną `\`.
+- `APRS / ikony modern`: naprawiono uszkodzone symbole `/!` (posterunek policji), `\!` (alarm) oraz `/q` i `\q` (warianty siatki kwadratowej), zastępując błędne lub zawierające cały arkusz pliki prawidłowymi kafelkami ze źródłowych arkuszy ikon.
+
+## 1.10.10.dev - 14.08.2026
+- `Packet Routing / zapis`: włączanie i wyłączanie reguł oraz zapis w edytorze używają teraz standardowego modala APRSBox ze spinnerem, komunikatem wyniku i obsługą błędów bez przeładowania strony; po udanym zapisie użytkownik wraca do właściwej listy lub edytowanej reguły.
+- `GUI / pomoc`: wszystkie przyciski pomocy mają ikonę powiększoną o 50% oraz stały niebieski akcent ikony, obramowania i tła, dzięki czemu są jednoznacznie rozpoznawalne we wszystkich widokach i paletach kolorystycznych.
+- `Mapa / siatka QTH`: zmniejszono rozmiar etykiet czteroznakowych lokatorów przy powiększeniu `6`, aby ograniczyć ich dominowanie i nakładanie się w gęstym widoku siatki.
+
+## 1.10.9.dev - 14.08.2026
+- `Wiadomości APRS / zgodność`: odbiór wiadomości, potwierdzeń `ack` i odrzuceń `rej` obsługuje teraz alfanumeryczne identyfikatory o długości od 1 do 5 znaków; ponownie odebrana numerowana wiadomość od tego samego nadawcy nie tworzy duplikatu nawet po zmianie konwersacji, ale nadal otrzymuje ponowne potwierdzenie.
+
+## 1.10.8.dev - 14.08.2026
+- `Pulpit / gotowość stacji`: przebudowano ocenę wokół połączenia APRS-IS, flow `Local TX → APRS-IS`, zdefiniowanego beaconu oraz kompletności kierunków `RF → APRS-IS`, `APRS-IS → RF` i `RF → RF` dla aktywnych interfejsów; stany są prezentowane ikonami, a liczba aktywnych interfejsów ma kolor zielony dla kompletu, ciemnożółty dla części i czerwony dla zera.
+- `Pulpit / układ`: kafelek gotowości przeniesiono do widocznej części obok wykresu, usunięto kafelki ostatnich ważnych zdarzeń oraz powtórzonego podsumowania interfejsów i aktywności RF, a pozostałą zawartość dopasowano do bieżącego okna; usunięto również mylący łączny licznik gotowości, który pomijał wyłączone interfejsy.
+- `Pulpit / pomoc konfiguracji`: link konfiguracji w kafelku gotowości zastąpiono standardową ikoną pomocy osadzoną w kafelku; dodano przystępny przewodnik w czterech językach, prowadzący przez `Interfejsy → Moja stacja → Packet Routing` oraz wyjaśniający różnicę między własnym flow `Local TX → APRS-IS` a uplinkiem ramek odebranych przez RF. Automatyczne odświeżanie pulpitu jest wstrzymywane podczas czytania pomocy i otrzymuje pełne 30 sekund po jej zamknięciu.
+- `Ustawienia / sprawdzanie wersji`: przycisk `Sprawdź wersję` pobiera teraz bezpośrednio plik `VERSION` z GitHub przez HTTPS, dzięki czemu działa również w obrazie Docker, w którym nie ma programu `git`; dla innych źródeł zachowano dotychczasowy mechanizm Git. Porównanie wersji nie proponuje już „aktualizacji” nowszej wersji developerskiej do starszego wydania stabilnego.
+
+## 1.10.7.dev - 14.08.2026
+- `Mapa / backend stacji`: dodano trwałą projekcję `map_station_state`, aktualizowaną podczas odbioru i nadawania ramek APRS oraz odtwarzaną z historii; endpointy mapy nie rekonstruują już stanu przez ponowne parsowanie `traffic_frames` (zmierzony TTFB `stations-lite` spadł z ok. `3,4 s` do ok. `63 ms`).
+- `Stacje / odświeżanie`: mapa i lista stacji czytają gotową projekcję, a polling według rewizji pobiera tylko zmienione rekordy i informacje o usunięciach; podsumowanie RF również nie skanuje historii.
+- `Pulpit / wydajność`: stan ostatnio słyszanych stacji i początkowy wykres korzystają z istniejących projekcji, KPI ruchu są liczone jednym zapytaniem, a lista słyszanych stacji nie jest ponownie parsowana z `traffic_frames`, gdy dostępny jest bufor godzinowy.
+
 ## 1.10.6 - 13.08.2026
 - `Wydanie stabilne`: scalono zmiany z wersji `1.10.2.dev–1.10.5.dev`, obejmujące bezpieczniejszą kopię konfiguracji v2, ujednolicone akcje i modale GUI, poprawki ergonomii oraz przewijania, automatyczne odświeżanie APRS Device Identification, warstwę siatki Maidenhead/QTH z adaptacyjną dokładnością i obsługą obu motywów, naprawę zawijania świata na mapie oraz standardowy modal potwierdzenia aktualizacji aplikacji.
 

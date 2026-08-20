@@ -3,6 +3,10 @@ set -eu
 
 JOB_ID="${APRSBOX_JOB_ID:-}"
 DB_PATH="${APRSBOX_DB_PATH:-}"
+INSTALL_ROOT="${APRSBOX_INSTALL_ROOT:-/opt/aprsbox}"
+APP_DIR="$INSTALL_ROOT/app"
+SSL_DIR="$INSTALL_ROOT/data/ssl"
+SUCCESS_MESSAGE="${APRSBOX_JOB_SUCCESS_MESSAGE:-Application update finished successfully.}"
 
 job_can_update() {
     if [ -z "$JOB_ID" ] || [ -z "$DB_PATH" ]; then
@@ -52,7 +56,7 @@ job_update() {
 on_exit() {
     code="$?"
     if [ "$code" -eq 0 ]; then
-        job_update "success" "Application update finished successfully." "0" "100" "completed"
+        job_update "success" "$SUCCESS_MESSAGE" "0" "100" "completed"
     else
         job_update "error" "Web service restart failed (exit $code)." "$code" "98" "failed"
     fi
@@ -62,4 +66,22 @@ on_exit() {
 trap on_exit EXIT
 job_update "running" "Restarting the web service. The browser may reconnect briefly." "" "98" "restarting-web"
 sleep 1
+mkdir -p "$SSL_DIR"
+chown aprsbox:aprsbox "$SSL_DIR" 2>/dev/null || true
+chmod 0750 "$SSL_DIR"
+if [ ! -f "$SSL_DIR/https-enabled" ] && grep -q -- "--ssl-certfile" /etc/systemd/system/aprsbox-web.service 2>/dev/null; then
+    touch "$SSL_DIR/https-enabled"
+    chown aprsbox:aprsbox "$SSL_DIR/https-enabled" 2>/dev/null || true
+fi
+install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-core.service" /etc/systemd/system/aprsbox-core.service
+install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-web.service" /etc/systemd/system/aprsbox-web.service
+install -m 0644 "$APP_DIR/deploy/systemd/aprsbox-http-redirect.service" /etc/systemd/system/aprsbox-http-redirect.service
+systemctl daemon-reload
+systemctl restart aprsbox-core.service
+if [ -f "$SSL_DIR/https-enabled" ]; then
+    systemctl enable aprsbox-http-redirect.service >/dev/null 2>&1 || true
+    systemctl restart aprsbox-http-redirect.service
+else
+    systemctl disable --now aprsbox-http-redirect.service >/dev/null 2>&1 || true
+fi
 systemctl restart aprsbox-web.service

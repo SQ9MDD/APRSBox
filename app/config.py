@@ -36,6 +36,8 @@ class Settings:
     privileged_runner: str = os.getenv("APRSBOX_PRIVILEGED_RUNNER", "").strip()
     core_host: str = os.getenv("APRSBOX_CORE_HOST", "127.0.0.1")
     core_port: int = int(os.getenv("APRSBOX_CORE_PORT", "18081"))
+    web_http_port: int = int(os.getenv("APRSBOX_WEB_HTTP_PORT", "8000"))
+    web_https_port: int = int(os.getenv("APRSBOX_WEB_HTTPS_PORT", "443"))
     root_path: str = os.getenv("APRSBOX_ROOT_PATH", "").rstrip("/")
     proxy_trusted_ips: str = os.getenv("APRSBOX_PROXY_TRUSTED_IPS", "127.0.0.1")
     map_tile_url: str = os.getenv("APRSBOX_MAP_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png")
@@ -77,6 +79,10 @@ class Settings:
     @property
     def cache_dir(self) -> Path:
         return self.data_dir / "cache"
+
+    @property
+    def ssl_dir(self) -> Path:
+        return self.data_dir / "ssl"
 
     @property
     def config_dir(self) -> Path:
