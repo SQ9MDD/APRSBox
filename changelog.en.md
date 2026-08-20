@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.16.dev - 2026-08-20
+- `APRS messages / conversation list`: rebuilt the list as compact single-line records with fixed columns for selection, callsign, heard status, read state, and deletion; time since the last frame moved to the row tooltip, and status indicators now use a consistent set of Material Design icons.
+- `APRS messages / bulk deletion`: added per-conversation checkboxes and a shared tri-state checkbox in the list header, aligned above the selection column; the delete-selected action sits above the trash-button column and removes the chosen conversations together with their messages after one confirmation.
+
 ## 1.10.15.dev - 2026-08-16
 - `Settings / HTTPS`: added a panel for managing `aprsbox.crt`, `aprsbox.key`, and the optional CA chain in `/opt/aprsbox/data/ssl`; the UI verifies the certificate/key pair, displays file status, supports upload and safe removal, and allows the CA chain to be downloaded. Local PKI generation and Root CA download remain disabled for now.
 - `HTTPS / runtime`: the switch persists HTTPS state and restarts services; HTTP mode listens on port `8000`, while HTTPS mode disables that listener, starts Uvicorn with TLS on `443`, and runs a separate service that redirects port `80` to HTTPS with status `308`.

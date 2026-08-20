@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.16.dev - 20.08.2026
+- `Wiadomości APRS / lista konwersacji`: listę przebudowano na zwarte, jednowierszowe rekordy ze stałymi kolumnami dla zaznaczenia, znaku, stanu słyszalności, stanu przeczytania i usuwania; czas od ostatniej ramki przeniesiono do tooltipa wiersza, a wskaźniki ujednolicono za pomocą ikon Material Design.
+- `Wiadomości APRS / usuwanie zbiorcze`: dodano checkboxy przy konwersacjach oraz wspólny checkbox ze stanem pośrednim w nagłówku listy, wyrównany nad kolumną zaznaczeń; przycisk usuwania zaznaczonych znajduje się nad kolumną koszy i usuwa wybrane konwersacje wraz z ich wiadomościami po jednym potwierdzeniu.
+
 ## 1.10.15.dev - 16.08.2026
 - `Ustawienia / HTTPS`: dodano panel zarządzania certyfikatem `aprsbox.crt`, kluczem `aprsbox.key` i opcjonalnym łańcuchem CA w `/opt/aprsbox/data/ssl`; interfejs sprawdza zgodność certyfikatu z kluczem, pokazuje statusy plików, obsługuje upload i bezpieczne usuwanie oraz pozwala pobrać łańcuch CA. Generator lokalnego PKI i pobieranie Root CA pozostają na razie nieaktywne.
 - `HTTPS / uruchamianie`: przełącznik zapisuje stan HTTPS i restartuje usługi; tryb HTTP działa na porcie `8000`, natomiast tryb HTTPS wyłącza ten listener, uruchamia Uvicorn z TLS na `443` i osobną usługę przekierowującą port `80` do HTTPS kodem `308`.
