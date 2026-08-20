@@ -1591,7 +1591,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
 
             row = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
             assert row is not None
-            self.assertEqual(int(row["total"]), 3)
+            self.assertEqual(int(row["total"]), 1)
 
             jobs = fetch_all(
                 """
@@ -1601,12 +1601,11 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 ORDER BY id ASC
                 """
             )
-            self.assertEqual(len(jobs), 3)
-            ack_now_job = next(job for job in jobs if '"message_text":"ack49"' in str(job["payload_json"]) and '"trigger":"ack-now"' in str(job["payload_json"]))
-            response_job = next(job for job in jobs if '"message_text":"Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER"' in str(job["payload_json"]))
-            self.assertGreater(str(response_job["scheduled_at"]), str(ack_now_job["scheduled_at"]))
+            self.assertEqual(len(jobs), 1)
+            self.assertIn('"message_text":"Queries: ?APRS ?APRSP ?APRSS ?APRSD ?DX ?APRSV ?VER"', str(jobs[0]["payload_json"]))
+            self.assertNotIn('"message_text":"ack49"', str(jobs[0]["payload_json"]))
 
-    def test_incoming_numbered_query_preserves_existing_manual_conversation_path_for_ack(self) -> None:
+    def test_incoming_numbered_query_is_not_acknowledged(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
             update_station_settings(station_payload(interface_id))
@@ -1636,10 +1635,9 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 ORDER BY id ASC
                 """
             )
-            self.assertEqual(len(ack_jobs), 2)
-            self.assertTrue(all('"path":"WIDE2-2"' in str(job["payload_json"]) for job in ack_jobs))
+            self.assertEqual(len(ack_jobs), 0)
 
-    def test_incoming_numbered_query_with_single_char_suffix_acks_exact_number(self) -> None:
+    def test_incoming_numbered_query_with_single_char_suffix_is_not_acknowledged(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
             update_station_settings(station_payload(interface_id))
@@ -1666,14 +1664,13 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 SELECT payload_json
                 FROM outbound_jobs
                 WHERE kind = 'message'
-                  AND payload_json LIKE '%"message_text":"ack1"%'
+                  AND payload_json LIKE '%"message_text":"ack%'
                 ORDER BY id ASC
                 """
             )
-            self.assertEqual(len(ack_jobs), 2)
-            self.assertTrue(all('"message_text":"ack1"' in str(job["payload_json"]) for job in ack_jobs))
+            self.assertEqual(len(ack_jobs), 0)
 
-    def test_duplicate_numbered_query_acknowledges_retry_without_second_auto_response(self) -> None:
+    def test_duplicate_numbered_query_is_not_acknowledged_and_gets_single_auto_response(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
             update_station_settings(station_payload(interface_id))
@@ -1716,13 +1713,9 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 ORDER BY id ASC
                 """
             )
-            self.assertEqual(len(ack_jobs), 3)
-            payloads = [str(row["payload_json"]) for row in ack_jobs]
-            self.assertTrue(any('"trigger":"ack-now"' in payload for payload in payloads))
-            self.assertTrue(any('"trigger":"ack-delayed"' in payload for payload in payloads))
-            self.assertTrue(any('"trigger":"ack-duplicate"' in payload for payload in payloads))
+            self.assertEqual(len(ack_jobs), 0)
 
-    def test_duplicate_numbered_query_via_consumed_hops_is_ack_throttled(self) -> None:
+    def test_duplicate_numbered_query_via_consumed_hops_is_not_acknowledged(self) -> None:
         with temporary_database():
             interface_id = insert_modem()
             update_station_settings(station_payload(interface_id))
@@ -1754,11 +1747,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
                 ORDER BY id ASC
                 """
             )
-            self.assertEqual(len(ack_jobs), 3)
-            payloads = [str(row["payload_json"]) for row in ack_jobs]
-            self.assertTrue(any('"trigger":"ack-now"' in payload for payload in payloads))
-            self.assertTrue(any('"trigger":"ack-delayed"' in payload for payload in payloads))
-            self.assertEqual(sum(1 for payload in payloads if '"trigger":"ack-duplicate"' in payload), 1)
+            self.assertEqual(len(ack_jobs), 0)
 
     def test_incoming_aprsp_query_queues_single_position_response(self) -> None:
         with temporary_database():
