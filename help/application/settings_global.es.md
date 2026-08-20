@@ -20,5 +20,6 @@ Este panel controla los valores generales de visualización, retención y regist
 - `Opacidad de relleno de cobertura` se guarda globalmente y controla el interior de las áreas de cobertura del mapa.
 - `Opacidad del contorno de cobertura` controla solo el borde y se guarda localmente en el navegador actual.
 - `0%` oculta el relleno o el contorno correspondiente.
+- `Agrupar los iconos de estaciones superpuestos en el mapa` sustituye los símbolos cercanos por un icono azul con el número de estaciones. Está desactivado de forma predeterminada para que el mapa muestre símbolos APRS individuales hasta que un operador active expresamente la agrupación.
 
 Use `Guardar ajustes globales` para aplicar los valores globales.

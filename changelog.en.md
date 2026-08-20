@@ -1,8 +1,12 @@
 # Changelog
 
+## 1.11 - 2026-08-20
+- `Stable release`: consolidated changes from `1.10.7.dev–1.10.16.dev`, including a substantially faster map and station list backed by persistent station-state projection, a redesigned Dashboard with clearer station-readiness assessment, complete HTTPS support for systemd and OpenRC, safer updates, and consistent dialogs, help, and GUI icons. APRS message compatibility was extended, conversations were reorganized into a compact list with selection and bulk deletion, and optional clustering of overlapping map stations remains disabled by default.
+
 ## 1.10.16.dev - 2026-08-20
 - `APRS messages / conversation list`: rebuilt the list as compact single-line records with fixed columns for selection, callsign, heard status, read state, and deletion; time since the last frame moved to the row tooltip, and status indicators now use a consistent set of Material Design icons.
 - `APRS messages / bulk deletion`: added per-conversation checkboxes and a shared tri-state checkbox in the list header, aligned above the selection column; the delete-selected action sits above the trash-button column and removes the chosen conversations together with their messages after one confirmation.
+- `Map / station clustering`: grouping overlapping symbols into blue count icons is now optional; a new global Settings switch is disabled by default, so the map normally renders individual APRS icons.
 
 ## 1.10.15.dev - 2026-08-16
 - `Settings / HTTPS`: added a panel for managing `aprsbox.crt`, `aprsbox.key`, and the optional CA chain in `/opt/aprsbox/data/ssl`; the UI verifies the certificate/key pair, displays file status, supports upload and safe removal, and allows the CA chain to be downloaded. Local PKI generation and Root CA download remain disabled for now.

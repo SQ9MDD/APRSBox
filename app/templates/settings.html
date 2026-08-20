@@ -127,6 +127,16 @@
                     {% endfor %}
                 </select>
             </label>
+            <label class="full checkbox-row">
+                <input
+                    type="checkbox"
+                    name="map_marker_clustering_enabled"
+                    value="1"
+                    {% if map_marker_clustering_enabled %}checked{% endif %}
+                    {% if can_manage_global_settings %}form="global-settings-form"{% else %}disabled{% endif %}
+                >
+                <span>{{ t("Group overlapping station icons on the map") }}</span>
+            </label>
         </div>
         {% if can_manage_global_settings %}
         <div class="form-actions">

@@ -10,11 +10,13 @@ from app.services.map_tile_proxy import clear_map_source_cache
 from app.services.map_service import (
     delete_map_source,
     get_map_page_config,
+    get_map_marker_clustering_enabled,
     get_map_source,
     list_map_sources,
     move_map_source,
     resolve_active_tile_layer,
     save_map_source,
+    save_map_marker_clustering_enabled,
     set_default_map_source,
 )
 
@@ -232,6 +234,16 @@ class MapSourcesTests(unittest.TestCase):
             set_app_setting("map_coverage_fill_opacity", "99")
 
             self.assertEqual(get_map_page_config()["coverage_fill_opacity"], 5)
+
+    def test_map_marker_clustering_is_disabled_by_default_and_can_be_enabled(self) -> None:
+        with temporary_database():
+            self.assertFalse(get_map_marker_clustering_enabled())
+            self.assertFalse(get_map_page_config()["marker_clustering_enabled"])
+
+            self.assertTrue(save_map_marker_clustering_enabled(True))
+
+            self.assertTrue(get_map_marker_clustering_enabled())
+            self.assertTrue(get_map_page_config()["marker_clustering_enabled"])
 
     def test_clear_map_source_cache_removes_files_and_resets_stats(self) -> None:
         with temporary_database():

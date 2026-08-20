@@ -207,6 +207,8 @@ class SettingsMaintenanceTests(unittest.TestCase):
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
         router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
         self.assertIn('name="coverage_fill_opacity"', template_source)
+        self.assertIn('name="map_marker_clustering_enabled"', template_source)
+        self.assertIn('{{ t("Group overlapping station icons on the map") }}', template_source)
         self.assertIn('{% if coverage_fill_opacity == value %}selected{% endif %}', template_source)
         self.assertNotIn("aprsbox-map-coverage-fill-opacity", template_source)
         self.assertIn("set_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY", router_source)
@@ -227,11 +229,13 @@ class SettingsMaintenanceTests(unittest.TestCase):
                 event_log_min_level="INFO",
                 event_log_debug_enabled=None,
                 coverage_fill_opacity="5",
+                map_marker_clustering_enabled="1",
                 current_user=UserIdentity(id=1, username="admin", role="admin", is_active=True),
             )
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(get_app_setting("map_coverage_fill_opacity"), "5")
+            self.assertEqual(get_app_setting("map_marker_clustering_enabled"), "1")
 
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")

@@ -58,6 +58,7 @@ class ConfigBackupTests(unittest.TestCase):
             set_app_setting("app_language", "pl")
             set_app_setting("traffic_retention_minutes", "180")
             set_app_setting("map_coverage_fill_opacity", "5")
+            set_app_setting("map_marker_clustering_enabled", "1")
             set_app_setting("aprs.map_alarm_level_threshold", "2")
             set_app_setting("aprs.global_alarm_level_threshold", "3")
             set_app_setting(
@@ -77,6 +78,7 @@ class ConfigBackupTests(unittest.TestCase):
             self.assertEqual("pl", payload["app_settings"]["app_language"])
             self.assertEqual("180", payload["app_settings"]["traffic_retention_minutes"])
             self.assertEqual("5", payload["app_settings"]["map_coverage_fill_opacity"])
+            self.assertEqual("1", payload["app_settings"]["map_marker_clustering_enabled"])
             self.assertEqual(
                 "2",
                 payload["app_settings"]["aprs.map_alarm_level_threshold"],
@@ -179,6 +181,16 @@ class ConfigBackupTests(unittest.TestCase):
             ok, error = safe_import_configuration_backup(json.dumps(payload).encode("utf-8"))
             self.assertFalse(ok)
             self.assertIn("missing app settings", str(error))
+
+    def test_import_accepts_older_v2_backup_without_marker_clustering_setting(self) -> None:
+        with temporary_database():
+            payload = export_configuration_backup()
+            del payload["app_settings"]["map_marker_clustering_enabled"]
+
+            ok, error = safe_import_configuration_backup(json.dumps(payload).encode("utf-8"))
+
+            self.assertTrue(ok, error)
+            self.assertEqual(get_app_setting("map_marker_clustering_enabled"), "0")
 
     def test_export_and_import_restores_messages_and_notification_configuration(self) -> None:
         with temporary_database():

@@ -1,8 +1,12 @@
 # Changelog
 
+## 1.11 - 2026-08-20
+- `Versión estable`: se integraron los cambios de `1.10.7.dev–1.10.16.dev`, entre ellos un mapa y una lista de estaciones mucho más rápidos gracias a la proyección persistente del estado, un Panel rediseñado con una evaluación más clara de la preparación de la estación, compatibilidad HTTPS completa para systemd y OpenRC, actualizaciones más seguras y diálogos, ayuda e iconos de GUI uniformes. Se amplió la compatibilidad de los mensajes APRS, las conversaciones se reorganizaron en una lista compacta con selección y eliminación múltiple, y la agrupación opcional de estaciones superpuestas en el mapa permanece desactivada de forma predeterminada.
+
 ## 1.10.16.dev - 2026-08-20
 - `Mensajes APRS / lista de conversaciones`: la lista se rediseñó como registros compactos de una sola línea con columnas fijas para selección, indicativo, estado de recepción, estado de lectura y eliminación; el tiempo transcurrido desde la última trama pasó al tooltip de la fila y los indicadores usan ahora un conjunto uniforme de iconos Material Design.
 - `Mensajes APRS / eliminación múltiple`: se añadieron casillas por conversación y una casilla común de tres estados en la cabecera de la lista, alineada sobre la columna de selección; la acción para eliminar lo seleccionado se sitúa sobre la columna de papeleras y borra las conversaciones elegidas junto con sus mensajes tras una única confirmación.
+- `Mapa / agrupación de estaciones`: la agrupación de símbolos superpuestos en iconos azules con contador es ahora opcional; un nuevo interruptor global de Ajustes está desactivado de forma predeterminada, por lo que el mapa normalmente muestra iconos APRS individuales.
 
 ## 1.10.15.dev - 2026-08-16
 - `Ajustes / HTTPS`: se añadió un panel para administrar `aprsbox.crt`, `aprsbox.key` y la cadena de CA opcional en `/opt/aprsbox/data/ssl`; la interfaz verifica el par certificado/clave, muestra el estado de los archivos, permite subirlos y eliminarlos de forma segura y descargar la cadena de CA. La generación de PKI local y la descarga de la CA raíz siguen desactivadas por ahora.

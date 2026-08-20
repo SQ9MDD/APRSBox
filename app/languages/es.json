@@ -674,6 +674,7 @@
   "Hide Maidenhead grid": "Ocultar cuadrícula Maidenhead",
   "Mask opacity": "Opacidad de la máscara",
   "Coverage fill opacity": "Opacidad de relleno de cobertura",
+  "Group overlapping station icons on the map": "Agrupar los iconos de estaciones superpuestos en el mapa",
   "Coverage outline opacity": "Opacidad del contorno de cobertura",
   "Show latest packet widget": "Mostrar el último widget de paquete",
   "Hide latest packet widget": "Ocultar el widget del último paquete",

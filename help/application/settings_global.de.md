@@ -20,5 +20,6 @@ Dieses Panel steuert anwendungsweite Vorgaben für Darstellung, Aufbewahrung und
 - `Deckkraft der Reichweitenfüllung` wird global gespeichert und steuert die Füllung der Reichweitenflächen auf der Karte.
 - `Deckkraft des Reichweitenumrisses` steuert nur den Rand und wird lokal im aktuellen Browser gespeichert.
 - `0%` blendet die jeweilige Füllung oder den Umriss aus.
+- `Überlappende Stationssymbole auf der Karte gruppieren` ersetzt nahe beieinanderliegende Symbole durch ein blaues Symbol mit der Stationsanzahl. Die Option ist standardmäßig deaktiviert, damit einzelne APRS-Symbole sichtbar bleiben, bis ein Operator die Gruppierung ausdrücklich aktiviert.
 
 Mit `Globale Einstellungen speichern` werden die globalen Werte übernommen.

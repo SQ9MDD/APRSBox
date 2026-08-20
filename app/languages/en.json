@@ -684,6 +684,7 @@
   "Hide Maidenhead grid": "Hide Maidenhead grid",
   "Mask opacity": "Mask opacity",
   "Coverage fill opacity": "Coverage fill opacity",
+  "Group overlapping station icons on the map": "Group overlapping station icons on the map",
   "Coverage outline opacity": "Coverage outline opacity",
   "Show latest packet widget": "Show latest packet widget",
   "Hide latest packet widget": "Hide latest packet widget",

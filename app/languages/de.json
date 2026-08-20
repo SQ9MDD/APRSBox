@@ -687,6 +687,7 @@
   "Hide Maidenhead grid": "Maidenhead-Gitter ausblenden",
   "Mask opacity": "Deckkraft der Maske",
   "Coverage fill opacity": "Deckkraft der Deckungsfüllung",
+  "Group overlapping station icons on the map": "Überlappende Stationssymbole auf der Karte gruppieren",
   "Coverage outline opacity": "Deckkraft der Abdeckungsumrisse",
   "Show latest packet widget": "Neuestes Paket-Widget anzeigen",
   "Hide latest packet widget": "Neuestes Paket-Widget ausblenden",

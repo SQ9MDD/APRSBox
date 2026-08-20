@@ -206,6 +206,7 @@ from app.services.https_files import (
 from app.services.map_service import (
     COVERAGE_FILL_OPACITY_SETTING_KEY,
     DEFAULT_COVERAGE_FILL_OPACITY_PERCENT,
+    get_map_marker_clustering_enabled,
     get_map_source,
     list_map_sources,
     get_coverage_fill_opacity_percent,
@@ -223,6 +224,7 @@ from app.services.map_service import (
     get_station_detail_map_config,
     get_station_detail_track_payload,
     normalize_coverage_fill_opacity_percent,
+    save_map_marker_clustering_enabled,
 )
 from app.services.map_station_state import read_map_station_rf_snapshots, read_map_station_state
 from app.services.map_tile_proxy import MapTileProxyError, resolve_map_tile, safe_clear_map_source_cache
@@ -981,6 +983,7 @@ def _settings_page_context(
     event_log_debug_enabled = get_event_log_debug_enabled()
     traffic_retention_minutes = _normalize_traffic_retention_minutes_option(get_traffic_retention_minutes())
     coverage_fill_opacity = get_coverage_fill_opacity_percent()
+    map_marker_clustering_enabled = get_map_marker_clustering_enabled()
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
     update_channel_options = [
@@ -1053,6 +1056,7 @@ def _settings_page_context(
             for value in TRAFFIC_RETENTION_ALLOWED_MINUTES
         ],
         coverage_fill_opacity=coverage_fill_opacity,
+        map_marker_clustering_enabled=map_marker_clustering_enabled,
         database_vacuum_blocked=database_vacuum_blocked,
         database_maintenance_snapshot=db_maintenance_snapshot,
         database_path=str(db_maintenance_snapshot.get("database_path") or ""),
@@ -1938,6 +1942,7 @@ def settings_update_global(
     event_log_min_level: str = Form(""),
     event_log_debug_enabled: str | None = Form(None),
     coverage_fill_opacity: str = Form(str(DEFAULT_COVERAGE_FILL_OPACITY_PERCENT)),
+    map_marker_clustering_enabled: str | None = Form(None),
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     raw_language = str(language or "").strip().lower()
@@ -1954,6 +1959,7 @@ def settings_update_global(
     selected_event_log_debug_enabled = _map_source_checkbox(event_log_debug_enabled)
     raw_coverage_fill_opacity = str(coverage_fill_opacity or "").strip()
     selected_coverage_fill_opacity = normalize_coverage_fill_opacity_percent(raw_coverage_fill_opacity)
+    selected_map_marker_clustering_enabled = _map_source_checkbox(map_marker_clustering_enabled)
     station_settings = get_station_settings()
     current_default_units = station_settings.get("default_units", "metric")
     if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != raw_language:
@@ -1993,6 +1999,7 @@ def settings_update_global(
     set_app_setting(EVENT_LOG_MIN_LEVEL_SETTING_KEY, selected_event_log_min_level)
     set_app_setting(EVENT_LOG_DEBUG_ENABLED_SETTING_KEY, "1" if selected_event_log_debug_enabled else "0")
     set_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY, str(selected_coverage_fill_opacity))
+    save_map_marker_clustering_enabled(selected_map_marker_clustering_enabled)
     return JSONResponse(
         {
             "ok": True,
@@ -2005,6 +2012,7 @@ def settings_update_global(
             "event_log_min_level": selected_event_log_min_level,
             "event_log_debug_enabled": selected_event_log_debug_enabled,
             "coverage_fill_opacity": selected_coverage_fill_opacity,
+            "map_marker_clustering_enabled": selected_map_marker_clustering_enabled,
             "reload": True,
         }
     )

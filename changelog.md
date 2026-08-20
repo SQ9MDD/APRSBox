@@ -1,8 +1,12 @@
 # Changelog
 
+## 1.11 - 20.08.2026
+- `Wydanie stabilne`: scalono zmiany z wersji `1.10.7.dev–1.10.16.dev`, obejmujące znacznie szybszą mapę i listę stacji dzięki trwałej projekcji stanu, przebudowany Dashboard z czytelną oceną gotowości stacji, pełną obsługę HTTPS dla systemd i OpenRC, bezpieczniejsze aktualizacje oraz ujednolicone modale, pomoc i ikony GUI. Rozszerzono zgodność wiadomości APRS, uporządkowano rozmowy w zwartej liście z zaznaczaniem i usuwaniem zbiorczym, a opcjonalne grupowanie nakładających się stacji na mapie pozostawiono domyślnie wyłączone.
+
 ## 1.10.16.dev - 20.08.2026
 - `Wiadomości APRS / lista konwersacji`: listę przebudowano na zwarte, jednowierszowe rekordy ze stałymi kolumnami dla zaznaczenia, znaku, stanu słyszalności, stanu przeczytania i usuwania; czas od ostatniej ramki przeniesiono do tooltipa wiersza, a wskaźniki ujednolicono za pomocą ikon Material Design.
 - `Wiadomości APRS / usuwanie zbiorcze`: dodano checkboxy przy konwersacjach oraz wspólny checkbox ze stanem pośrednim w nagłówku listy, wyrównany nad kolumną zaznaczeń; przycisk usuwania zaznaczonych znajduje się nad kolumną koszy i usuwa wybrane konwersacje wraz z ich wiadomościami po jednym potwierdzeniu.
+- `Mapa / agregacja stacji`: grupowanie nakładających się symboli w niebieskie ikony z licznikiem jest teraz opcjonalne; nowy globalny przełącznik w Ustawieniach jest domyślnie wyłączony, więc mapa standardowo pokazuje osobne ikony APRS.
 
 ## 1.10.15.dev - 16.08.2026
 - `Ustawienia / HTTPS`: dodano panel zarządzania certyfikatem `aprsbox.crt`, kluczem `aprsbox.key` i opcjonalnym łańcuchem CA w `/opt/aprsbox/data/ssl`; interfejs sprawdza zgodność certyfikatu z kluczem, pokazuje statusy plików, obsługuje upload i bezpieczne usuwanie oraz pozwala pobrać łańcuch CA. Generator lokalnego PKI i pobieranie Root CA pozostają na razie nieaktywne.

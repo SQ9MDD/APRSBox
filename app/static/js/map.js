@@ -23,6 +23,7 @@
         .split(/[,\s]+/)
         .map((token) => token.trim())
         .filter((token) => token.length > 0);
+    const markerClusteringEnabled = root.dataset.markerClusteringEnabled === "true";
 
     const centerOutput = document.getElementById("map-center");
     const zoomOutput = document.getElementById("map-zoom");
@@ -1961,7 +1962,7 @@
     }
 
     function buildStationMarkerLayerGroup() {
-        if (typeof window.L.markerClusterGroup !== "function") {
+        if (!markerClusteringEnabled || typeof window.L.markerClusterGroup !== "function") {
             return window.L.layerGroup();
         }
         // Cluster only markers that visually overlap; the radius is close to the

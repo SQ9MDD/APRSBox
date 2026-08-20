@@ -40,6 +40,7 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "event_log_min_level",
     "event_log_debug_enabled",
     "map_coverage_fill_opacity",
+    "map_marker_clustering_enabled",
     "gui_update_branch",
     "aprsis_server",
     "aprsis_port",
@@ -59,6 +60,11 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "radar_enabled",
     "radar_ignored_patterns",
 )
+
+CONFIG_BACKUP_OPTIONAL_APP_SETTING_DEFAULTS: dict[str, str | None] = {
+    # Added during backup format v2; accepting its absence keeps older v2 files importable.
+    "map_marker_clustering_enabled": "0",
+}
 
 # These columns describe transient counters or the result of a connectivity
 # test. They are deliberately not restored as configuration.
@@ -172,7 +178,12 @@ def _parse_backup_payload(raw_payload: bytes) -> dict[str, Any]:
     app_settings_payload = payload.get("app_settings")
     if not isinstance(app_settings_payload, dict):
         raise ValueError("Backup payload contains invalid app settings.")
-    missing_settings = [key for key in CONFIG_BACKUP_APP_SETTING_KEYS if key not in app_settings_payload]
+    normalized_app_settings = dict(app_settings_payload)
+    missing_settings = [
+        key
+        for key in CONFIG_BACKUP_APP_SETTING_KEYS
+        if key not in app_settings_payload and key not in CONFIG_BACKUP_OPTIONAL_APP_SETTING_DEFAULTS
+    ]
     if missing_settings:
         missing = ", ".join(missing_settings)
         raise ValueError(f"Backup payload is missing app settings: {missing}.")
@@ -180,12 +191,14 @@ def _parse_backup_payload(raw_payload: bytes) -> dict[str, Any]:
     if unexpected_settings:
         unexpected = ", ".join(sorted(str(key) for key in unexpected_settings))
         raise ValueError(f"Backup payload contains unsupported app settings: {unexpected}.")
-    for key, value in app_settings_payload.items():
+    for key, default_value in CONFIG_BACKUP_OPTIONAL_APP_SETTING_DEFAULTS.items():
+        normalized_app_settings.setdefault(key, default_value)
+    for key, value in normalized_app_settings.items():
         if value is not None and not isinstance(value, str):
             raise ValueError(f"Backup payload contains invalid value for app setting '{key}'.")
 
     return {
-        "app_settings": dict(app_settings_payload),
+        "app_settings": normalized_app_settings,
         "tables": tables_payload,
     }
 

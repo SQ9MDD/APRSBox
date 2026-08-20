@@ -20,5 +20,6 @@ Ten panel steruje wspólnymi ustawieniami wyglądu, retencji i logowania. Admini
 - `Krycie wypełnienia zasięgu` jest zapisywane globalnie i steruje wnętrzem obszarów zasięgu na mapie.
 - `Krycie obrysu zasięgu` dotyczy tylko obramowania i jest zapisywane lokalnie w bieżącej przeglądarce.
 - Wartość `0%` ukrywa odpowiednio wypełnienie albo obrys.
+- `Grupuj nakładające się ikony stacji na mapie` zastępuje blisko położone symbole niebieską ikoną z liczbą stacji. Opcja jest domyślnie wyłączona, aby mapa pokazywała osobne symbole APRS, dopóki operator świadomie nie włączy agregacji.
 
 Przycisk `Zapisz globalne ustawienia` zapisuje wartości globalne.

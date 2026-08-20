@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 
 {% block extra_head %}
+{% if map_config.marker_clustering_enabled %}
 <link rel="stylesheet" href="{{ request.scope.root_path }}/static/vendor/leaflet-markercluster/MarkerCluster.css?v={{ app_version }}">
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -27,6 +29,7 @@
             data-tile-max-zoom="{{ map_config.tile_max_zoom }}"
             data-tile-subdomains="{{ map_config.tile_subdomains }}"
             data-coverage-fill-opacity="{{ map_config.coverage_fill_opacity }}"
+            data-marker-clustering-enabled="{{ 'true' if map_config.marker_clustering_enabled else 'false' }}"
             data-static-root="{{ request.scope.root_path }}/static/"
             data-root-path="{{ request.scope.root_path }}"
             data-i18n-aprs-client="{{ t('APRS client') }}"
@@ -209,8 +212,10 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{% if map_config.marker_clustering_enabled %}
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet-markercluster/leaflet.markercluster.js?v={{ app_version }}"></script>
+{% endif %}
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}-alerts-global-2"></script>
-<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-map-cluster-1"></script>
+<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-deferred-alerts-1-map-cluster-toggle-1"></script>
 {% endblock %}

@@ -20,5 +20,6 @@ panelvam application HochvaD narghmeH, De' polmeH, log chenmoHmeH je SeHmey choH
 - `Coverage fill opacity` globally pollu' 'ej map coverage Daq qoD SeH.
 - `Coverage outline opacity` HeH neH SeH 'ej browservamDaq local pollu'.
 - `0%` fill pagh outline So'.
+- `Group overlapping station icons on the map` nearby symbolmey blue station-count iconDaq rar. DefaultDaq Qapbe' 'ej operator wIvDI' neH clustering Qap.
 
 `Save Global Settings` yI'uy global values polmeH.

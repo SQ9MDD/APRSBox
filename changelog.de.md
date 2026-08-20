@@ -1,8 +1,12 @@
 # Changelog
 
+## 1.11 - 2026-08-20
+- `Stabile Version`: Die Änderungen aus `1.10.7.dev–1.10.16.dev` wurden zusammengeführt, darunter eine deutlich schnellere Karte und Stationsliste auf Basis einer persistenten Stationszustandsprojektion, ein neu gestaltetes Dashboard mit klarerer Bewertung der Stationsbereitschaft, vollständige HTTPS-Unterstützung für systemd und OpenRC, sicherere Aktualisierungen sowie einheitliche Dialoge, Hilfe und GUI-Symbole. Die Kompatibilität von APRS-Nachrichten wurde erweitert, Konversationen wurden als kompakte Liste mit Auswahl und Sammellöschung neu organisiert und die optionale Gruppierung überlappender Kartenstationen bleibt standardmäßig deaktiviert.
+
 ## 1.10.16.dev - 2026-08-20
 - `APRS-Nachrichten / Konversationsliste`: Die Liste wurde als kompakte, einzeilige Datensätze mit festen Spalten für Auswahl, Rufzeichen, Hörstatus, Lesestatus und Löschen neu aufgebaut; die Zeit seit dem letzten Frame steht jetzt im Tooltip der Zeile, und die Statusanzeigen verwenden einheitliche Material-Design-Symbole.
 - `APRS-Nachrichten / Mehrfachlöschen`: Checkboxen pro Konversation sowie eine gemeinsame Checkbox mit Zwischenzustand wurden im Listenkopf ergänzt und über der Auswahlspalte ausgerichtet; die Aktion zum Löschen der Auswahl steht über der Papierkorbspalte und entfernt die gewählten Konversationen samt Nachrichten nach einer einzigen Bestätigung.
+- `Karte / Stationsgruppierung`: Das Zusammenfassen überlappender Symbole zu blauen Zählsymbolen ist jetzt optional; ein neuer globaler Schalter in den Einstellungen ist standardmäßig deaktiviert, sodass die Karte normalerweise einzelne APRS-Symbole darstellt.
 
 ## 1.10.15.dev - 2026-08-16
 - `Einstellungen / HTTPS`: Ein Panel zur Verwaltung von `aprsbox.crt`, `aprsbox.key` und der optionalen CA-Kette in `/opt/aprsbox/data/ssl` wurde ergänzt; die Oberfläche prüft das Zertifikat-Schlüssel-Paar, zeigt den Dateistatus, unterstützt Upload und sicheres Löschen und ermöglicht den Download der CA-Kette. Lokale PKI-Erzeugung und Root-CA-Download bleiben vorerst deaktiviert.

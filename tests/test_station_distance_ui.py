@@ -262,6 +262,15 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("let coverageFillOpacity = 0.05;", map_script_source)
         self.assertNotIn("aprsbox-map-coverage-fill-opacity", map_script_source)
 
+    def test_map_clustering_assets_and_runtime_are_guarded_by_the_global_setting(self) -> None:
+        map_script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        map_template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
+
+        self.assertIn("{% if map_config.marker_clustering_enabled %}", map_template_source)
+        self.assertIn('data-marker-clustering-enabled=', map_template_source)
+        self.assertIn('root.dataset.markerClusteringEnabled === "true"', map_script_source)
+        self.assertIn("if (!markerClusteringEnabled ||", map_script_source)
+
     def test_map_latest_overlay_script_handles_overlay_toggle_and_qsy(self) -> None:
         script_source = Path("app/static/js/map-latest-overlay.js").read_text(encoding="utf-8")
         self.assertIn("const stationsRefreshEventName = \"aprsbox:map-stations-refreshed\";", script_source)

@@ -683,6 +683,7 @@
   "Hide Maidenhead grid": "Ukryj siatkę Maidenhead",
   "Mask opacity": "Przezroczystość maski",
   "Coverage fill opacity": "Przezroczystość wypełnienia zasięgu",
+  "Group overlapping station icons on the map": "Grupuj nakładające się ikony stacji na mapie",
   "Coverage outline opacity": "Przezroczystość obwiedni zasięgu",
   "Show latest packet widget": "Pokaż widget ostatniego pakietu",
   "Hide latest packet widget": "Ukryj widget ostatniego pakietu",

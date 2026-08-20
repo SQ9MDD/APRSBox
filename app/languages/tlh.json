@@ -621,6 +621,7 @@
   "Map viewer": "Map leghwI'",
   "Mask opacity": "mask chup",
   "Coverage fill opacity": "Coverage fill opacity",
+  "Group overlapping station icons on the map": "Group overlapping station icons on the map",
   "Coverage outline opacity": "Coverage outline opacity",
   "Match against consumed digi hops only. Wildcard * is supported.": "consumed digi hopmey neH botlhmeH yIlo'. Wildcard * chavnISlu'.",
   "Match against the source callsign. Wildcard * is supported.": "source callsign botlhmeH yIlo'. Wildcard * chavnISlu'.",

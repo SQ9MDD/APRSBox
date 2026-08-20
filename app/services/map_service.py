@@ -4,7 +4,7 @@ import re
 from typing import Any
 from urllib.parse import quote, unquote
 
-from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, utc_now
+from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
 from app.services.alert_areas import (
     build_alert_area_feature_collection,
     get_active_alert_area_feature_collection,
@@ -39,6 +39,7 @@ MAP_SOURCE_REQUIRED_TILE_TOKENS = ("{z}", "{x}", "{y}")
 MAP_TILE_PROXY_ENDPOINT = "/api/map/tiles"
 COVERAGE_FILL_OPACITY_SETTING_KEY = "map_coverage_fill_opacity"
 DEFAULT_COVERAGE_FILL_OPACITY_PERCENT = 5
+MAP_MARKER_CLUSTERING_ENABLED_SETTING_KEY = "map_marker_clustering_enabled"
 
 
 def normalize_coverage_fill_opacity_percent(value: Any) -> int:
@@ -53,6 +54,21 @@ def normalize_coverage_fill_opacity_percent(value: Any) -> int:
 
 def get_coverage_fill_opacity_percent() -> int:
     return normalize_coverage_fill_opacity_percent(get_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY))
+
+
+def get_map_marker_clustering_enabled() -> bool:
+    return str(get_app_setting(MAP_MARKER_CLUSTERING_ENABLED_SETTING_KEY) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def save_map_marker_clustering_enabled(enabled: bool) -> bool:
+    normalized = bool(enabled)
+    set_app_setting(MAP_MARKER_CLUSTERING_ENABLED_SETTING_KEY, "1" if normalized else "0")
+    return normalized
 
 
 def list_map_sources() -> list[dict[str, Any]]:
@@ -692,6 +708,7 @@ def get_map_page_config(*, root_path: str = "") -> dict[str, Any]:
         "tile_max_zoom": tile_layer["tile_max_zoom"],
         "tile_subdomains": tile_layer["tile_subdomains"],
         "coverage_fill_opacity": get_coverage_fill_opacity_percent(),
+        "marker_clustering_enabled": get_map_marker_clustering_enabled(),
     }
 
 

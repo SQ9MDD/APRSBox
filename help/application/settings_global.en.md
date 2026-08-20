@@ -20,5 +20,6 @@ This panel controls application-wide display, retention, and logging defaults. A
 - `Coverage fill opacity` is saved globally and controls the fill inside coverage areas on the map.
 - `Coverage outline opacity` controls only the border and is stored locally in the current browser.
 - A value of `0%` hides the corresponding fill or outline.
+- `Group overlapping station icons on the map` replaces nearby symbols with a blue icon showing the station count. It is disabled by default so the map shows individual APRS symbols until an operator explicitly enables clustering.
 
 Use `Save Global Settings` to apply globally stored values.
