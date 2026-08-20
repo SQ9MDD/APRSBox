@@ -2067,6 +2067,10 @@
         const spiderfier = new window.OverlappingMarkerSpiderfier(map, {
             keepSpiderfied: false,
             nearbyDistance: markerSpiderfyNearbyDistancePx,
+            circleFootSeparation: isModernAprsSymbolSet ? 42 : 32,
+            spiralFootSeparation: isModernAprsSymbolSet ? 44 : 34,
+            spiralLengthStart: isModernAprsSymbolSet ? 16 : 12,
+            spiralLengthFactor: isModernAprsSymbolSet ? 7 : 5.5,
             legWeight: 1.5,
         });
         spiderfier.legColors.usual = "#7a8a94";

@@ -282,6 +282,8 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("mapMaximumZoom - markerSpiderfyZoomLevelsBeforeMax", map_script_source)
         self.assertIn("clusterOptions.disableClusteringAtZoom = markerSpiderfyActivationZoom", map_script_source)
         self.assertIn("nearbyDistance: markerSpiderfyNearbyDistancePx", map_script_source)
+        self.assertIn("circleFootSeparation: isModernAprsSymbolSet ? 42 : 32", map_script_source)
+        self.assertIn("spiralFootSeparation: isModernAprsSymbolSet ? 44 : 34", map_script_source)
         self.assertIn('map.on("zoomend", syncMarkerSpiderfierActivation)', map_script_source)
         self.assertTrue(Path(
             "app/static/vendor/overlapping-marker-spiderfier-leaflet/oms.min.js"

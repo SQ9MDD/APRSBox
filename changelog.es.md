@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.11.2.dev - 2026-08-20
-- `Mapa / separación de marcadores`: se incorporó localmente `OverlappingMarkerSpiderfier` y se añadió la separación opcional de marcadores individuales superpuestos con zoom alto, conservando los iconos APRS, los tooltips y la gestión de clics existente. El umbral se calcula respecto a `map.getMaxZoom()`, mientras que `Leaflet.markercluster` sigue siendo configurable de forma independiente y entrega los marcadores individuales al spiderfier en el mismo nivel de zoom para evitar interferencias.
+- `Mapa / separación de marcadores`: se incorporó localmente `OverlappingMarkerSpiderfier` y se añadió la separación opcional de marcadores individuales superpuestos con zoom alto, conservando los iconos APRS, los tooltips y la gestión de clics existente. El umbral se calcula respecto a `map.getMaxZoom()`, mientras que `Leaflet.markercluster` sigue siendo configurable de forma independiente y entrega los marcadores individuales al spiderfier en el mismo nivel de zoom para evitar interferencias; la geometría de separación tiene en cuenta el tamaño del conjunto de iconos seleccionado y deja un espacio claro entre los símbolos.
 - `Ajustes / mapa`: los Ajustes globales incluyen ahora un interruptor para separar marcadores, el número de niveles antes del zoom máximo (valor predeterminado `2`) y la distancia de superposición en píxeles (valor predeterminado `20`); los valores se validan, se guardan mediante los ajustes de la aplicación y se incluyen en las copias de configuración v2.
 
 ## 1.11 - 2026-08-20

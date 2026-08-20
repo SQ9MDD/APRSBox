@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.11.2.dev - 20.08.2026
-- `Mapa / rozsuwanie markerów`: dodano vendoring `OverlappingMarkerSpiderfier` i opcjonalne rozsuwanie nakładających się pojedynczych markerów przy dużym zoomie, z zachowaniem ikon APRS, tooltipów i dotychczasowej obsługi kliknięć. Próg jest wyliczany względem `map.getMaxZoom()`, a `Leaflet.markercluster` pozostaje niezależnie konfigurowalny i przekazuje pojedyncze markery do spiderfy od tego samego poziomu zoomu, dzięki czemu mechanizmy nie kolidują.
+- `Mapa / rozsuwanie markerów`: dodano vendoring `OverlappingMarkerSpiderfier` i opcjonalne rozsuwanie nakładających się pojedynczych markerów przy dużym zoomie, z zachowaniem ikon APRS, tooltipów i dotychczasowej obsługi kliknięć. Próg jest wyliczany względem `map.getMaxZoom()`, a `Leaflet.markercluster` pozostaje niezależnie konfigurowalny i przekazuje pojedyncze markery do spiderfy od tego samego poziomu zoomu, dzięki czemu mechanizmy nie kolidują; geometria rozsunięcia uwzględnia rozmiar zestawu ikon i pozostawia wyraźny odstęp między symbolami.
 - `Ustawienia / mapa`: w Globalnych ustawieniach dodano przełącznik rozsuwania markerów, liczbę poziomów przed maksymalnym zoomem (domyślnie `2`) oraz odległość nakładania w pikselach (domyślnie `20`); wartości są walidowane, zapisywane w ustawieniach aplikacji i uwzględniane w kopiach konfiguracji v2.
 
 ## 1.11 - 20.08.2026
