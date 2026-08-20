@@ -271,6 +271,22 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn('root.dataset.markerClusteringEnabled === "true"', map_script_source)
         self.assertIn("if (!markerClusteringEnabled ||", map_script_source)
 
+    def test_map_spiderfy_assets_threshold_and_cluster_handoff_are_configured(self) -> None:
+        map_script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        map_template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
+
+        self.assertIn("{% if map_config.marker_spiderfy_enabled %}", map_template_source)
+        self.assertIn("overlapping-marker-spiderfier-leaflet/oms.min.js", map_template_source)
+        self.assertIn('data-marker-spiderfy-enabled=', map_template_source)
+        self.assertIn("const mapMaximumZoom = map.getMaxZoom();", map_script_source)
+        self.assertIn("mapMaximumZoom - markerSpiderfyZoomLevelsBeforeMax", map_script_source)
+        self.assertIn("clusterOptions.disableClusteringAtZoom = markerSpiderfyActivationZoom", map_script_source)
+        self.assertIn("nearbyDistance: markerSpiderfyNearbyDistancePx", map_script_source)
+        self.assertIn('map.on("zoomend", syncMarkerSpiderfierActivation)', map_script_source)
+        self.assertTrue(Path(
+            "app/static/vendor/overlapping-marker-spiderfier-leaflet/oms.min.js"
+        ).is_file())
+
     def test_map_latest_overlay_script_handles_overlay_toggle_and_qsy(self) -> None:
         script_source = Path("app/static/js/map-latest-overlay.js").read_text(encoding="utf-8")
         self.assertIn("const stationsRefreshEventName = \"aprsbox:map-stations-refreshed\";", script_source)

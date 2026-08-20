@@ -30,6 +30,9 @@
             data-tile-subdomains="{{ map_config.tile_subdomains }}"
             data-coverage-fill-opacity="{{ map_config.coverage_fill_opacity }}"
             data-marker-clustering-enabled="{{ 'true' if map_config.marker_clustering_enabled else 'false' }}"
+            data-marker-spiderfy-enabled="{{ 'true' if map_config.marker_spiderfy_enabled else 'false' }}"
+            data-marker-spiderfy-zoom-levels-before-max="{{ map_config.marker_spiderfy_zoom_levels_before_max }}"
+            data-marker-spiderfy-nearby-distance-px="{{ map_config.marker_spiderfy_nearby_distance_px }}"
             data-static-root="{{ request.scope.root_path }}/static/"
             data-root-path="{{ request.scope.root_path }}"
             data-i18n-aprs-client="{{ t('APRS client') }}"
@@ -214,6 +217,9 @@
 {% block extra_scripts %}
 {% if map_config.marker_clustering_enabled %}
 <script src="{{ request.scope.root_path }}/static/vendor/leaflet-markercluster/leaflet.markercluster.js?v={{ app_version }}"></script>
+{% endif %}
+{% if map_config.marker_spiderfy_enabled %}
+<script src="{{ request.scope.root_path }}/static/vendor/overlapping-marker-spiderfier-leaflet/oms.min.js?v={{ app_version }}"></script>
 {% endif %}
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}-alerts-global-2"></script>

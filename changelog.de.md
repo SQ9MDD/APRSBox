@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.2.dev - 2026-08-20
+- `Karte / Marker auffächern`: `OverlappingMarkerSpiderfier` wurde lokal eingebunden und das optionale Auffächern überlappender Einzelmarker bei hohem Zoom ergänzt; APRS-Symbole, Tooltips und die bestehende Klickbehandlung bleiben erhalten. Der Schwellenwert wird relativ zu `map.getMaxZoom()` berechnet, während `Leaflet.markercluster` unabhängig konfigurierbar bleibt und Einzelmarker ab derselben Zoomstufe an den Spiderfier übergibt, sodass beide Mechanismen nicht kollidieren.
+- `Einstellungen / Karte`: Die globalen Einstellungen enthalten jetzt einen Schalter zum Auffächern von Markern, die Anzahl der Stufen vor dem maximalen Zoom (Standard `2`) und den Überlappungsabstand in Pixeln (Standard `20`); die Werte werden validiert, in den Anwendungseinstellungen gespeichert und in Konfigurationssicherungen v2 aufgenommen.
+
 ## 1.11 - 2026-08-20
 - `Stabile Version`: Die Änderungen aus `1.10.7.dev–1.10.16.dev` wurden zusammengeführt, darunter eine deutlich schnellere Karte und Stationsliste auf Basis einer persistenten Stationszustandsprojektion, ein neu gestaltetes Dashboard mit klarerer Bewertung der Stationsbereitschaft, vollständige HTTPS-Unterstützung für systemd und OpenRC, sicherere Aktualisierungen sowie einheitliche Dialoge, Hilfe und GUI-Symbole. Die Kompatibilität von APRS-Nachrichten wurde erweitert, Konversationen wurden als kompakte Liste mit Auswahl und Sammellöschung neu organisiert und die optionale Gruppierung überlappender Kartenstationen bleibt standardmäßig deaktiviert.
 

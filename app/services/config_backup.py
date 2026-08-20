@@ -41,6 +41,9 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "event_log_debug_enabled",
     "map_coverage_fill_opacity",
     "map_marker_clustering_enabled",
+    "map_marker_spiderfy_enabled",
+    "map_marker_spiderfy_zoom_levels_before_max",
+    "map_marker_spiderfy_nearby_distance_px",
     "gui_update_branch",
     "aprsis_server",
     "aprsis_port",
@@ -62,8 +65,11 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
 )
 
 CONFIG_BACKUP_OPTIONAL_APP_SETTING_DEFAULTS: dict[str, str | None] = {
-    # Added during backup format v2; accepting its absence keeps older v2 files importable.
+    # Added during backup format v2; accepting absent newer keys keeps older v2 files importable.
     "map_marker_clustering_enabled": "0",
+    "map_marker_spiderfy_enabled": "0",
+    "map_marker_spiderfy_zoom_levels_before_max": "2",
+    "map_marker_spiderfy_nearby_distance_px": "20",
 }
 
 # These columns describe transient counters or the result of a connectivity

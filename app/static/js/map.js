@@ -24,6 +24,21 @@
         .map((token) => token.trim())
         .filter((token) => token.length > 0);
     const markerClusteringEnabled = root.dataset.markerClusteringEnabled === "true";
+    const markerSpiderfyEnabled = root.dataset.markerSpiderfyEnabled === "true";
+    const configuredMarkerSpiderfyZoomLevels = Number.parseInt(
+        root.dataset.markerSpiderfyZoomLevelsBeforeMax || "2",
+        10
+    );
+    const markerSpiderfyZoomLevelsBeforeMax = Number.isInteger(configuredMarkerSpiderfyZoomLevels)
+        ? Math.min(10, Math.max(0, configuredMarkerSpiderfyZoomLevels))
+        : 2;
+    const configuredMarkerSpiderfyNearbyDistance = Number.parseInt(
+        root.dataset.markerSpiderfyNearbyDistancePx || "20",
+        10
+    );
+    const markerSpiderfyNearbyDistancePx = Number.isInteger(configuredMarkerSpiderfyNearbyDistance)
+        ? Math.min(100, Math.max(1, configuredMarkerSpiderfyNearbyDistance))
+        : 20;
 
     const centerOutput = document.getElementById("map-center");
     const zoomOutput = document.getElementById("map-zoom");
@@ -94,7 +109,10 @@
     });
     const coverageLayerGroup = window.L.layerGroup();
     const trackLayerGroup = window.L.layerGroup();
-    const markerLayerGroup = buildStationMarkerLayerGroup();
+    let markerLayerGroup = null;
+    let markerSpiderfier = null;
+    let markerSpiderfierActive = false;
+    let markerSpiderfyActivationZoom = Number.POSITIVE_INFINITY;
     const rulerLayer = window.L.layerGroup();
     const maidenheadGridLayer = window.L.layerGroup();
     let alertAreaLayer = null;
@@ -718,6 +736,19 @@
     map.on("resize zoom move", syncMapMaskLayerViewport);
     mapMaskLayer = ensureMapMaskLayer(map);
     const tileLayer = window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
+    const mapMaximumZoom = map.getMaxZoom();
+    if (
+        markerSpiderfyEnabled
+        && typeof window.OverlappingMarkerSpiderfier === "function"
+        && Number.isFinite(mapMaximumZoom)
+    ) {
+        markerSpiderfyActivationZoom = Math.max(
+            map.getMinZoom(),
+            mapMaximumZoom - markerSpiderfyZoomLevelsBeforeMax
+        );
+    }
+    markerLayerGroup = buildStationMarkerLayerGroup();
+    markerSpiderfier = buildStationMarkerSpiderfier();
     const alertAreasPaneName = "alert-areas-pane";
     const alertAreasPane = map.createPane(alertAreasPaneName);
     alertAreasPane.style.zIndex = "350";
@@ -753,6 +784,8 @@
     coverageLayerGroup.addTo(map);
     trackLayerGroup.addTo(map);
     markerLayerGroup.addTo(map);
+    syncMarkerSpiderfierActivation();
+    map.on("zoomend", syncMarkerSpiderfierActivation);
     rulerLayer.addTo(map);
     maidenheadGridLayer.addTo(map);
 
@@ -1967,7 +2000,7 @@
         }
         // Cluster only markers that visually overlap; the radius is close to the
         // icon size so spread-out stations keep rendering as individual markers.
-        const clusterGroup = window.L.markerClusterGroup({
+        const clusterOptions = {
             maxClusterRadius: 28,
             showCoverageOnHover: false,
             zoomToBoundsOnClick: true,
@@ -1980,7 +2013,13 @@
             chunkedLoading: false,
             spiderLegPolylineOptions: { weight: 1.5, color: "#7a8a94", opacity: 0.85 },
             iconCreateFunction: buildStationClusterIcon,
-        });
+        };
+        if (Number.isFinite(markerSpiderfyActivationZoom)) {
+            // At this zoom OMS takes over individual markers, so a marker is
+            // never controlled by both spiderfying implementations at once.
+            clusterOptions.disableClusteringAtZoom = markerSpiderfyActivationZoom;
+        }
+        const clusterGroup = window.L.markerClusterGroup(clusterOptions);
         clusterGroup.on("clustermouseover", function (event) {
             const cluster = event.propagatedFrom || event.layer;
             if (!cluster || typeof cluster.getAllChildMarkers !== "function") {
@@ -2015,6 +2054,61 @@
             }
         });
         return clusterGroup;
+    }
+
+    function buildStationMarkerSpiderfier() {
+        if (
+            !markerSpiderfyEnabled
+            || !Number.isFinite(markerSpiderfyActivationZoom)
+            || typeof window.OverlappingMarkerSpiderfier !== "function"
+        ) {
+            return null;
+        }
+        const spiderfier = new window.OverlappingMarkerSpiderfier(map, {
+            keepSpiderfied: false,
+            nearbyDistance: markerSpiderfyNearbyDistancePx,
+            legWeight: 1.5,
+        });
+        spiderfier.legColors.usual = "#7a8a94";
+        spiderfier.legColors.highlighted = "#f59e0b";
+        spiderfier.addListener("click", function (marker) {
+            const station = marker && marker.aprsStation;
+            if (station && station.detail_href) {
+                window.location.href = station.detail_href;
+            }
+        });
+        return spiderfier;
+    }
+
+    function addMarkerToSpiderfier(marker) {
+        if (markerSpiderfier && markerSpiderfierActive && marker && !marker._oms) {
+            markerSpiderfier.addMarker(marker);
+        }
+    }
+
+    function removeMarkerFromSpiderfier(marker) {
+        if (markerSpiderfier && marker && marker._oms) {
+            markerSpiderfier.removeMarker(marker);
+        }
+    }
+
+    function syncMarkerSpiderfierActivation() {
+        if (!markerSpiderfier) {
+            markerSpiderfierActive = false;
+            return;
+        }
+        const shouldBeActive = map.getZoom() >= markerSpiderfyActivationZoom;
+        if (shouldBeActive === markerSpiderfierActive) {
+            return;
+        }
+        markerSpiderfierActive = shouldBeActive;
+        if (!shouldBeActive) {
+            markerSpiderfier.clearMarkers();
+            return;
+        }
+        for (const record of markerLayersByKey.values()) {
+            addMarkerToSpiderfier(record.layer);
+        }
     }
 
     function buildStationClusterIcon(cluster) {
@@ -2315,18 +2409,28 @@
                 sticky: true,
             });
         }
-        marker.off("click");
+        if (marker.aprsboxClickHandler) {
+            marker.off("click", marker.aprsboxClickHandler);
+            delete marker.aprsboxClickHandler;
+        }
         if (station.detail_href) {
-            marker.on("click", function () {
+            marker.aprsboxClickHandler = function () {
+                if (markerSpiderfierActive) {
+                    return;
+                }
                 window.location.href = station.detail_href;
-            });
+            };
+            marker.on("click", marker.aprsboxClickHandler);
         }
     }
 
-    function removeMissingLayerRecords(recordsByKey, layerGroup, nextKeys) {
+    function removeMissingLayerRecords(recordsByKey, layerGroup, nextKeys, beforeRemove = null) {
         for (const [key, record] of Array.from(recordsByKey.entries())) {
             if (nextKeys.has(key)) {
                 continue;
+            }
+            if (typeof beforeRemove === "function") {
+                beforeRemove(record.layer);
             }
             layerGroup.removeLayer(record.layer);
             recordsByKey.delete(key);
@@ -2439,6 +2543,7 @@
             marker.aprsStation = station;
             syncMarkerInteractions(marker, station, nextTooltipContent);
             markerLayerGroup.addLayer(marker);
+            addMarkerToSpiderfier(marker);
             markerLayersByKey.set(key, {
                 layer: marker,
                 markerSignature: nextMarkerSignature,
@@ -2455,6 +2560,9 @@
             if (positionChanged) {
                 // The cluster group indexes markers by position, so a moved
                 // marker has to be re-added for clustering to stay correct.
+                if (markerSpiderfier) {
+                    markerSpiderfier.unspiderfy();
+                }
                 markerLayerGroup.removeLayer(existing.layer);
                 existing.layer.setLatLng([station.latitude, station.longitude]);
                 existing.layer.setIcon(buildStationIcon(station));
@@ -2516,7 +2624,12 @@
             nextKeys.add(key);
             records.push({ key, sourceIndex, station });
         }
-        removeMissingLayerRecords(markerLayersByKey, markerLayerGroup, nextKeys);
+        removeMissingLayerRecords(
+            markerLayersByKey,
+            markerLayerGroup,
+            nextKeys,
+            removeMarkerFromSpiderfier
+        );
         const prioritizedRecords = prioritizeMarkerRecords(records);
         renderMarkerBatch(prioritizedRecords, 0, renderGeneration, initialMarkerBatchSize);
     }

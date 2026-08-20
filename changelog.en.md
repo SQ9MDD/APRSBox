@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.2.dev - 2026-08-20
+- `Map / marker spiderfy`: vendored `OverlappingMarkerSpiderfier` and added optional spreading of overlapping individual markers at high zoom while preserving APRS icons, tooltips, and existing click handling. The threshold is calculated relative to `map.getMaxZoom()`, while `Leaflet.markercluster` remains independently configurable and hands individual markers over to spiderfy at the same zoom level so the two mechanisms do not conflict.
+- `Settings / map`: Global Settings now include a marker-spreading switch, the number of levels before maximum zoom (default `2`), and the overlap distance in pixels (default `20`); values are validated, persisted through application settings, and included in configuration backup v2.
+
 ## 1.11 - 2026-08-20
 - `Stable release`: consolidated changes from `1.10.7.dev–1.10.16.dev`, including a substantially faster map and station list backed by persistent station-state projection, a redesigned Dashboard with clearer station-readiness assessment, complete HTTPS support for systemd and OpenRC, safer updates, and consistent dialogs, help, and GUI icons. APRS message compatibility was extended, conversations were reorganized into a compact list with selection and bulk deletion, and optional clustering of overlapping map stations remains disabled by default.
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.2.dev - 2026-08-20
+- `Mapa / separación de marcadores`: se incorporó localmente `OverlappingMarkerSpiderfier` y se añadió la separación opcional de marcadores individuales superpuestos con zoom alto, conservando los iconos APRS, los tooltips y la gestión de clics existente. El umbral se calcula respecto a `map.getMaxZoom()`, mientras que `Leaflet.markercluster` sigue siendo configurable de forma independiente y entrega los marcadores individuales al spiderfier en el mismo nivel de zoom para evitar interferencias.
+- `Ajustes / mapa`: los Ajustes globales incluyen ahora un interruptor para separar marcadores, el número de niveles antes del zoom máximo (valor predeterminado `2`) y la distancia de superposición en píxeles (valor predeterminado `20`); los valores se validan, se guardan mediante los ajustes de la aplicación y se incluyen en las copias de configuración v2.
+
 ## 1.11 - 2026-08-20
 - `Versión estable`: se integraron los cambios de `1.10.7.dev–1.10.16.dev`, entre ellos un mapa y una lista de estaciones mucho más rápidos gracias a la proyección persistente del estado, un Panel rediseñado con una evaluación más clara de la preparación de la estación, compatibilidad HTTPS completa para systemd y OpenRC, actualizaciones más seguras y diálogos, ayuda e iconos de GUI uniformes. Se amplió la compatibilidad de los mensajes APRS, las conversaciones se reorganizaron en una lista compacta con selección y eliminación múltiple, y la agrupación opcional de estaciones superpuestas en el mapa permanece desactivada de forma predeterminada.
 

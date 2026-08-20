@@ -40,6 +40,11 @@ MAP_TILE_PROXY_ENDPOINT = "/api/map/tiles"
 COVERAGE_FILL_OPACITY_SETTING_KEY = "map_coverage_fill_opacity"
 DEFAULT_COVERAGE_FILL_OPACITY_PERCENT = 5
 MAP_MARKER_CLUSTERING_ENABLED_SETTING_KEY = "map_marker_clustering_enabled"
+MAP_MARKER_SPIDERFY_ENABLED_SETTING_KEY = "map_marker_spiderfy_enabled"
+MAP_MARKER_SPIDERFY_ZOOM_LEVELS_SETTING_KEY = "map_marker_spiderfy_zoom_levels_before_max"
+MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY = "map_marker_spiderfy_nearby_distance_px"
+DEFAULT_MAP_MARKER_SPIDERFY_ZOOM_LEVELS = 2
+DEFAULT_MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_PX = 20
 
 
 def normalize_coverage_fill_opacity_percent(value: Any) -> int:
@@ -69,6 +74,47 @@ def save_map_marker_clustering_enabled(enabled: bool) -> bool:
     normalized = bool(enabled)
     set_app_setting(MAP_MARKER_CLUSTERING_ENABLED_SETTING_KEY, "1" if normalized else "0")
     return normalized
+
+
+def get_map_marker_spiderfy_enabled() -> bool:
+    return str(get_app_setting(MAP_MARKER_SPIDERFY_ENABLED_SETTING_KEY) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def normalize_map_marker_spiderfy_zoom_levels(value: Any) -> int:
+    try:
+        normalized = int(str(value).strip())
+    except (TypeError, ValueError):
+        return DEFAULT_MAP_MARKER_SPIDERFY_ZOOM_LEVELS
+    if normalized < 0 or normalized > 10:
+        return DEFAULT_MAP_MARKER_SPIDERFY_ZOOM_LEVELS
+    return normalized
+
+
+def get_map_marker_spiderfy_zoom_levels() -> int:
+    return normalize_map_marker_spiderfy_zoom_levels(
+        get_app_setting(MAP_MARKER_SPIDERFY_ZOOM_LEVELS_SETTING_KEY)
+    )
+
+
+def normalize_map_marker_spiderfy_nearby_distance_px(value: Any) -> int:
+    try:
+        normalized = int(str(value).strip())
+    except (TypeError, ValueError):
+        return DEFAULT_MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_PX
+    if normalized < 1 or normalized > 100:
+        return DEFAULT_MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_PX
+    return normalized
+
+
+def get_map_marker_spiderfy_nearby_distance_px() -> int:
+    return normalize_map_marker_spiderfy_nearby_distance_px(
+        get_app_setting(MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY)
+    )
 
 
 def list_map_sources() -> list[dict[str, Any]]:
@@ -709,6 +755,9 @@ def get_map_page_config(*, root_path: str = "") -> dict[str, Any]:
         "tile_subdomains": tile_layer["tile_subdomains"],
         "coverage_fill_opacity": get_coverage_fill_opacity_percent(),
         "marker_clustering_enabled": get_map_marker_clustering_enabled(),
+        "marker_spiderfy_enabled": get_map_marker_spiderfy_enabled(),
+        "marker_spiderfy_zoom_levels_before_max": get_map_marker_spiderfy_zoom_levels(),
+        "marker_spiderfy_nearby_distance_px": get_map_marker_spiderfy_nearby_distance_px(),
     }
 
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.2.dev - 20.08.2026
+- `Mapa / rozsuwanie markerów`: dodano vendoring `OverlappingMarkerSpiderfier` i opcjonalne rozsuwanie nakładających się pojedynczych markerów przy dużym zoomie, z zachowaniem ikon APRS, tooltipów i dotychczasowej obsługi kliknięć. Próg jest wyliczany względem `map.getMaxZoom()`, a `Leaflet.markercluster` pozostaje niezależnie konfigurowalny i przekazuje pojedyncze markery do spiderfy od tego samego poziomu zoomu, dzięki czemu mechanizmy nie kolidują.
+- `Ustawienia / mapa`: w Globalnych ustawieniach dodano przełącznik rozsuwania markerów, liczbę poziomów przed maksymalnym zoomem (domyślnie `2`) oraz odległość nakładania w pikselach (domyślnie `20`); wartości są walidowane, zapisywane w ustawieniach aplikacji i uwzględniane w kopiach konfiguracji v2.
+
 ## 1.11 - 20.08.2026
 - `Wydanie stabilne`: scalono zmiany z wersji `1.10.7.dev–1.10.16.dev`, obejmujące znacznie szybszą mapę i listę stacji dzięki trwałej projekcji stanu, przebudowany Dashboard z czytelną oceną gotowości stacji, pełną obsługę HTTPS dla systemd i OpenRC, bezpieczniejsze aktualizacje oraz ujednolicone modale, pomoc i ikony GUI. Rozszerzono zgodność wiadomości APRS, uporządkowano rozmowy w zwartej liście z zaznaczaniem i usuwaniem zbiorczym, a opcjonalne grupowanie nakładających się stacji na mapie pozostawiono domyślnie wyłączone.
 
