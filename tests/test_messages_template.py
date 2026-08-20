@@ -74,7 +74,13 @@ class MessagesTemplateTests(unittest.TestCase):
         self.assertIn('data-select-conversation=', template_source)
         self.assertIn('/selected-conversations/delete', template_source)
         self.assertIn('grid-template-columns: 1.25rem minmax(0, 1fr) 1.25rem 1.85rem 1.85rem;', stylesheet_source)
+        self.assertIn('url("../icons/checkbox-marked-outline.svg")', stylesheet_source)
+        self.assertIn('url("../icons/antenna.svg")', stylesheet_source)
+        self.assertIn('url("../icons/account-group-outline.svg")', stylesheet_source)
+        self.assertIn('url("../icons/email-alert-outline.svg")', stylesheet_source)
         self.assertNotIn('class="messages-conversation-meta-row"', template_source)
+        self.assertNotIn('class="messages-group-mark"', template_source)
+        self.assertNotIn('class="messages-heard-none"', template_source)
 
 
 if __name__ == "__main__":

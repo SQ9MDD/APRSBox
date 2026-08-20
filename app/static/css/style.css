@@ -7973,6 +7973,19 @@ body.modal-open {
     min-height: 2rem;
 }
 
+.messages-sidebar-actions .table-icon-button,
+.messages-conversation-delete {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+
+.messages-sidebar-actions .table-icon-button:hover:not(:disabled),
+.messages-conversation-delete:hover:not(:disabled) {
+    border-color: rgba(201, 122, 122, 0.35);
+    background: rgba(201, 122, 122, 0.12);
+}
+
 .messages-confirm-modal[hidden] {
     display: none !important;
 }
@@ -8229,14 +8242,52 @@ body.modal-open {
     display: grid;
     place-items: center;
     margin: 0;
+    cursor: pointer;
 }
 
 .messages-conversation-select input,
 .messages-select-all input {
-    width: 1rem;
-    height: 1rem;
+    width: 1.18rem;
+    height: 1.18rem;
     margin: 0;
-    accent-color: var(--accent);
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--muted);
+    cursor: pointer;
+    -webkit-mask: center / contain no-repeat;
+    mask: center / contain no-repeat;
+    -webkit-mask-image: url("../icons/checkbox-blank-outline.svg");
+    mask-image: url("../icons/checkbox-blank-outline.svg");
+}
+
+.messages-select-all {
+    width: 2rem;
+    height: 2rem;
+}
+
+.messages-conversation-select input:checked,
+.messages-select-all input:checked {
+    background: var(--accent);
+    -webkit-mask-image: url("../icons/checkbox-marked-outline.svg");
+    mask-image: url("../icons/checkbox-marked-outline.svg");
+}
+
+.messages-select-all input:indeterminate {
+    background: var(--accent);
+    -webkit-mask-image: url("../icons/checkbox-intermediate.svg");
+    mask-image: url("../icons/checkbox-intermediate.svg");
+}
+
+.messages-conversation-select input:focus-visible,
+.messages-select-all input:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 3px;
+}
+
+.messages-conversation-select input:disabled,
+.messages-select-all input:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
 }
 
 .messages-conversation-heard,
@@ -8246,21 +8297,41 @@ body.modal-open {
     justify-content: center;
 }
 
-.messages-conversation-read-state img {
-    width: 1rem;
-    height: 1rem;
-    filter: var(--icon-filter);
+.messages-status-icon,
+.messages-read-icon {
+    display: block;
+    width: 1.05rem;
+    height: 1.05rem;
+    background: var(--muted);
+    -webkit-mask: center / contain no-repeat;
+    mask: center / contain no-repeat;
 }
 
-.messages-group-mark {
-    color: var(--muted);
-    font-size: 0.68rem;
-    font-weight: 800;
+.messages-status-icon-heard {
+    -webkit-mask-image: url("../icons/antenna.svg");
+    mask-image: url("../icons/antenna.svg");
 }
 
-.messages-heard-none {
-    color: var(--muted);
-    font-size: 0.75rem;
+.messages-status-icon-group {
+    -webkit-mask-image: url("../icons/account-group-outline.svg");
+    mask-image: url("../icons/account-group-outline.svg");
+}
+
+.messages-status-icon-off {
+    opacity: 0.68;
+    -webkit-mask-image: url("../icons/access-point-off.svg");
+    mask-image: url("../icons/access-point-off.svg");
+}
+
+.messages-read-icon-read {
+    -webkit-mask-image: url("../icons/email-open-outline.svg");
+    mask-image: url("../icons/email-open-outline.svg");
+}
+
+.messages-read-icon-unread {
+    background: var(--warning);
+    -webkit-mask-image: url("../icons/email-alert-outline.svg");
+    mask-image: url("../icons/email-alert-outline.svg");
 }
 
 .messages-conversation-delete {
@@ -8298,35 +8369,16 @@ body.modal-open {
     color: var(--muted);
 }
 
-.messages-heard-indicator {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.38rem;
-    color: var(--muted);
-    font-size: 0.72rem;
-}
-
-.messages-heard-dot {
-    width: 0.48rem;
-    height: 0.48rem;
-    border-radius: 999px;
+.messages-status-fresh {
     background: var(--accent);
-    box-shadow: 0 0 0 3px rgba(109, 189, 128, 0.12);
 }
 
-.messages-heard-dot-fresh {
-    background: var(--accent);
-    box-shadow: 0 0 0 3px rgba(109, 189, 128, 0.12);
-}
-
-.messages-heard-dot-warn {
+.messages-status-warn {
     background: var(--warning);
-    box-shadow: 0 0 0 3px rgba(217, 181, 101, 0.14);
 }
 
-.messages-heard-dot-stale {
+.messages-status-stale {
     background: var(--danger);
-    box-shadow: 0 0 0 3px rgba(201, 122, 122, 0.14);
 }
 
 .messages-thread {

@@ -615,14 +615,13 @@
         conversationList.innerHTML = state.conversations.map((conversation) => {
             const isActive = conversation.id === state.activeConversationId;
             const unreadCount = isActive ? 0 : conversation.unread_count;
-            const stateBadgeClass = unreadCount > 0 ? "message-state-badge-unread" : "message-state-badge-read";
             const stateBadgeLabel = unreadCount > 0
                 ? formatText(i18n.unreadWithCount, { count: unreadCount })
                 : i18n.read;
             const heardStateClass = {
-                fresh: "messages-heard-dot-fresh",
-                warn: "messages-heard-dot-warn",
-                stale: "messages-heard-dot-stale",
+                fresh: "messages-status-fresh",
+                warn: "messages-status-warn",
+                stale: "messages-status-stale",
             }[conversation.heard_recently_state] || "";
             const heardLabel = conversation.kind === "group"
                 ? i18n.groupConversationNoAck
@@ -630,10 +629,10 @@
                     ? (conversation.heard_recently_label || i18n.heardRecently)
                     : i18n.noRecentHeardStationEntry);
             const heardIndicator = conversation.kind === "group"
-                ? `<span class="messages-group-mark">G</span>`
+                ? `<span class="messages-status-icon messages-status-icon-group"></span>`
                 : (conversation.recently_heard
-                    ? `<span class="messages-heard-dot ${heardStateClass}"></span>`
-                    : `<span class="messages-heard-none" aria-hidden="true">–</span>`);
+                    ? `<span class="messages-status-icon messages-status-icon-heard ${heardStateClass}"></span>`
+                    : `<span class="messages-status-icon messages-status-icon-off"></span>`);
             return `
                 <div class="messages-conversation-row${isActive ? " active" : ""}" data-conversation-id="${escapeHtml(conversation.id)}" title="${escapeHtml(heardLabel)}">
                     <label class="messages-conversation-select" title="${escapeHtml(i18n.deleteSelected)}">
@@ -645,8 +644,8 @@
                     <span class="messages-conversation-heard" aria-label="${escapeHtml(heardLabel)}">
                         ${heardIndicator}
                     </span>
-                    <span class="messages-conversation-read-state ${stateBadgeClass}" title="${escapeHtml(stateBadgeLabel)}" aria-label="${escapeHtml(stateBadgeLabel)}">
-                        <img src="${staticRoot}icons/${unreadCount > 0 ? "email-box.svg" : "email-open-outline.svg"}" alt="">
+                    <span class="messages-conversation-read-state" title="${escapeHtml(stateBadgeLabel)}" aria-label="${escapeHtml(stateBadgeLabel)}">
+                        <span class="messages-read-icon ${unreadCount > 0 ? "messages-read-icon-unread" : "messages-read-icon-read"}"></span>
                     </span>
                     <button type="button" class="table-icon-button table-icon-button-danger messages-conversation-delete" data-delete-conversation="${escapeHtml(conversation.id)}" aria-label="${escapeHtml(formatText(i18n.deleteConversationWithCallsign, { callsign: conversation.callsign }))}" title="${escapeHtml(i18n.deleteConversation)}">
                         <img src="${staticRoot}icons/delete-outline.svg" alt="">
