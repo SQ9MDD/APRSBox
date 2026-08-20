@@ -35,18 +35,6 @@
                         </div>
                     </div>
                     <div class="messages-sidebar-actions">
-                        <label class="messages-select-all" title="{{ t('Select all') }}">
-                            <input id="messages-select-all" type="checkbox" aria-label="{{ t('Select all') }}">
-                        </label>
-                        <button
-                            class="table-icon-button table-icon-button-danger"
-                            id="messages-clear-inbox-button"
-                            type="button"
-                            title="{{ t('Delete selected') }}"
-                            aria-label="{{ t('Delete selected') }}"
-                        >
-                            <img src="{{ request.scope.root_path }}/static/icons/delete-sweep-outline.svg" alt="">
-                        </button>
                         <button
                             class="help-icon-button page-help-button"
                             type="button"
@@ -76,6 +64,27 @@
                         </div>
                     </label>
                 </form>
+            </div>
+            <div class="messages-conversation-list-header">
+                <div class="messages-conversation-header-cell">
+                    <label class="messages-select-all" title="{{ t('Select all') }}">
+                        <input id="messages-select-all" type="checkbox" aria-label="{{ t('Select all') }}">
+                    </label>
+                </div>
+                <span class="messages-conversation-header-cell"></span>
+                <span class="messages-conversation-header-cell"></span>
+                <span class="messages-conversation-header-cell"></span>
+                <div class="messages-conversation-header-cell">
+                    <button
+                        class="table-icon-button table-icon-button-danger"
+                        id="messages-clear-inbox-button"
+                        type="button"
+                        title="{{ t('Delete selected') }}"
+                        aria-label="{{ t('Delete selected') }}"
+                    >
+                        <img src="{{ request.scope.root_path }}/static/icons/delete-sweep-outline.svg" alt="">
+                    </button>
+                </div>
             </div>
             <div class="messages-conversation-list" id="messages-conversation-list">
                 <div class="empty-state muted">{{ t("No conversations loaded.") }}</div>

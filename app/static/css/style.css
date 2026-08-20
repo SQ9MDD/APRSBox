@@ -7933,7 +7933,7 @@ body.modal-open {
 
 .messages-sidebar {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
     border-right: 1px solid var(--border);
     background: linear-gradient(180deg, var(--panel-alt), var(--panel-soft));
 }
@@ -7942,7 +7942,6 @@ body.modal-open {
     display: grid;
     gap: var(--space-4);
     padding: var(--space-5);
-    border-bottom: 1px solid var(--border);
 }
 
 .messages-sidebar-title-row,
@@ -7966,21 +7965,34 @@ body.modal-open {
     white-space: nowrap;
 }
 
-.messages-sidebar-actions .table-icon-button {
-    width: 2rem;
-    min-width: 2rem;
-    height: 2rem;
-    min-height: 2rem;
+.messages-conversation-list-header {
+    display: grid;
+    grid-template-columns: 1.25rem minmax(0, 1fr) 1.25rem 1.85rem 1.85rem;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 2.55rem;
+    padding: 0.32rem calc(var(--space-3) + 0.24rem);
+    border-top: 1px solid var(--border);
+    border-right: 1px solid transparent;
+    border-bottom: 1px solid var(--border);
+    border-left: 1px solid transparent;
+    background: color-mix(in srgb, var(--panel-alt) 72%, var(--panel-soft));
 }
 
-.messages-sidebar-actions .table-icon-button,
+.messages-conversation-header-cell {
+    display: grid;
+    place-items: center;
+    min-width: 0;
+}
+
+.messages-conversation-list-header .table-icon-button,
 .messages-conversation-delete {
     border-color: transparent;
     background: transparent;
     box-shadow: none;
 }
 
-.messages-sidebar-actions .table-icon-button:hover:not(:disabled),
+.messages-conversation-list-header .table-icon-button:hover:not(:disabled),
 .messages-conversation-delete:hover:not(:disabled) {
     border-color: rgba(201, 122, 122, 0.35);
     background: rgba(201, 122, 122, 0.12);
@@ -8261,8 +8273,8 @@ body.modal-open {
 }
 
 .messages-select-all {
-    width: 2rem;
-    height: 2rem;
+    width: 1.25rem;
+    height: 1.85rem;
 }
 
 .messages-conversation-select input:checked,
