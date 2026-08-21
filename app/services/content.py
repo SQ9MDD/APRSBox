@@ -449,6 +449,19 @@ def delete_section_row(slug: str, row_id: int) -> None:
     log_event("INFO", "config", f"Deleted record {row_id} from {definition.table_name}")
 
 
+def set_modem_enabled(row_id: int, enabled: bool) -> None:
+    timestamp = utc_now()
+    with get_connection() as connection:
+        cursor = connection.execute(
+            "UPDATE modems SET enabled = ?, updated_at = ? WHERE id = ?",
+            (int(enabled), timestamp, row_id),
+        )
+        if cursor.rowcount == 0:
+            raise ValueError("Interface not found.")
+    state = "enabled" if enabled else "disabled"
+    log_event("INFO", "config", f"Interface {row_id} {state}")
+
+
 def get_station_settings() -> dict[str, Any]:
     row = fetch_one("SELECT * FROM station_settings WHERE id = 1")
     if not row:

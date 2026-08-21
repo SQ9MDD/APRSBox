@@ -78,6 +78,7 @@ from app.services.content import (
     station_summary,
     traffic_snapshot as get_traffic_snapshot,
     safe_create_section_row,
+    set_modem_enabled,
     safe_update_section_row,
 )
 from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, INTERNAL_TX_INTERFACE_OPTION_VALUE
@@ -1500,6 +1501,41 @@ def modems_delete(
 ) -> RedirectResponse:
     delete_section_row("modems", record_id)
     return RedirectResponse(url=_path(request, "/settings/modems"), status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/settings/modems/{record_id}/toggle")
+def modems_toggle(
+    record_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+    enabled: int = Form(...),
+) -> object:
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
+    try:
+        set_modem_enabled(record_id, bool(enabled))
+    except ValueError as exc:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(str(exc))},
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        return RedirectResponse(
+            url=_path(request, f"/settings/modems?flash={quote(str(exc))}&success=0"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Interface status updated."),
+                "reload": True,
+                "redirect": _path(request, "/settings/modems"),
+            }
+        )
+    return RedirectResponse(
+        url=_path(request, "/settings/modems?flash=Interface%20status%20updated.&success=1"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get("/settings/servers")
