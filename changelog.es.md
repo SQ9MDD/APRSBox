@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.11.3.dev - 2026-08-21
+- `Interfaces / acciones rápidas`: se añadió a la lista de interfaces un botón contextual para activar o desactivar, equivalente a la acción de las reglas de enrutamiento; el cambio de estado ya no requiere abrir el editor, actualiza únicamente el estado de actividad de la interfaz y utiliza el modal de progreso compartido con un mensaje de resultado localizado y gestión de errores.
+
 ## 1.11.2.dev - 2026-08-20
 - `Mapa / separación de marcadores`: se incorporó localmente `OverlappingMarkerSpiderfier` y se añadió la separación opcional de marcadores individuales superpuestos con zoom alto, conservando los iconos APRS y los tooltips. En escritorio, pasar el ratón separa el grupo, un clic siempre abre los detalles de la estación elegida y salir del área ampliada del grupo lo vuelve a cerrar tras un breve retardo; en dispositivos táctiles se mantiene el flujo seguro de primer toque para separar y segundo toque para abrir detalles. El umbral se calcula respecto a `map.getMaxZoom()`, `Leaflet.markercluster` entrega los marcadores en el mismo zoom y la geometría considera el tamaño del conjunto de iconos.
 - `Ajustes / mapa`: los Ajustes globales incluyen ahora un interruptor para separar marcadores, el número de niveles antes del zoom máximo (valor predeterminado `2`) y la distancia de superposición en píxeles (valor predeterminado `20`); los valores se validan, se guardan mediante los ajustes de la aplicación y se incluyen en las copias de configuración v2.

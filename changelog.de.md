@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.11.3.dev - 2026-08-21
+- `Schnittstellen / Schnellaktionen`: In der Schnittstellenliste wurde eine kontextabhängige Schaltfläche zum Aktivieren oder Deaktivieren ergänzt, entsprechend der Aktion bei Routing-Regeln; die Statusänderung erfordert kein Öffnen des Editors, aktualisiert ausschließlich den Aktivitätszustand der Schnittstelle und verwendet das gemeinsame Fortschrittsmodal mit lokalisierter Ergebnismeldung und Fehlerbehandlung.
+
 ## 1.11.2.dev - 2026-08-20
 - `Karte / Marker auffächern`: `OverlappingMarkerSpiderfier` wurde lokal eingebunden und das optionale Auffächern überlappender Einzelmarker bei hohem Zoom ergänzt; APRS-Symbole und Tooltips bleiben erhalten. Am Desktop fächert Hover die Gruppe auf, ein Klick öffnet immer die Details der gewählten Station, und das Verlassen des erweiterten Gruppenbereichs klappt sie verzögert wieder zusammen; auf Touch-Geräten gilt weiterhin erster Tap zum Auffächern, zweiter Tap für Details. Der Schwellenwert wird relativ zu `map.getMaxZoom()` berechnet, `Leaflet.markercluster` übergibt Marker ab derselben Zoomstufe und die Geometrie berücksichtigt die Größe des Symbolsatzes.
 - `Einstellungen / Karte`: Die globalen Einstellungen enthalten jetzt einen Schalter zum Auffächern von Markern, die Anzahl der Stufen vor dem maximalen Zoom (Standard `2`) und den Überlappungsabstand in Pixeln (Standard `20`); die Werte werden validiert, in den Anwendungseinstellungen gespeichert und in Konfigurationssicherungen v2 aufgenommen.

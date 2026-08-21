@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.11.3.dev - 2026-08-21
+- `Interfaces / quick actions`: added a contextual enable or disable button to the interface list, matching the action used for routing rules; changing the status no longer requires opening the editor, updates only the interface activity state, and uses the shared progress modal with a localized result message and error handling.
+
 ## 1.11.2.dev - 2026-08-20
 - `Map / marker spiderfy`: vendored `OverlappingMarkerSpiderfier` and added optional spreading of overlapping individual markers at high zoom while preserving APRS icons and tooltips. On desktop, hover spreads a group, clicking always opens the selected station's details, and leaving the group's padded area collapses it after a short delay; touch devices retain the safe first-tap-to-spread, second-tap-for-details flow. The threshold is calculated relative to `map.getMaxZoom()`, `Leaflet.markercluster` hands markers over at the same zoom, and spread geometry follows the selected icon-set size.
 - `Settings / map`: Global Settings now include a marker-spreading switch, the number of levels before maximum zoom (default `2`), and the overlap distance in pixels (default `20`); values are validated, persisted through application settings, and included in configuration backup v2.
