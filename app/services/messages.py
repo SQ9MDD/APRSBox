@@ -1075,6 +1075,34 @@ def process_incoming_tnc2_message(
     if local_sender and _callsign_identity_matches(sender, local_sender):
         return
     received_at = _normalize_timestamp(timestamp)
+    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,5})(?:}(?P<reply_ack>[0-9A-Z]{1,5})?)?", text_field, flags=re.IGNORECASE)
+    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,5})(?:}(?P<reply_ack>[0-9A-Z]{1,5})?)?", text_field, flags=re.IGNORECASE)
+    # ACK/REJ are protocol control frames, never user messages.  Recognize
+    # them before the group/other-SSID display-only path so they cannot be
+    # stored as unread messages or forwarded to notification transports.
+    if ack_match or reject_match:
+        if recipient_kind != "local":
+            return
+        match = ack_match or reject_match
+        assert match is not None
+        message_number = _normalize_message_number(match.group("number"))
+        if not message_number:
+            return
+        if ack_match:
+            acknowledge_outgoing_message(
+                sender=sender,
+                addressee=addressee.upper(),
+                message_number=message_number,
+                timestamp=received_at,
+            )
+        else:
+            reject_outgoing_message(
+                sender=sender,
+                addressee=addressee.upper(),
+                message_number=message_number,
+                timestamp=received_at,
+            )
+        return
     # Only the configured callsign-SSID is a true local addressee.  APRS
     # message groups and the optional same-callsign/other-SSID receive mode
     # are display filters; they must never ACK or trigger a query response.
@@ -1115,21 +1143,6 @@ def process_incoming_tnc2_message(
                 automatic_response_internal_tx_only=automatic_response_internal_tx_only,
             )
         return
-    ack_match = re.fullmatch(r"ack(?P<number>[0-9A-Z]{1,5})(?:}(?P<reply_ack>[0-9A-Z]{1,5})?)?", text_field, flags=re.IGNORECASE)
-    reject_match = re.fullmatch(r"rej(?P<number>[0-9A-Z]{1,5})(?:}(?P<reply_ack>[0-9A-Z]{1,5})?)?", text_field, flags=re.IGNORECASE)
-    if ack_match:
-        message_number = _normalize_message_number(ack_match.group("number"))
-        if not message_number:
-            return
-        acknowledge_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=message_number, timestamp=received_at)
-        return
-    if reject_match:
-        message_number = _normalize_message_number(reject_match.group("number"))
-        if not message_number:
-            return
-        reject_outgoing_message(sender=sender, addressee=addressee.upper(), message_number=message_number, timestamp=received_at)
-        return
-
     suffix_match = _MESSAGE_SUFFIX_RE.fullmatch(text_field)
     if suffix_match is None:
         return

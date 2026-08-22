@@ -382,6 +382,21 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             assert queued_acks is not None
             self.assertEqual(int(queued_acks["total"]), 0)
 
+    def test_ack_to_other_local_ssid_is_not_stored_or_notified(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            save_message_settings({"default_path": "", "receive_any_ssid": True, "target_groups": []})
+
+            with patch("app.services.messages.queue_aprs_message_notification") as notification_mock:
+                process_incoming_tnc2_message(
+                    "SP8ABC>APRS::SQ9MDD-7 :ack01",
+                    timestamp="2026-01-01T00:01:00+00:00",
+                )
+
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_messages WHERE direction = 'rx'"))
+            notification_mock.assert_not_called()
+
     def test_message_text_allows_extended_printable_ascii_punctuation(self) -> None:
         allowed = r''',.:?/\()<>-_+=[]{}"'&$@#!'''
         self.assertEqual(normalize_aprs_message_text(allowed), allowed)
