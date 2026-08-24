@@ -2,6 +2,7 @@
 
 ## 1.11.5.dev - 2026-08-24
 - `Mensajes / grupos`: los grupos de destino anteriores se dividieron en `Grupos RF` y `Grupos APRS-IS`; en el primer uso, la lista APRS-IS hereda los grupos RF y después puede configurarse de forma independiente. Los grupos APRS-IS se combinan automáticamente con los grupos de alarma habilitados en el filtro `g/...` de la conexión APRS-IS.
+- `Mapa / fuentes y recorridos`: los iconos de estación usan ahora la última trama de posición cronológica de las fuentes visibles, de modo que cada marcador permanece al final de su recorrido correspondiente tanto con todas las fuentes activadas como tras seleccionar una sola interfaz. Un único punto visible sigue posicionando el icono sin dibujar una polilínea artificial, y las observaciones repetidas en la misma posición conservan la fuente y la marca de tiempo más recientes.
 
 ## 1.11.3.dev - 2026-08-21
 - `Interfaces / acciones rápidas`: se añadió a la lista de interfaces un botón contextual para activar o desactivar, equivalente a la acción de las reglas de enrutamiento; el cambio de estado ya no requiere abrir el editor, actualiza únicamente el estado de actividad de la interfaz y utiliza el modal de progreso compartido con un mensaje de resultado localizado y gestión de errores.

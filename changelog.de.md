@@ -2,6 +2,7 @@
 
 ## 1.11.5.dev - 2026-08-24
 - `Nachrichten / Gruppen`: Die bisherigen Zielgruppen wurden in `RF-Gruppen` und `APRS-IS-Gruppen` aufgeteilt; bei der ersten Verwendung übernimmt die APRS-IS-Liste die RF-Gruppen und kann anschließend unabhängig konfiguriert werden. APRS-IS-Gruppen werden im `g/...`-Filter der APRS-IS-Verbindung automatisch mit aktivierten Alarmgruppen zusammengeführt.
+- `Karte / Quellen und Tracks`: Stationssymbole verwenden jetzt den chronologisch neuesten Positionsframe aus den aktuell sichtbaren Quellen, sodass der Marker sowohl bei aktivierten Quellen als auch nach Auswahl einer einzelnen Schnittstelle am Ende des zugehörigen Tracks bleibt. Ein einzelner sichtbarer Punkt positioniert das Symbol weiterhin, ohne eine künstliche Polylinie zu zeichnen; wiederholte Beobachtungen an derselben Position behalten die neueste Quelle und den neuesten Zeitstempel.
 
 ## 1.11.3.dev - 2026-08-21
 - `Schnittstellen / Schnellaktionen`: In der Schnittstellenliste wurde eine kontextabhängige Schaltfläche zum Aktivieren oder Deaktivieren ergänzt, entsprechend der Aktion bei Routing-Regeln; die Statusänderung erfordert kein Öffnen des Editors, aktualisiert ausschließlich den Aktivitätszustand der Schnittstelle und verwendet das gemeinsame Fortschrittsmodal mit lokalisierter Ergebnismeldung und Fehlerbehandlung.

@@ -2,6 +2,7 @@
 
 ## 1.11.5.dev - 2026-08-24
 - `Messages / groups`: split the previous target groups into `RF groups` and `APRS-IS groups`; on first use, the APRS-IS list inherits the RF groups and can then be configured independently. APRS-IS groups are automatically combined with enabled alarm groups in the APRS-IS connection's `g/...` filter.
+- `Map / sources and tracks`: station icons now use the latest chronological position frame from the currently visible sources, keeping each marker at the end of its matching track both with all sources enabled and after selecting a single interface. One visible point still positions the icon without drawing an artificial polyline, while repeated observations at the same position retain the newest source and timestamp.
 
 ## 1.11.3.dev - 2026-08-21
 - `Interfaces / quick actions`: added a contextual enable or disable button to the interface list, matching the action used for routing rules; changing the status no longer requires opening the editor, updates only the interface activity state, and uses the shared progress modal with a localized result message and error handling.

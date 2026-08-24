@@ -2,6 +2,7 @@
 
 ## 1.11.5.dev - 24.08.2026
 - `Wiadomości / grupy`: rozdzielono dotychczasowe grupy docelowe na `Grupy RF` i `Grupy APRS-IS`; przy pierwszym użyciu lista APRS-IS dziedziczy grupy RF, a następnie może być konfigurowana niezależnie. Grupy APRS-IS są automatycznie łączone z aktywnymi grupami alarmowymi w filtrze `g/...` połączenia APRS-IS.
+- `Mapa / źródła i ślady`: pozycja ikony stacji jest teraz wybierana z ostatniej chronologicznie ramki pozycyjnej należącej do aktualnie widocznych źródeł, dzięki czemu marker pozostaje na końcu odpowiadającego mu śladu zarówno przy włączonych wszystkich źródłach, jak i po wybraniu pojedynczego interfejsu. Pojedynczy widoczny punkt nadal ustawia pozycję ikony bez rysowania sztucznej polilinii, a powtórzenia tej samej pozycji zachowują najnowsze źródło i czas.
 
 ## 1.11.3.dev - 21.08.2026
 - `Interfejsy / szybkie akcje`: na liście interfejsów dodano kontekstowy przycisk włączania lub wyłączania, analogiczny do akcji w regułach routingu; zmiana statusu nie wymaga otwierania edytora, aktualizuje wyłącznie aktywność interfejsu i korzysta ze wspólnego modala postępu z lokalizowanym komunikatem wyniku oraz obsługą błędów.
