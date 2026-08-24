@@ -1540,6 +1540,8 @@
   "Receive messages for any SSID of my callsign": "Receive messages for any SSID of my callsign",
   "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.": "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.",
   "Target groups": "Target groups",
+  "RF groups": "RF groups",
+  "APRS-IS groups": "APRS-IS groups",
   "Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.": "Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.",
   "Only explicitly defined groups are received. Spaces around aliases are removed; each group must contain 1-9 letters or digits. Group messages are never acknowledged.": "Only explicitly defined groups are received. Spaces around aliases are removed; each group must contain 1-9 letters or digits. Group messages are never acknowledged.",
   "Save settings": "Save settings",

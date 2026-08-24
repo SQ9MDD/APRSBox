@@ -8130,12 +8130,23 @@ body.modal-open {
 }
 
 .messages-settings {
-    grid-template-columns: minmax(10rem, 0.65fr) minmax(18rem, 1.35fr) minmax(19rem, auto) auto;
+    grid-template-columns: minmax(10rem, 0.55fr) minmax(30rem, 1.7fr) minmax(19rem, auto) auto;
     align-items: end;
     gap: var(--space-3);
 }
 
 .messages-settings > label {
+    min-width: 0;
+}
+
+.messages-settings-group-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.messages-settings-group-fields label {
     min-width: 0;
 }
 

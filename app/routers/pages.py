@@ -1008,7 +1008,8 @@ def _settings_page_context(
     aprs_alarm_enabled = get_aprs_alarm_enabled()
     aprs_alarm_groups = get_aprs_alarm_groups()
     effective_rf_message_groups = get_effective_message_target_groups(
-        alarm_groups=aprs_alarm_groups
+        alarm_groups=aprs_alarm_groups,
+        source_kind="rf",
     )
     automatic_aprsis_alarm_filter = build_automatic_aprsis_alarm_filter(
         aprs_alarm_groups

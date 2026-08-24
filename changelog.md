@@ -1,5 +1,7 @@
 # Changelog
 
+- `Wiadomości / grupy`: rozdzielono dotychczasowe grupy docelowe na `Grupy RF` i `Grupy APRS-IS`; przy pierwszym użyciu lista APRS-IS dziedziczy grupy RF, a następnie może być konfigurowana niezależnie. Grupy APRS-IS są automatycznie łączone z aktywnymi grupami alarmowymi w filtrze `g/...` połączenia APRS-IS.
+
 ## 1.11.3.dev - 21.08.2026
 - `Interfejsy / szybkie akcje`: na liście interfejsów dodano kontekstowy przycisk włączania lub wyłączania, analogiczny do akcji w regułach routingu; zmiana statusu nie wymaga otwierania edytora, aktualizuje wyłącznie aktywność interfejsu i korzysta ze wspólnego modala postępu z lokalizowanym komunikatem wyniku oraz obsługą błędów.
 

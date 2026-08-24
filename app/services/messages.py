@@ -44,6 +44,7 @@ MESSAGE_NUMBER_KEY = "messages.next_message_number"
 MESSAGE_DEFAULT_PATH_SETTING_KEY = "messages.default_path"
 MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY = "messages.receive_any_ssid"
 MESSAGE_TARGET_GROUPS_SETTING_KEY = "messages.target_groups"
+MESSAGE_APRSIS_TARGET_GROUPS_SETTING_KEY = "messages.aprsis_target_groups"
 CONVERSATION_KIND_DIRECT = "direct"
 CONVERSATION_KIND_GROUP = "group"
 DEFAULT_MESSAGE_TARGET_GROUPS = ("ALL", "QST", "CQ")
@@ -174,24 +175,57 @@ def get_message_settings() -> dict[str, Any]:
             target_groups = normalize_message_target_groups(saved_groups)
         except ValueError:
             target_groups = []
+    saved_aprsis_groups = get_app_setting(MESSAGE_APRSIS_TARGET_GROUPS_SETTING_KEY)
+    if saved_aprsis_groups is None:
+        # Backward-compatible first-use migration: APRS-IS starts with the
+        # same groups that were already used for RF reception.
+        aprsis_target_groups = list(target_groups)
+    else:
+        try:
+            aprsis_target_groups = normalize_message_target_groups(saved_aprsis_groups)
+        except ValueError:
+            aprsis_target_groups = []
     receive_any_ssid = str(get_app_setting(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY) or "").strip().lower() in {"1", "true", "yes", "on"}
     return {
         "default_path": default_path,
         "path_options": [{"value": value, "label": label} for value, label in MESSAGE_PATH_OPTIONS],
         "receive_any_ssid": receive_any_ssid,
         "target_groups": target_groups,
+        "aprsis_target_groups": aprsis_target_groups,
     }
 
 
 def get_effective_message_target_groups(
     message_target_groups: Any | None = None,
+    aprsis_target_groups: Any | None = None,
     alarm_groups: Any | None = None,
+    source_kind: str | None = None,
 ) -> list[str]:
-    standard_groups = (
-        get_message_settings()["target_groups"]
-        if message_target_groups is None
-        else normalize_message_target_groups(message_target_groups)
-    )
+    settings = get_message_settings()
+    if str(source_kind or "").strip().lower() == "aprsis":
+        standard_groups = (
+            settings["aprsis_target_groups"]
+            if aprsis_target_groups is None
+            else normalize_message_target_groups(aprsis_target_groups)
+        )
+    elif source_kind is None:
+        rf_groups = (
+            settings["target_groups"]
+            if message_target_groups is None
+            else normalize_message_target_groups(message_target_groups)
+        )
+        is_groups = (
+            settings["aprsis_target_groups"]
+            if aprsis_target_groups is None
+            else normalize_message_target_groups(aprsis_target_groups)
+        )
+        standard_groups = list(dict.fromkeys([*rf_groups, *is_groups]))
+    else:
+        standard_groups = (
+            settings["target_groups"]
+            if message_target_groups is None
+            else normalize_message_target_groups(message_target_groups)
+        )
     configured_alarm_groups = (
         get_aprs_alarm_groups()
         if alarm_groups is None
@@ -207,16 +241,30 @@ def save_message_settings(payload: dict[str, Any]) -> dict[str, Any]:
     if path not in {value for value, _label in MESSAGE_PATH_OPTIONS}:
         raise ValueError(_t("Choose a default path from the list."))
     groups = normalize_message_target_groups(payload.get("target_groups") or [])
+    if "aprsis_target_groups" in payload:
+        aprsis_groups = normalize_message_target_groups(payload.get("aprsis_target_groups") or [])
+    else:
+        saved_aprsis_groups = get_app_setting(MESSAGE_APRSIS_TARGET_GROUPS_SETTING_KEY)
+        aprsis_groups = (
+            groups
+            if saved_aprsis_groups is None
+            else normalize_message_target_groups(saved_aprsis_groups)
+        )
     receive_any_ssid = bool(payload.get("receive_any_ssid"))
     set_app_setting(MESSAGE_DEFAULT_PATH_SETTING_KEY, path)
     set_app_setting(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY, "1" if receive_any_ssid else "0")
     set_app_setting(MESSAGE_TARGET_GROUPS_SETTING_KEY, ",".join(groups))
-    reconcile_effective_message_group_conversations(message_target_groups=groups)
+    set_app_setting(MESSAGE_APRSIS_TARGET_GROUPS_SETTING_KEY, ",".join(aprsis_groups))
+    reconcile_effective_message_group_conversations(
+        message_target_groups=groups,
+        aprsis_target_groups=aprsis_groups,
+    )
     return get_message_settings()
 
 
 def reconcile_effective_message_group_conversations(
     message_target_groups: Any | None = None,
+    aprsis_target_groups: Any | None = None,
     alarm_groups: Any | None = None,
 ) -> None:
     configured_alarm_groups = set(
@@ -229,6 +277,7 @@ def reconcile_effective_message_group_conversations(
             group
             for group in get_effective_message_target_groups(
                 message_target_groups=message_target_groups,
+                aprsis_target_groups=aprsis_target_groups,
                 alarm_groups=list(configured_alarm_groups),
             )
             if group not in configured_alarm_groups
@@ -1029,6 +1078,7 @@ def process_incoming_tnc2_message(
     timestamp: str | None = None,
     allow_automatic_responses: bool = True,
     automatic_response_internal_tx_only: bool = False,
+    source_kind: str = "rf",
 ) -> None:
     parsed = _parse_effective_incoming_tnc2_line(line, log_invalid_third_party=True)
     if parsed is None:
@@ -1068,7 +1118,11 @@ def process_incoming_tnc2_message(
         return
 
     local_sender = _local_station_identity()
-    recipient_kind = _incoming_message_recipient_kind(addressee, local_sender)
+    recipient_kind = _incoming_message_recipient_kind(
+        addressee,
+        local_sender,
+        source_kind=source_kind,
+    )
     if recipient_kind is None:
         return
 
@@ -2170,7 +2224,12 @@ def _callsign_identity_matches(left: str, right: str) -> bool:
     return left_canonical == right_canonical
 
 
-def _incoming_message_recipient_kind(addressee: str, local_sender: str) -> str | None:
+def _incoming_message_recipient_kind(
+    addressee: str,
+    local_sender: str,
+    *,
+    source_kind: str = "rf",
+) -> str | None:
     normalized_addressee = _canonical_callsign_identity(addressee)
     normalized_local = _canonical_callsign_identity(local_sender)
     if not normalized_addressee or not normalized_local:
@@ -2183,7 +2242,7 @@ def _incoming_message_recipient_kind(addressee: str, local_sender: str) -> str |
     if get_message_settings()["receive_any_ssid"] and local_callsign == addressee_callsign:
         return "other_ssid"
 
-    if normalized_addressee in set(get_effective_message_target_groups()):
+    if normalized_addressee in set(get_effective_message_target_groups(source_kind=source_kind)):
         return "group"
     return None
 

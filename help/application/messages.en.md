@@ -18,15 +18,16 @@ The `Message settings` block is located below the conversations panel:
 
 - `Default path` is used for new conversations, group messages, and automatic APRS responses.
 - `Receive messages for any SSID of my callsign` allows messages addressed to other SSIDs of the same base callsign to be displayed. Only the exact configured `CALL-SSID` receives an `ACK` or an automatic response.
-- `Target groups` defines the shared message addresses that APRSBox receives.
+- `RF groups` define shared message addresses received from radio interfaces.
+- `APRS-IS groups` define shared message addresses received from APRS-IS. APRSBox automatically appends them to the connection's `g/...` filter together with enabled alarm groups.
 
-On first use, when no group setting has been saved yet, the list contains `ALL`, `QST`, and `CQ`. If the user removes these values and saves an empty field, the list remains empty.
+On first use both lists are identical and contain `ALL`, `QST`, and `CQ`. On an existing installation without the separate APRS-IS setting, that list is copied from the saved RF list. After saving, the lists can be changed independently and a saved empty field stays empty.
 
 Groups are entered in one field and separated by commas, for example `CQ, QST, ALL, WAW, BEM`. Spaces around names are removed, letters are converted to uppercase, and duplicates are discarded. Each name must contain between `1` and `9` characters from `A-Z` or `0-9`. Empty entries, special characters, internal spaces, and addresses beginning with `BLN` are rejected.
 
 ## Group conversations
 
-- A group conversation is created only for an addressee present in the saved `Target groups` list.
+- A group conversation is created only for an addressee in the list matching the frame source: `RF groups` or `APRS-IS groups`.
 - A message to an undefined group, such as `BEM`, is ignored: it creates no conversation, history entry, unread state, notification, or `ACK`.
 - The conversation key is the group address, for example `WAW`, rather than the sender callsign. Messages from multiple stations appear in the same chronological `WAW` thread.
 - The actual sender, for example `SQ5WLA-9`, is shown above every group-message bubble. An outbound message is labelled `You · CALL-SSID`.

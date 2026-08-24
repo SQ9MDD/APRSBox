@@ -57,6 +57,7 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "messages.default_path",
     "messages.receive_any_ssid",
     "messages.target_groups",
+    "messages.aprsis_target_groups",
     "station.tx.internal_mode",
     "messages_enabled",
     "messages_include_content",
@@ -70,6 +71,9 @@ CONFIG_BACKUP_OPTIONAL_APP_SETTING_DEFAULTS: dict[str, str | None] = {
     "map_marker_spiderfy_enabled": "0",
     "map_marker_spiderfy_zoom_levels_before_max": "2",
     "map_marker_spiderfy_nearby_distance_px": "20",
+    # Older backups predate separate RF and APRS-IS message groups.  None
+    # preserves the first-use fallback to the saved RF group list.
+    "messages.aprsis_target_groups": None,
 }
 
 # These columns describe transient counters or the result of a connectivity

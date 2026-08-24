@@ -1640,6 +1640,8 @@
   "Receive messages for any SSID of my callsign": "Nachrichten für jede SSID meines Rufzeichens empfangen",
   "Only messages addressed to the configured callsign-SSID are acknowledged or answered automatically.": "Nur Nachrichten an das konfigurierte Rufzeichen mit SSID werden bestätigt oder automatisch beantwortet.",
   "Target groups": "Zielgruppen",
+  "RF groups": "RF-Gruppen",
+  "APRS-IS groups": "APRS-IS-Gruppen",
   "Only explicitly defined groups are received. Use comma-separated aliases with 1-9 letters or digits; group messages are never acknowledged.": "Nur ausdrücklich definierte Gruppen werden empfangen. Aliasse durch Kommas trennen, 1–9 Buchstaben oder Ziffern; Gruppennachrichten werden nie bestätigt.",
   "Only explicitly defined groups are received. Spaces around aliases are removed; each group must contain 1-9 letters or digits. Group messages are never acknowledged.": "Nur ausdrücklich definierte Gruppen werden empfangen. Leerzeichen um Aliasse werden entfernt; jede Gruppe muss 1–9 Buchstaben oder Ziffern enthalten. Gruppennachrichten werden nie bestätigt.",
   "Save settings": "Einstellungen speichern",

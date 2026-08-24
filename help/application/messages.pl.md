@@ -18,15 +18,16 @@ Blok `Ustawienia wiadomości` znajduje się pod panelem rozmów:
 
 - `Domyślna ścieżka` jest używana dla nowych rozmów, wiadomości grupowych i automatycznych odpowiedzi APRS.
 - `Odbieraj wiadomości dla każdego SSID mojego znaku` pozwala wyświetlać wiadomości skierowane do innych SSID tego samego znaku bazowego. Tylko dokładny skonfigurowany `CALL-SSID` otrzymuje `ACK` lub automatyczną odpowiedź.
-- `Grupy docelowe` określają wspólne adresy wiadomości, które APRSBox ma odbierać.
+- `Grupy RF` określają wspólne adresy wiadomości odbierane z interfejsów radiowych.
+- `Grupy APRS-IS` określają wspólne adresy wiadomości odbierane z APRS-IS. APRSBox automatycznie dopisuje je do filtra połączenia `g/...`, razem z włączonymi grupami alarmowymi.
 
-Przy pierwszym użyciu, gdy ustawienie grup nie zostało jeszcze zapisane, lista zawiera `ALL`, `QST` i `CQ`. Jeżeli użytkownik usunie te wartości i zapisze puste pole, lista pozostanie pusta.
+Przy pierwszym użyciu obie listy są identyczne i zawierają `ALL`, `QST` i `CQ`. W istniejącej instalacji bez osobnego ustawienia APRS-IS jego lista jest kopiowana z zapisanej listy RF. Po zapisaniu obie listy można zmieniać niezależnie; zapisane puste pole pozostaje puste.
 
 Grupy wpisuje się w jednym polu, oddzielając je przecinkami, na przykład `CQ, QST, ALL, WAW, BEM`. Spacje wokół nazw są usuwane, litery zamieniane na wielkie, a duplikaty pomijane. Każda nazwa musi zawierać od `1` do `9` znaków `A-Z` lub `0-9`. Puste pozycje, znaki specjalne, wewnętrzne spacje oraz adresy zaczynające się od `BLN` są odrzucane.
 
 ## Rozmowy grupowe
 
-- Rozmowa grupowa powstaje wyłącznie dla adresata znajdującego się na zapisanej liście `Grupy docelowe`.
+- Rozmowa grupowa powstaje wyłącznie dla adresata znajdującego się na liście odpowiadającej źródłu ramki: `Grupy RF` albo `Grupy APRS-IS`.
 - Wiadomość do niezdefiniowanej grupy, na przykład `BEM`, jest ignorowana: nie tworzy rozmowy, wpisu w historii, stanu nieprzeczytanego, powiadomienia ani `ACK`.
 - Kluczem rozmowy jest adres grupy, na przykład `WAW`, a nie znak nadawcy. Wiadomości od wielu stacji trafiają do jednego chronologicznego wątku `WAW`.
 - Nad każdym dymkiem grupowym widoczny jest rzeczywisty nadawca, na przykład `SQ5WLA-9`. Własna wiadomość jest podpisana `Ty · CALL-SSID`.

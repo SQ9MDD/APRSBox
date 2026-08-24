@@ -151,10 +151,16 @@
                     {% endfor %}
                 </select>
             </label>
-            <label>
-                <span>{{ t("Target groups") }}</span>
-                <input type="text" id="messages-target-groups" name="target_groups" value="{{ messages_view.message_settings.target_groups|join(', ') }}" placeholder="CQ, YAESU, LOCAL" autocapitalize="characters" spellcheck="false">
-            </label>
+            <div class="messages-settings-group-fields">
+                <label>
+                    <span>{{ t("RF groups") }}</span>
+                    <input type="text" id="messages-target-groups" name="target_groups" value="{{ messages_view.message_settings.target_groups|join(', ') }}" placeholder="CQ, YAESU, LOCAL" autocapitalize="characters" spellcheck="false">
+                </label>
+                <label>
+                    <span>{{ t("APRS-IS groups") }}</span>
+                    <input type="text" id="messages-aprsis-target-groups" name="aprsis_target_groups" value="{{ messages_view.message_settings.aprsis_target_groups|join(', ') }}" placeholder="CQ, YAESU, LOCAL" autocapitalize="characters" spellcheck="false">
+                </label>
+            </div>
             <label class="full checkbox-row">
                 <input type="checkbox" id="messages-receive-any-ssid" name="receive_any_ssid"{% if messages_view.message_settings.receive_any_ssid %} checked{% endif %}>
                 <span>{{ t("Receive messages for any SSID of my callsign") }}</span>
@@ -194,6 +200,7 @@
     const defaultPathSelect = document.getElementById("messages-default-path");
     const receiveAnySsidInput = document.getElementById("messages-receive-any-ssid");
     const targetGroupsInput = document.getElementById("messages-target-groups");
+    const aprsisTargetGroupsInput = document.getElementById("messages-aprsis-target-groups");
     const settingsError = document.getElementById("messages-settings-error");
     const inboxCount = document.getElementById("messages-inbox-count");
     const clearInboxButton = document.getElementById("messages-clear-inbox-button");
@@ -993,6 +1000,7 @@
         event.preventDefault();
         settingsError.hidden = true;
         const groupValidation = validateTargetGroups(targetGroupsInput.value);
+        const aprsisGroupValidation = validateTargetGroups(aprsisTargetGroupsInput.value);
         if (!groupValidation.valid) {
             targetGroupsInput.setAttribute("aria-invalid", "true");
             settingsError.hidden = false;
@@ -1000,14 +1008,24 @@
             targetGroupsInput.focus();
             return;
         }
+        if (!aprsisGroupValidation.valid) {
+            aprsisTargetGroupsInput.setAttribute("aria-invalid", "true");
+            settingsError.hidden = false;
+            settingsError.textContent = aprsisGroupValidation.error;
+            aprsisTargetGroupsInput.focus();
+            return;
+        }
         targetGroupsInput.removeAttribute("aria-invalid");
+        aprsisTargetGroupsInput.removeAttribute("aria-invalid");
         targetGroupsInput.value = groupValidation.canonical;
+        aprsisTargetGroupsInput.value = aprsisGroupValidation.canonical;
         void apiRequest(`${messagesApi}/settings`, {
             method: "PUT",
             body: JSON.stringify({
                 default_path: normalizeFuturePath(defaultPathSelect.value),
                 receive_any_ssid: receiveAnySsidInput.checked,
                 target_groups: groupValidation.groups,
+                aprsis_target_groups: aprsisGroupValidation.groups,
             }),
         }).then(async (payload) => {
             const savedSettings = payload && payload.settings ? payload.settings : {};
@@ -1015,6 +1033,7 @@
             defaultPathSelect.value = defaultPath;
             receiveAnySsidInput.checked = Boolean(savedSettings.receive_any_ssid);
             targetGroupsInput.value = Array.isArray(savedSettings.target_groups) ? savedSettings.target_groups.join(", ") : "";
+            aprsisTargetGroupsInput.value = Array.isArray(savedSettings.aprsis_target_groups) ? savedSettings.aprsis_target_groups.join(", ") : "";
             await applyServerState(payload.messages_view);
         }).catch((error) => {
             settingsError.hidden = false;
@@ -1027,6 +1046,11 @@
         settingsError.hidden = true;
     });
 
+    aprsisTargetGroupsInput.addEventListener("input", () => {
+        aprsisTargetGroupsInput.removeAttribute("aria-invalid");
+        settingsError.hidden = true;
+    });
+
     targetGroupsInput.addEventListener("blur", () => {
         const validation = validateTargetGroups(targetGroupsInput.value);
         if (validation.valid) {
@@ -1035,6 +1059,18 @@
             return;
         }
         targetGroupsInput.setAttribute("aria-invalid", "true");
+        settingsError.hidden = false;
+        settingsError.textContent = validation.error;
+    });
+
+    aprsisTargetGroupsInput.addEventListener("blur", () => {
+        const validation = validateTargetGroups(aprsisTargetGroupsInput.value);
+        if (validation.valid) {
+            aprsisTargetGroupsInput.removeAttribute("aria-invalid");
+            aprsisTargetGroupsInput.value = validation.canonical;
+            return;
+        }
+        aprsisTargetGroupsInput.setAttribute("aria-invalid", "true");
         settingsError.hidden = false;
         settingsError.textContent = validation.error;
     });

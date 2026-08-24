@@ -18,15 +18,16 @@ Der Bereich `Nachrichteneinstellungen` befindet sich unter dem Unterhaltungsbere
 
 - `Standardpfad` wird für neue Unterhaltungen, Gruppennachrichten und automatische APRS-Antworten verwendet.
 - `Nachrichten für jede SSID meines Rufzeichens empfangen` erlaubt die Anzeige von Nachrichten an andere SSIDs desselben Basisrufzeichens. Nur das exakt konfigurierte `CALL-SSID` erhält ein `ACK` oder eine automatische Antwort.
-- `Zielgruppen` definiert die gemeinsamen Nachrichtenadressen, die APRSBox empfängt.
+- `RF-Gruppen` definiert gemeinsame Nachrichtenadressen für Funk-Schnittstellen.
+- `APRS-IS-Gruppen` definiert gemeinsame Nachrichtenadressen für APRS-IS. APRSBox ergänzt sie zusammen mit aktivierten Alarmgruppen automatisch im Verbindungsfilter `g/...`.
 
-Bei der ersten Verwendung, solange noch keine Gruppeneinstellung gespeichert wurde, enthält die Liste `ALL`, `QST` und `CQ`. Entfernt der Benutzer diese Werte und speichert ein leeres Feld, bleibt die Liste leer.
+Bei der ersten Verwendung sind beide Listen identisch und enthalten `ALL`, `QST` und `CQ`. Bei bestehenden Installationen ohne separate APRS-IS-Einstellung wird diese Liste aus der gespeicherten RF-Liste übernommen. Danach können beide Listen unabhängig geändert werden.
 
 Gruppen werden in einem Feld eingegeben und durch Kommas getrennt, zum Beispiel `CQ, QST, ALL, WAW, BEM`. Leerzeichen um die Namen werden entfernt, Buchstaben in Großbuchstaben umgewandelt und Duplikate verworfen. Jeder Name muss zwischen `1` und `9` Zeichen aus `A-Z` oder `0-9` enthalten. Leere Einträge, Sonderzeichen, innere Leerzeichen und mit `BLN` beginnende Adressen werden abgelehnt.
 
 ## Gruppenunterhaltungen
 
-- Eine Gruppenunterhaltung wird nur für einen Adressaten erstellt, der in der gespeicherten Liste `Zielgruppen` enthalten ist.
+- Eine Gruppenunterhaltung wird nur für einen Adressaten erstellt, der in der zur Frame-Quelle passenden Liste `RF-Gruppen` oder `APRS-IS-Gruppen` enthalten ist.
 - Eine Nachricht an eine nicht definierte Gruppe wie `BEM` wird ignoriert: Es entstehen keine Unterhaltung, kein Verlaufseintrag, kein Ungelesen-Status, keine Benachrichtigung und kein `ACK`.
 - Der Schlüssel der Unterhaltung ist die Gruppenadresse, zum Beispiel `WAW`, nicht das Rufzeichen des Absenders. Nachrichten mehrerer Stationen erscheinen im selben chronologischen `WAW`-Thread.
 - Der tatsächliche Absender, zum Beispiel `SQ5WLA-9`, wird über jeder Gruppennachricht angezeigt. Eine eigene Nachricht ist mit `Du · CALL-SSID` gekennzeichnet.

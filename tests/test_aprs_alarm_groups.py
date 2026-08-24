@@ -80,6 +80,9 @@ def temporary_database() -> Path:
 @contextlib.contextmanager
 def configured_alarm_database() -> Path:
     with temporary_database() as database_path:
+        # Keep alarm-filter tests focused on alarm groups; APRS-IS message
+        # group subscriptions are covered independently.
+        set_app_setting("messages.aprsis_target_groups", "")
         save_aprs_alarm_enabled(True)
         save_aprs_alarm_groups("PL-WARN")
         thresholds = get_aprs_alarm_category_thresholds()
@@ -448,6 +451,26 @@ class AprsAlarmGroupConfigurationTests(unittest.TestCase):
 
 
 class AprsAlarmGroupFilterTests(unittest.TestCase):
+    def test_aprsis_message_groups_are_added_without_alarm_groups(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_enabled(False)
+            save_aprs_alarm_groups("")
+            set_app_setting("messages.aprsis_target_groups", "CQ,LOCAL")
+            self.assertEqual(
+                build_effective_aprsis_filter("m/100"),
+                "m/100 g/CQ/LOCAL",
+            )
+
+    def test_aprsis_message_groups_share_filter_with_alarm_groups(self) -> None:
+        with temporary_database():
+            save_aprs_alarm_enabled(True)
+            save_aprs_alarm_groups("PL-WARN")
+            set_app_setting("messages.aprsis_target_groups", "CQ,LOCAL")
+            self.assertEqual(
+                build_effective_aprsis_filter("m/100"),
+                "m/100 g/PL-WARN/CQ/LOCAL",
+            )
+
     def test_global_disable_removes_only_automatic_alarm_filter(self) -> None:
         with configured_alarm_database():
             save_aprs_alarm_enabled(False)
@@ -518,6 +541,42 @@ class AprsAlarmGroupFilterTests(unittest.TestCase):
             service._connected_rx_signature = service._rx_signature(before)
 
             save_aprs_alarm_groups("PL-WARN,LOCALWARN")
+            after = get_enabled_aprsis_interface()
+
+            self.assertTrue(
+                service._connection_needs_reconnect(
+                    config_key=config_key,
+                    desired_rx_signature=service._rx_signature(after),
+                )
+            )
+
+    def test_aprsis_message_group_change_uses_filter_signature_reconnect(self) -> None:
+        with temporary_database():
+            insert_aprsis_interface("m/100")
+            save_message_settings(
+                {
+                    "default_path": "",
+                    "receive_any_ssid": False,
+                    "target_groups": ["RFONLY"],
+                    "aprsis_target_groups": ["CQ"],
+                }
+            )
+            before = get_enabled_aprsis_interface()
+            assert before is not None
+            service = AprsisClientService()
+            config_key = ("example.aprs2.net", 14580, "SP0BOX-1", "12345")
+            service._writer = object()  # type: ignore[assignment]
+            service._connected_config = config_key
+            service._connected_rx_signature = service._rx_signature(before)
+
+            save_message_settings(
+                {
+                    "default_path": "",
+                    "receive_any_ssid": False,
+                    "target_groups": ["RFONLY"],
+                    "aprsis_target_groups": ["LOCAL"],
+                }
+            )
             after = get_enabled_aprsis_interface()
 
             self.assertTrue(

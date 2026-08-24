@@ -148,14 +148,15 @@ class AprsisInterfaceConfigurationTests(unittest.TestCase):
             count = fetch_one("SELECT COUNT(*) AS total FROM modems WHERE modem_type = 'APRSIS'")
             self.assertEqual(int((count or {"total": -1})["total"]), 1)
 
-    def test_login_line_has_no_automatic_alarm_filter_by_default(self) -> None:
-        line = build_aprsis_login_line(
-            login="SQ9XYZ-10",
-            passcode="12345",
-            server_filter="r/52.23/21.01/50",
-        )
-        self.assertIn("user SQ9XYZ-10 pass 12345", line)
-        self.assertTrue(line.endswith("filter r/52.23/21.01/50"))
+    def test_login_line_includes_default_aprsis_message_groups(self) -> None:
+        with temporary_database():
+            line = build_aprsis_login_line(
+                login="SQ9XYZ-10",
+                passcode="12345",
+                server_filter="r/52.23/21.01/50",
+            )
+            self.assertIn("user SQ9XYZ-10 pass 12345", line)
+            self.assertTrue(line.endswith("filter r/52.23/21.01/50 g/ALL/QST/CQ"))
 
     def test_interfaces_form_saves_aprsis_connection_settings_and_legacy_route_redirects(self) -> None:
         with temporary_database():
@@ -570,7 +571,7 @@ class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(opener.await_count, 1)
             self.assertIs(service._writer, writer)
-            self.assertIn(b" filter m/20 g/PL-WARN\r\n", writer.writes[0])
+            self.assertIn(b" filter m/20 g/PL-WARN/ALL/QST/CQ\r\n", writer.writes[0])
             self.assertTrue(service._process_server_line(POSITION_LINE))
             sent, _detail = await service.send_tnc2_line("SQ9XYZ-10>APRS:>TX test")
             self.assertTrue(sent)

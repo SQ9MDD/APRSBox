@@ -18,15 +18,16 @@ El bloque `Configuración de mensajes` se encuentra debajo del panel de conversa
 
 - `Ruta predeterminada` se usa para conversaciones nuevas, mensajes de grupo y respuestas APRS automáticas.
 - `Recibir mensajes para cualquier SSID de mi indicativo` permite mostrar mensajes dirigidos a otros SSID del mismo indicativo base. Solo el `CALL-SSID` configurado exactamente recibe un `ACK` o una respuesta automática.
-- `Grupos de destino` define las direcciones compartidas de mensajes que recibe APRSBox.
+- `Grupos RF` define las direcciones compartidas recibidas desde interfaces de radio.
+- `Grupos APRS-IS` define las direcciones compartidas recibidas desde APRS-IS. APRSBox las añade automáticamente al filtro de conexión `g/...` junto con los grupos de alarma habilitados.
 
-En el primer uso, mientras todavía no se haya guardado una configuración de grupos, la lista contiene `ALL`, `QST` y `CQ`. Si el usuario elimina estos valores y guarda el campo vacío, la lista permanece vacía.
+En el primer uso ambas listas son idénticas y contienen `ALL`, `QST` y `CQ`. En una instalación existente sin configuración APRS-IS separada, esa lista se copia de la lista RF guardada. Después se pueden modificar de forma independiente.
 
 Los grupos se introducen en un solo campo y se separan con comas, por ejemplo `CQ, QST, ALL, WAW, BEM`. Se eliminan los espacios alrededor de los nombres, las letras se convierten a mayúsculas y se descartan los duplicados. Cada nombre debe contener entre `1` y `9` caracteres de `A-Z` o `0-9`. Se rechazan entradas vacías, caracteres especiales, espacios internos y direcciones que comiencen por `BLN`.
 
 ## Conversaciones de grupo
 
-- Una conversación de grupo solo se crea para un destinatario presente en la lista guardada `Grupos de destino`.
+- Una conversación de grupo solo se crea para un destinatario presente en la lista correspondiente al origen de la trama: `Grupos RF` o `Grupos APRS-IS`.
 - Un mensaje dirigido a un grupo no definido, como `BEM`, se ignora: no crea conversación, entrada en el historial, estado sin leer, notificación ni `ACK`.
 - La clave de la conversación es la dirección del grupo, por ejemplo `WAW`, y no el indicativo del remitente. Los mensajes de varias estaciones aparecen en el mismo hilo cronológico `WAW`.
 - El remitente real, por ejemplo `SQ5WLA-9`, se muestra encima de cada burbuja de grupo. Un mensaje propio se etiqueta como `Tú · CALL-SSID`.
