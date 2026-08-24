@@ -1356,13 +1356,6 @@
         return visibleInterfaceIds.has(interfaceId);
     }
 
-    function filteredStations(stations, interfacesById, visibleInterfaceIds) {
-        return (stations || []).filter((station) => {
-            const interfaceId = normalizeInterfaceId(station && station.interface_id);
-            return isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds);
-        });
-    }
-
     function isSameTrackPointPosition(previous, current) {
         const previousLatitude = Number(previous && previous.latitude);
         const previousLongitude = Number(previous && previous.longitude);
@@ -1385,6 +1378,9 @@
             }
             const previous = rebuilt[rebuilt.length - 1];
             if (previous && isSameTrackPointPosition(previous, point)) {
+                // Keep the newest observation at an unchanged position so the
+                // marker source and timestamp still follow the latest frame.
+                rebuilt[rebuilt.length - 1] = point;
                 continue;
             }
             rebuilt.push(point);
@@ -1392,14 +1388,19 @@
         return rebuilt.slice(-mobileTrackMaxRenderedPoints);
     }
 
-    function filteredMobileTracks(mobileTracks, interfacesById, visibleInterfaceIds) {
+    function filteredMobileTrackData(mobileTracks, interfacesById, visibleInterfaceIds) {
         const filteredTracks = [];
+        const visiblePointsByStationKey = new Map();
         for (const track of mobileTracks || []) {
             const rebuiltPoints = rebuildVisibleTrackPoints(
                 track.points,
                 interfacesById,
                 visibleInterfaceIds
             );
+            const stationKey = String(track.display_callsign || "").trim();
+            if (stationKey && rebuiltPoints.length > 0) {
+                visiblePointsByStationKey.set(stationKey, rebuiltPoints);
+            }
             if (rebuiltPoints.length < 2) {
                 continue;
             }
@@ -1408,14 +1409,66 @@
                 points: rebuiltPoints,
             });
         }
-        return filteredTracks;
+        return { filteredTracks, visiblePointsByStationKey };
+    }
+
+    function trackPointAgeSeconds(heardAt, fallbackAgeSeconds) {
+        const heardAtMs = Date.parse(String(heardAt || ""));
+        if (!Number.isFinite(heardAtMs)) {
+            return fallbackAgeSeconds;
+        }
+        return Math.max(0, (Date.now() - heardAtMs) / 1000);
+    }
+
+    function stationsAtLatestVisibleTrackPoints(
+        stations,
+        visiblePointsByStationKey,
+        interfacesById,
+        visibleInterfaceIds
+    ) {
+        const resolvedStations = [];
+        for (const station of stations || []) {
+            const stationKey = stationIdentityKey(station);
+            const visiblePoints = visiblePointsByStationKey.get(stationKey) || [];
+            const latestPoint = visiblePoints[visiblePoints.length - 1];
+            if (latestPoint) {
+                const interfaceId = normalizeInterfaceId(latestPoint.interface_id);
+                const interfaceItem = interfaceId === null ? null : interfacesById.get(interfaceId);
+                const heardAt = String(latestPoint.heard_at || "").trim();
+                resolvedStations.push({
+                    ...station,
+                    latitude: Number(latestPoint.latitude),
+                    longitude: Number(latestPoint.longitude),
+                    interface_id: interfaceId,
+                    source: String((interfaceItem && interfaceItem.name) || station.source || "").trim(),
+                    last_heard_at: heardAt || station.last_heard_at,
+                    last_heard_age_s: trackPointAgeSeconds(heardAt, station.last_heard_age_s),
+                });
+                continue;
+            }
+            const interfaceId = normalizeInterfaceId(station && station.interface_id);
+            if (isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds)) {
+                resolvedStations.push(station);
+            }
+        }
+        return resolvedStations;
     }
 
     function filteredMapData(stations, mobileTracks, interfaces) {
         const { interfacesById, visibleInterfaceIds } = interfaceVisibilityContext(interfaces);
+        const { filteredTracks, visiblePointsByStationKey } = filteredMobileTrackData(
+            mobileTracks,
+            interfacesById,
+            visibleInterfaceIds
+        );
         return {
-            stations: filteredStations(stations, interfacesById, visibleInterfaceIds),
-            mobileTracks: filteredMobileTracks(mobileTracks, interfacesById, visibleInterfaceIds),
+            stations: stationsAtLatestVisibleTrackPoints(
+                stations,
+                visiblePointsByStationKey,
+                interfacesById,
+                visibleInterfaceIds
+            ),
+            mobileTracks: filteredTracks,
         };
     }
 
@@ -1458,7 +1511,7 @@
         return [
             normalizeRevision(latestStationRevision),
             normalizeRevision(latestStationDetailsRevision),
-            tracksVisible ? normalizeRevision(latestTrackRevision) : "tracks-off",
+            normalizeRevision(latestTrackRevision),
             coverageVisible ? normalizeRevision(latestStationDetailsRevision) : "coverage-off",
             String(latestStations.length),
             String(latestMobileTracks.length),
@@ -2993,7 +3046,7 @@
             if (latestStationDetailsRevision !== targetRevision) {
                 void loadStationDetails(targetRevision);
             }
-            if (tracksVisible && latestTrackRevision !== targetRevision) {
+            if (latestTrackRevision !== targetRevision) {
                 void loadMobileTracks(targetRevision);
             }
         });

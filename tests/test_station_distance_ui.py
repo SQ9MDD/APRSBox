@@ -174,7 +174,33 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function rebuildVisibleTrackPoints(points, interfacesById, visibleInterfaceIds)", script_source)
         self.assertIn("isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds)", script_source)
         self.assertIn("isSameTrackPointPosition(previous, point)", script_source)
+        self.assertIn("rebuilt[rebuilt.length - 1] = point;", script_source)
         self.assertIn("return rebuilt.slice(-mobileTrackMaxRenderedPoints);", script_source)
+
+    def test_map_script_anchors_marker_to_latest_point_from_visible_interfaces(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("function filteredMobileTrackData(mobileTracks, interfacesById, visibleInterfaceIds)", script_source)
+        self.assertIn("const visiblePointsByStationKey = new Map();", script_source)
+        self.assertIn("function stationsAtLatestVisibleTrackPoints(", script_source)
+        self.assertIn("const latestPoint = visiblePoints[visiblePoints.length - 1];", script_source)
+        self.assertIn("latitude: Number(latestPoint.latitude)", script_source)
+        self.assertIn("longitude: Number(latestPoint.longitude)", script_source)
+        self.assertIn("interface_id: interfaceId", script_source)
+        self.assertIn("last_heard_at: heardAt || station.last_heard_at", script_source)
+
+    def test_map_script_uses_single_visible_track_point_for_marker_but_not_polyline(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        point_cache = script_source.index("if (stationKey && rebuiltPoints.length > 0)")
+        polyline_guard = script_source.index("if (rebuiltPoints.length < 2)", point_cache)
+        self.assertLess(point_cache, polyline_guard)
+
+    def test_map_script_loads_tracks_even_when_polyline_layer_is_hidden(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        schedule_start = script_source.index("function scheduleDeferredMapDataLoad()")
+        schedule_end = script_source.index("function runWhenBrowserIdle", schedule_start)
+        schedule_source = script_source[schedule_start:schedule_end]
+        self.assertIn("if (latestTrackRevision !== targetRevision)", schedule_source)
+        self.assertNotIn("if (tracksVisible && latestTrackRevision", schedule_source)
 
     def test_station_detail_map_script_renders_station_track(self) -> None:
         script_source = Path("app/static/js/station-detail-map.js").read_text(encoding="utf-8")
