@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.11.5.dev - 2026-08-24
+- `Mensajes / grupos`: los grupos de destino anteriores se dividieron en `Grupos RF` y `Grupos APRS-IS`; en el primer uso, la lista APRS-IS hereda los grupos RF y después puede configurarse de forma independiente. Los grupos APRS-IS se combinan automáticamente con los grupos de alarma habilitados en el filtro `g/...` de la conexión APRS-IS.
+
 ## 1.11.3.dev - 2026-08-21
 - `Interfaces / acciones rápidas`: se añadió a la lista de interfaces un botón contextual para activar o desactivar, equivalente a la acción de las reglas de enrutamiento; el cambio de estado ya no requiere abrir el editor, actualiza únicamente el estado de actividad de la interfaz y utiliza el modal de progreso compartido con un mensaje de resultado localizado y gestión de errores.
 

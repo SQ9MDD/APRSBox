@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.11.5.dev - 2026-08-24
+- `Nachrichten / Gruppen`: Die bisherigen Zielgruppen wurden in `RF-Gruppen` und `APRS-IS-Gruppen` aufgeteilt; bei der ersten Verwendung übernimmt die APRS-IS-Liste die RF-Gruppen und kann anschließend unabhängig konfiguriert werden. APRS-IS-Gruppen werden im `g/...`-Filter der APRS-IS-Verbindung automatisch mit aktivierten Alarmgruppen zusammengeführt.
+
 ## 1.11.3.dev - 2026-08-21
 - `Schnittstellen / Schnellaktionen`: In der Schnittstellenliste wurde eine kontextabhängige Schaltfläche zum Aktivieren oder Deaktivieren ergänzt, entsprechend der Aktion bei Routing-Regeln; die Statusänderung erfordert kein Öffnen des Editors, aktualisiert ausschließlich den Aktivitätszustand der Schnittstelle und verwendet das gemeinsame Fortschrittsmodal mit lokalisierter Ergebnismeldung und Fehlerbehandlung.
 

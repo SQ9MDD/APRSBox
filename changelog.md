@@ -1,5 +1,6 @@
 # Changelog
 
+## 1.11.5.dev - 24.08.2026
 - `Wiadomości / grupy`: rozdzielono dotychczasowe grupy docelowe na `Grupy RF` i `Grupy APRS-IS`; przy pierwszym użyciu lista APRS-IS dziedziczy grupy RF, a następnie może być konfigurowana niezależnie. Grupy APRS-IS są automatycznie łączone z aktywnymi grupami alarmowymi w filtrze `g/...` połączenia APRS-IS.
 
 ## 1.11.3.dev - 21.08.2026
