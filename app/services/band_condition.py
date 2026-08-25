@@ -43,11 +43,19 @@ BAND_CONDITION_PROFILE_REPEATABLE_MIN_HOURS = 2
 BAND_CONDITION_CONFIRM_SEGMENTS = 3
 
 # Distance model
+#
+# Far / very-far thresholds are learned automatically from baseline stations.
+# The baseline sample contains one distance per unique station, so stations
+# beaconing more often do not receive a larger statistical weight.
+#
+# Obvious long-distance outliers are removed from the baseline with a robust
+# median/MAD fence.  These are internal model constants, not user settings.
 BAND_CONDITION_DISTANCE_PERCENTILE = 0.90
-BAND_CONDITION_FAR_RATIO = 1.30
-BAND_CONDITION_FAR_EXTRA_KM = 50.0
-BAND_CONDITION_VERY_FAR_RATIO = 1.80
-BAND_CONDITION_VERY_FAR_EXTRA_KM = 130.0
+BAND_CONDITION_BASELINE_DISTANCE_MIN_STATIONS = 8
+BAND_CONDITION_BASELINE_MAD_SCALE = 1.4826
+BAND_CONDITION_BASELINE_FAR_MAD_Z = 3.5
+BAND_CONDITION_BASELINE_VERY_FAR_MAD_Z = 5.0
+BAND_CONDITION_BASELINE_OUTLIER_PASSES = 2
 
 # New geographic area detection
 BAND_CONDITION_NEW_AREA_CELL_DEGREES = 0.5
@@ -253,6 +261,91 @@ def _bit_count(value: Any) -> int:
         return int(value or 0).bit_count()
     except (TypeError, ValueError):
         return 0
+
+
+
+def _robust_distance_spread(values: list[float]) -> tuple[float | None, float | None, float | None]:
+    """Return median, MAD and robust sigma-equivalent spread for distances."""
+    ordered = sorted(float(value) for value in values if math.isfinite(float(value)) and float(value) >= 0.0)
+    if not ordered:
+        return None, None, None
+
+    center = float(median(ordered))
+    deviations = [abs(value - center) for value in ordered]
+    mad = float(median(deviations)) if deviations else 0.0
+    spread = mad * BAND_CONDITION_BASELINE_MAD_SCALE
+
+    # MAD can legitimately collapse to zero when many stations have nearly the
+    # same distance.  Use the interquartile range as another robust estimate.
+    if spread <= 0.0 and len(ordered) >= 4:
+        q25 = _percentile(ordered, 0.25)
+        q75 = _percentile(ordered, 0.75)
+        if q25 is not None and q75 is not None and q75 > q25:
+            spread = (q75 - q25) / 1.349
+
+    return center, mad, spread if spread > 0.0 else None
+
+
+def _clean_baseline_distances(values: list[float]) -> dict[str, Any]:
+    """Build an automatically learned distance envelope from baseline stations."""
+    working = sorted(
+        float(value)
+        for value in values
+        if math.isfinite(float(value)) and float(value) >= 0.0
+    )
+    raw_count = len(working)
+
+    if raw_count < BAND_CONDITION_BASELINE_DISTANCE_MIN_STATIONS:
+        return {
+            "raw": working,
+            "cleaned": working,
+            "raw_count": raw_count,
+            "cleaned_count": raw_count,
+            "median_km": float(median(working)) if working else None,
+            "mad_km": None,
+            "spread_km": None,
+            "far_threshold_km": None,
+            "very_far_threshold_km": None,
+        }
+
+    # Remove only upper-tail outliers.  Very short paths are harmless for a
+    # propagation reach model and should remain part of the local RF footprint.
+    for _ in range(max(1, int(BAND_CONDITION_BASELINE_OUTLIER_PASSES))):
+        center, mad, spread = _robust_distance_spread(working)
+        if center is None or spread is None:
+            break
+        upper_fence = center + (BAND_CONDITION_BASELINE_FAR_MAD_Z * spread)
+        cleaned = [value for value in working if value <= upper_fence]
+        if len(cleaned) < BAND_CONDITION_BASELINE_DISTANCE_MIN_STATIONS or len(cleaned) == len(working):
+            break
+        working = cleaned
+
+    center, mad, spread = _robust_distance_spread(working)
+    far_threshold = None
+    very_far_threshold = None
+    if (
+        center is not None
+        and spread is not None
+        and len(working) >= BAND_CONDITION_BASELINE_DISTANCE_MIN_STATIONS
+    ):
+        far_threshold = center + (BAND_CONDITION_BASELINE_FAR_MAD_Z * spread)
+        very_far_threshold = center + (BAND_CONDITION_BASELINE_VERY_FAR_MAD_Z * spread)
+
+    return {
+        "raw": sorted(
+            float(value)
+            for value in values
+            if math.isfinite(float(value)) and float(value) >= 0.0
+        ),
+        "cleaned": working,
+        "raw_count": raw_count,
+        "cleaned_count": len(working),
+        "median_km": center,
+        "mad_km": mad,
+        "spread_km": spread,
+        "far_threshold_km": far_threshold,
+        "very_far_threshold_km": very_far_threshold,
+    }
 
 
 def _geographic_cell(latitude: float | None, longitude: float | None) -> str:
@@ -530,6 +623,89 @@ def _select_baseline_rows(
         if (_parse_iso_datetime(row.get("hour_start_utc")) or hour_start).hour == _floor_to_hour(hour_start).hour
     ]
     return same_hour if len(same_hour) >= BAND_CONDITION_BASELINE_SAME_HOUR_MIN_ROWS else candidate_rows
+
+
+
+def _baseline_station_distances(
+    interface_id: int,
+    band: str,
+    baseline_rows: list[dict[str, Any]],
+) -> list[float]:
+    """Return one representative distance per unique baseline station.
+
+    Using one value per station prevents beacon frequency and the number of
+    baseline hours in which a station appears from biasing the learned reach.
+    """
+    baseline_hours = {
+        str(row.get("hour_start_utc") or "").strip()
+        for row in baseline_rows
+        if str(row.get("hour_start_utc") or "").strip()
+    }
+    if not baseline_hours:
+        return []
+
+    # A 28-day baseline contains at most 672 hourly values, which stays below
+    # SQLite's common parameter limit.  Keep a little headroom and split if the
+    # retention/model parameters are changed later.
+    hours = sorted(baseline_hours)
+    station_distances: dict[str, list[float]] = {}
+
+    for offset in range(0, len(hours), 800):
+        chunk = hours[offset : offset + 800]
+        placeholders = ", ".join("?" for _ in chunk)
+        rows = fetch_all(
+            f"""
+            SELECT
+                current.station_key,
+                current.distance_km,
+                current.mobile_hint,
+                COALESCE(profile.fixed_hours, 0) AS historical_fixed_hours,
+                COALESCE(profile.mobile_hours, 0) AS historical_mobile_hours
+            FROM band_condition_station_hours AS current
+            LEFT JOIN band_condition_station_profiles AS profile
+              ON profile.interface_id = current.interface_id
+             AND profile.band = current.band
+             AND profile.station_key = current.station_key
+            WHERE current.interface_id = ?
+              AND current.band = ?
+              AND current.hour_start_utc IN ({placeholders})
+              AND current.distance_km IS NOT NULL
+            """,
+            (
+                int(interface_id),
+                normalize_band(band),
+                *chunk,
+            ),
+        )
+        for row in rows:
+            item = dict(row)
+            if bool(item.get("mobile_hint")):
+                continue
+            historical_mobile = int(item.get("historical_mobile_hours") or 0)
+            historical_fixed = int(item.get("historical_fixed_hours") or 0)
+            if (
+                historical_mobile > historical_fixed
+                and historical_mobile >= BAND_CONDITION_MOBILE_HISTORY_MIN_HOURS
+            ):
+                continue
+            try:
+                distance = float(item["distance_km"])
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(distance) or distance < 0.0:
+                continue
+            station_key = str(item.get("station_key") or "").strip().upper()
+            if not station_key:
+                continue
+            station_distances.setdefault(station_key, []).append(distance)
+
+    # A fixed station should have an effectively constant distance, but median
+    # also makes this robust against stale/moved position reports.
+    return [
+        float(median(values))
+        for values in station_distances.values()
+        if values
+    ]
 
 
 def _history_summary(interface_id: int, band: str, hour_start: datetime) -> dict[str, Any]:
@@ -829,29 +1005,25 @@ def _evaluate_hour(
     baseline_candidates = _baseline_candidate_rows(interface_id, normalized_band, hour)
     baseline = _select_baseline_rows(baseline_candidates, hour)
     baseline_counts = [float(row.get("fixed_station_count") or 0) for row in baseline]
-    baseline_p90_values = [
-        float(row["p90_distance_km"])
-        for row in baseline
-        if row.get("p90_distance_km") is not None and float(row["p90_distance_km"]) > 0
-    ]
     normal_station_count = float(median(baseline_counts)) if baseline_counts else 0.0
-    normal_p90_distance = float(median(baseline_p90_values)) if baseline_p90_values else None
-    moderate_far_threshold = (
-        max(
-            normal_p90_distance * BAND_CONDITION_FAR_RATIO,
-            normal_p90_distance + BAND_CONDITION_FAR_EXTRA_KM,
-        )
-        if normal_p90_distance is not None
-        else None
+
+    # Learn the RF reach from the stations that actually form this receiver's
+    # baseline.  Each callsign contributes only once.  Strong upper-tail
+    # outliers are removed with median/MAD before thresholds are calculated.
+    baseline_station_distances = _baseline_station_distances(
+        interface_id,
+        normalized_band,
+        baseline,
     )
-    very_far_threshold = (
-        max(
-            normal_p90_distance * BAND_CONDITION_VERY_FAR_RATIO,
-            normal_p90_distance + BAND_CONDITION_VERY_FAR_EXTRA_KM,
-        )
-        if normal_p90_distance is not None
-        else None
+    baseline_distance_model = _clean_baseline_distances(baseline_station_distances)
+    cleaned_baseline_distances = list(baseline_distance_model["cleaned"])
+
+    normal_p90_distance = _percentile(
+        cleaned_baseline_distances,
+        BAND_CONDITION_DISTANCE_PERCENTILE,
     )
+    moderate_far_threshold = baseline_distance_model["far_threshold_km"]
+    very_far_threshold = baseline_distance_model["very_far_threshold_km"]
     far_rows = [
         row
         for row in station_rows
@@ -978,6 +1150,11 @@ def _evaluate_hour(
         "max_confirmed_distance_km": _rounded(max_confirmed_distance),
         "normal_station_count": round(normal_station_count, 1),
         "normal_p90_distance_km": _rounded(normal_p90_distance),
+        "baseline_distance_station_count": int(baseline_distance_model["raw_count"]),
+        "baseline_distance_clean_station_count": int(baseline_distance_model["cleaned_count"]),
+        "baseline_distance_median_km": _rounded(baseline_distance_model["median_km"]),
+        "baseline_distance_mad_km": _rounded(baseline_distance_model["mad_km"]),
+        "baseline_distance_spread_km": _rounded(baseline_distance_model["spread_km"]),
         "far_threshold_km": _rounded(moderate_far_threshold),
         "very_far_threshold_km": _rounded(very_far_threshold),
         "far_station_count": len(far_rows),
