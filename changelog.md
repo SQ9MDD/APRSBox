@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.6.dev - 25.08.2026
+- `Warunki pasma / model zasięgu`: przebudowano ocenę W0–W5 tak, aby dla każdego odbiornika uczyła się normalnego zasięgu z jednej reprezentatywnej odległości każdej stałej stacji. Odstające dalekie odbiory są odfiltrowywane metodą mediany i MAD, a progi stacji dalekich i bardzo dalekich są wyznaczane automatycznie z lokalnej charakterystyki RF zamiast z pojedynczych obserwacji.
+- `Warunki pasma / wiarygodność`: ramki third-party nie są już uznawane za fizyczne obserwacje RF, potwierdzenie dalekiej stacji wymaga odbioru w co najmniej trzech przedziałach czasu, a poziomy W3–W5 wymagają wyraźniejszych i powtarzalnych przesłanek. Uporządkowano również bazę odniesienia, dojrzewanie pewności oceny oraz parametry strojenia modelu.
+
 ## 1.11.5.dev - 24.08.2026
 - `Wiadomości / grupy`: rozdzielono dotychczasowe grupy docelowe na `Grupy RF` i `Grupy APRS-IS`; przy pierwszym użyciu lista APRS-IS dziedziczy grupy RF, a następnie może być konfigurowana niezależnie. Grupy APRS-IS są automatycznie łączone z aktywnymi grupami alarmowymi w filtrze `g/...` połączenia APRS-IS.
 - `Mapa / źródła i ślady`: pozycja ikony stacji jest teraz wybierana z ostatniej chronologicznie ramki pozycyjnej należącej do aktualnie widocznych źródeł, dzięki czemu marker pozostaje na końcu odpowiadającego mu śladu zarówno przy włączonych wszystkich źródłach, jak i po wybraniu pojedynczego interfejsu. Pojedynczy widoczny punkt nadal ustawia pozycję ikony bez rysowania sztucznej polilinii, a powtórzenia tej samej pozycji zachowują najnowsze źródło i czas.

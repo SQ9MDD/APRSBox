@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.6.dev - 2026-08-25
+- `Bandbedingungen / Reichweitenmodell`: Die Bewertung W0–W5 wurde so überarbeitet, dass jeder Empfänger seine normale Reichweite aus genau einer repräsentativen Entfernung je ortsfester Station lernt. Außergewöhnliche Fernempfänge werden robust mit Median und MAD herausgefiltert; die Schwellen für entfernte und sehr entfernte Stationen werden automatisch aus dem lokalen RF-Footprint statt aus Einzelbeobachtungen abgeleitet.
+- `Bandbedingungen / Zuverlässigkeit`: Third-Party-Frames gelten nicht mehr als physische RF-Beobachtungen, die Bestätigung einer entfernten Station erfordert nun Empfang in mindestens drei Zeitsegmenten und W3–W5 setzen klarere, wiederholbare Hinweise voraus. Außerdem wurden Referenzbasis, Reifung der Bewertungssicherheit und Modellparameter vereinheitlicht.
+
 ## 1.11.5.dev - 2026-08-24
 - `Nachrichten / Gruppen`: Die bisherigen Zielgruppen wurden in `RF-Gruppen` und `APRS-IS-Gruppen` aufgeteilt; bei der ersten Verwendung übernimmt die APRS-IS-Liste die RF-Gruppen und kann anschließend unabhängig konfiguriert werden. APRS-IS-Gruppen werden im `g/...`-Filter der APRS-IS-Verbindung automatisch mit aktivierten Alarmgruppen zusammengeführt.
 - `Karte / Quellen und Tracks`: Stationssymbole verwenden jetzt den chronologisch neuesten Positionsframe aus den aktuell sichtbaren Quellen, sodass der Marker sowohl bei aktivierten Quellen als auch nach Auswahl einer einzelnen Schnittstelle am Ende des zugehörigen Tracks bleibt. Ein einzelner sichtbarer Punkt positioniert das Symbol weiterhin, ohne eine künstliche Polylinie zu zeichnen; wiederholte Beobachtungen an derselben Position behalten die neueste Quelle und den neuesten Zeitstempel.

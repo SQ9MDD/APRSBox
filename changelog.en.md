@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.6.dev - 2026-08-25
+- `Band conditions / reach model`: rebuilt the W0–W5 assessment so that each receiver learns its normal reach from one representative distance per fixed station. Exceptional long-distance receptions are filtered with a robust median/MAD method, while far and very-far station thresholds are derived automatically from the local RF footprint instead of individual observations.
+- `Band conditions / reliability`: third-party frames are no longer treated as physical RF observations, confirming a distant station now requires reception in at least three time segments, and W3–W5 require clearer, repeatable evidence. The reference baseline, confidence maturation, and model tuning parameters were also made more consistent.
+
 ## 1.11.5.dev - 2026-08-24
 - `Messages / groups`: split the previous target groups into `RF groups` and `APRS-IS groups`; on first use, the APRS-IS list inherits the RF groups and can then be configured independently. APRS-IS groups are automatically combined with enabled alarm groups in the APRS-IS connection's `g/...` filter.
 - `Map / sources and tracks`: station icons now use the latest chronological position frame from the currently visible sources, keeping each marker at the end of its matching track both with all sources enabled and after selecting a single interface. One visible point still positions the icon without drawing an artificial polyline, while repeated observations at the same position retain the newest source and timestamp.

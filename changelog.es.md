@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.6.dev - 2026-08-25
+- `Condiciones de banda / modelo de alcance`: se rediseñó la evaluación W0–W5 para que cada receptor aprenda su alcance normal a partir de una distancia representativa por estación fija. Las recepciones lejanas excepcionales se filtran mediante mediana y MAD, y los umbrales de estaciones lejanas y muy lejanas se obtienen automáticamente de la huella RF local en lugar de observaciones aisladas.
+- `Condiciones de banda / fiabilidad`: las tramas third-party ya no se consideran observaciones RF físicas, confirmar una estación distante exige ahora recibirla en al menos tres segmentos temporales y W3–W5 requieren indicios más claros y repetibles. También se hicieron más coherentes la base de referencia, la maduración de la confianza y los parámetros de ajuste del modelo.
+
 ## 1.11.5.dev - 2026-08-24
 - `Mensajes / grupos`: los grupos de destino anteriores se dividieron en `Grupos RF` y `Grupos APRS-IS`; en el primer uso, la lista APRS-IS hereda los grupos RF y después puede configurarse de forma independiente. Los grupos APRS-IS se combinan automáticamente con los grupos de alarma habilitados en el filtro `g/...` de la conexión APRS-IS.
 - `Mapa / fuentes y recorridos`: los iconos de estación usan ahora la última trama de posición cronológica de las fuentes visibles, de modo que cada marcador permanece al final de su recorrido correspondiente tanto con todas las fuentes activadas como tras seleccionar una sola interfaz. Un único punto visible sigue posicionando el icono sin dibujar una polilínea artificial, y las observaciones repetidas en la misma posición conservan la fuente y la marca de tiempo más recientes.
