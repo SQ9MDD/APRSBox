@@ -327,10 +327,17 @@ class StationDistanceUiTests(unittest.TestCase):
     def test_map_latest_overlay_script_handles_overlay_toggle_and_qsy(self) -> None:
         script_source = Path("app/static/js/map-latest-overlay.js").read_text(encoding="utf-8")
         self.assertIn("const stationsRefreshEventName = \"aprsbox:map-stations-refreshed\";", script_source)
+        self.assertIn("const latestFrameRefreshEventName = \"aprsbox:map-latest-frame-refreshed\";", script_source)
+        self.assertIn("root.addEventListener(latestFrameRefreshEventName", script_source)
+        self.assertIn("renderLatestTrafficFrame()", script_source)
         self.assertIn("map-toggle-latest-overlay", script_source)
         self.assertIn("formatQsy(station)", script_source)
         self.assertIn("qsy_frequency_mhz", script_source)
         self.assertIn("map-latest-overlay-visible", script_source)
+
+        scroller_source = Path("app/static/js/map-scroller-overlay.js").read_text(encoding="utf-8")
+        self.assertIn("const latestFrameRefreshEventName = \"aprsbox:map-latest-frame-refreshed\";", scroller_source)
+        self.assertIn("entry: entries.length ? entries[0] : null", scroller_source)
 
     def test_station_detail_template_exposes_initial_track_points(self) -> None:
         template_source = Path("app/templates/station_detail.html").read_text(encoding="utf-8")

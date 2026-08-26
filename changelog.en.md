@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.11.10.dev - 2026-08-26
+- `Map / latest frame`: the widget now uses the same live traffic stream as the scroller, so it immediately shows the newest scroller entry instead of waiting for the periodic station-list refresh; QSY, distance, and comment data are enriched from the current station record.
+
 ## 1.11.8.dev - 2026-08-26
 - `APRS-IS / transmission`: the uplink now has an explicit best-effort contract with no frame buffering or retries. A packet is written only through the currently active transport; a missing connection, closing transport, write error, or timeout causes an immediate drop, while reconnect handles new frames only and never replays earlier ones. Routing logs now distinguish `sent` from `drop` instead of describing a direct write as queued.
 

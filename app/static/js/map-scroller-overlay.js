@@ -14,6 +14,7 @@
     const stationsRefreshEventName = "aprsbox:map-stations-refreshed";
     const mapViewRefreshEventName = "aprsbox:map-view-refreshed";
     const trafficSnapshotEventName = "aprsbox:traffic-snapshot";
+    const latestFrameRefreshEventName = "aprsbox:map-latest-frame-refreshed";
     const fallbackStationIconPath = `${staticRoot}${aprsSymbolIconFallback}`;
     const maxEntries = 120;
     const stationSourceKey = normalizeCallsignKey(root.dataset.stationSourceKey || "");
@@ -480,6 +481,11 @@
             detail: snapshot,
         }));
         const entries = buildScrollerEntries(snapshot);
+        root.dispatchEvent(new window.CustomEvent(latestFrameRefreshEventName, {
+            detail: {
+                entry: entries.length ? entries[0] : null,
+            },
+        }));
         const signature = entries
             .map((entry) => `${entry.timestamp}|${entry.stationLabel}|${entry.digipeater}|${entry.stationIconPath}|${entry.stationIconOverlay}|${entry.stationColor}`)
             .join("||");

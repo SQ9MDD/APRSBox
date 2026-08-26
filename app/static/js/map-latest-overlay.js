@@ -10,6 +10,7 @@
     const staticRoot = root.dataset.staticRoot || "/static/";
     const overlayVisibleStorageKey = "aprsbox-map-latest-overlay-visible";
     const stationsRefreshEventName = "aprsbox:map-stations-refreshed";
+    const latestFrameRefreshEventName = "aprsbox:map-latest-frame-refreshed";
 
     const i18n = Object.freeze({
         callsign: root.dataset.i18nCallsign || "Callsign",
@@ -25,6 +26,9 @@
     let overlayVisible = true;
     let stationReferenceLatitude = Number.parseFloat(root.dataset.stationLatitude || "");
     let stationReferenceLongitude = Number.parseFloat(root.dataset.stationLongitude || "");
+    let latestStations = [];
+    let latestFrameCallsign = "";
+    let latestFrameSeen = false;
 
     function escapeHtml(value) {
         return String(value ?? "")
@@ -133,6 +137,31 @@
         return null;
     }
 
+    function normalizeCallsign(value) {
+        return String(value || "").trim().toUpperCase();
+    }
+
+    function stationForCallsign(callsign) {
+        const target = normalizeCallsign(callsign);
+        if (!target) {
+            return null;
+        }
+        return latestStations.find((station) => (
+            normalizeCallsign(station && station.display_callsign) === target
+            || normalizeCallsign(station && station.callsign) === target
+        )) || null;
+    }
+
+    function renderLatestTrafficFrame() {
+        if (!latestFrameCallsign) {
+            renderOverlay(null);
+            return;
+        }
+        renderOverlay(stationForCallsign(latestFrameCallsign) || {
+            display_callsign: latestFrameCallsign,
+        });
+    }
+
     function renderOverlay(station) {
         if (!station) {
             overlay.innerHTML = `
@@ -169,6 +198,7 @@
     root.addEventListener(stationsRefreshEventName, function (event) {
         const detail = event && event.detail ? event.detail : {};
         const stations = Array.isArray(detail.stations) ? detail.stations : [];
+        latestStations = stations;
 
         const referenceLatitude = Number(detail.stationLatitude);
         const referenceLongitude = Number(detail.stationLongitude);
@@ -177,7 +207,19 @@
             stationReferenceLongitude = referenceLongitude;
         }
 
-        renderOverlay(selectLatestStation(stations));
+        if (latestFrameSeen) {
+            renderLatestTrafficFrame();
+        } else {
+            renderOverlay(selectLatestStation(stations));
+        }
+    });
+
+    root.addEventListener(latestFrameRefreshEventName, function (event) {
+        const detail = event && event.detail ? event.detail : {};
+        const entry = detail.entry && typeof detail.entry === "object" ? detail.entry : null;
+        latestFrameSeen = true;
+        latestFrameCallsign = String((entry && entry.station) || "").trim();
+        renderLatestTrafficFrame();
     });
 
     applyOverlayToggleState(resolveOverlayVisible());
