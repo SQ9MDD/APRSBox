@@ -349,6 +349,15 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn(".help-viewer-body::-webkit-scrollbar {", help_viewer_style)
         self.assertIn("scrollbar-width: thin;", help_viewer_style)
         self.assertIn("overscroll-behavior: contain;", help_viewer_style)
+        self.assertIn("pointer-events: none;", help_viewer_style)
+        self.assertIn("pointer-events: auto;", help_viewer_style)
+        self.assertIn('dragHandle.addEventListener("pointerdown"', help_viewer_source)
+        self.assertIn('dragHandle.addEventListener("pointermove"', help_viewer_source)
+        self.assertNotIn('document.body.classList.add("modal-open")', help_viewer_source)
+
+        help_modal = Path("app/templates/partials/help_modal.html").read_text(encoding="utf-8")
+        self.assertNotIn("help-viewer-backdrop", help_modal)
+        self.assertNotIn('aria-modal="true"', help_modal)
 
     def test_alarm_help_links_to_localized_cawf_and_nws_warn_guides(self) -> None:
         languages = ("en", "de", "pl", "es", "tlh")

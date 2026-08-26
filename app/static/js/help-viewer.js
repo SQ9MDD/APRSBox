@@ -18,6 +18,7 @@
     let currentPath = "";
     let activeRequestId = 0;
     let lastTrigger = null;
+    let dragState = null;
 
     const escapeHtml = (value) => String(value || "")
         .replaceAll("&", "&amp;")
@@ -147,7 +148,6 @@
     const openModal = (trigger) => {
         lastTrigger = trigger instanceof HTMLElement ? trigger : lastTrigger;
         modal.hidden = false;
-        document.body.classList.add("modal-open");
         if (dialog instanceof HTMLElement) {
             dialog.focus();
         }
@@ -155,11 +155,72 @@
 
     const closeModal = () => {
         modal.hidden = true;
-        document.body.classList.remove("modal-open");
         if (lastTrigger instanceof HTMLElement) {
             lastTrigger.focus();
         }
     };
+
+    const keepDialogInViewport = () => {
+        if (!(dialog instanceof HTMLElement) || modal.hidden) {
+            return;
+        }
+        const bounds = dialog.getBoundingClientRect();
+        const maxLeft = Math.max(0, window.innerWidth - bounds.width);
+        const maxTop = Math.max(0, window.innerHeight - bounds.height);
+        dialog.style.transform = "none";
+        dialog.style.left = `${Math.min(Math.max(0, bounds.left), maxLeft)}px`;
+        dialog.style.top = `${Math.min(Math.max(0, bounds.top), maxTop)}px`;
+    };
+
+    if (dialog instanceof HTMLElement) {
+        const dragHandle = dialog.querySelector(".help-viewer-header");
+        if (dragHandle instanceof HTMLElement) {
+            dragHandle.addEventListener("pointerdown", (event) => {
+                if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button, a"))) {
+                    return;
+                }
+                const bounds = dialog.getBoundingClientRect();
+                dragState = {
+                    pointerId: event.pointerId,
+                    offsetX: event.clientX - bounds.left,
+                    offsetY: event.clientY - bounds.top,
+                };
+                dialog.style.transform = "none";
+                dialog.style.left = `${bounds.left}px`;
+                dialog.style.top = `${bounds.top}px`;
+                dialog.classList.add("is-dragging");
+                dragHandle.setPointerCapture(event.pointerId);
+                event.preventDefault();
+            });
+
+            dragHandle.addEventListener("pointermove", (event) => {
+                if (!dragState || dragState.pointerId !== event.pointerId) {
+                    return;
+                }
+                const maxLeft = Math.max(0, window.innerWidth - dialog.offsetWidth);
+                const maxTop = Math.max(0, window.innerHeight - dialog.offsetHeight);
+                const left = Math.min(Math.max(0, event.clientX - dragState.offsetX), maxLeft);
+                const top = Math.min(Math.max(0, event.clientY - dragState.offsetY), maxTop);
+                dialog.style.left = `${left}px`;
+                dialog.style.top = `${top}px`;
+            });
+
+            const stopDragging = (event) => {
+                if (!dragState || dragState.pointerId !== event.pointerId) {
+                    return;
+                }
+                dragState = null;
+                dialog.classList.remove("is-dragging");
+                if (dragHandle.hasPointerCapture(event.pointerId)) {
+                    dragHandle.releasePointerCapture(event.pointerId);
+                }
+            };
+            dragHandle.addEventListener("pointerup", stopDragging);
+            dragHandle.addEventListener("pointercancel", stopDragging);
+        }
+    }
+
+    window.addEventListener("resize", keepDialogInViewport);
 
     const resolveMarkdownHelpPath = (href) => {
         const rawHref = String(href || "").trim();

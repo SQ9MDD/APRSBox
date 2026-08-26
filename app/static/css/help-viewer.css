@@ -64,19 +64,16 @@
     inset: 0;
     /* Leaflet controls reach 1000 and the global emergency modal reaches 10000. */
     z-index: 11000;
-}
-
-.help-viewer-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    pointer-events: none;
 }
 
 .help-viewer-dialog {
-    position: relative;
+    position: absolute;
+    top: 4vh;
+    left: 50%;
     width: min(56rem, calc(100vw - 2rem));
     max-height: 80vh;
-    margin: 4vh auto 0;
+    transform: translateX(-50%);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--panel);
@@ -84,6 +81,7 @@
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     overflow: hidden;
+    pointer-events: auto;
 }
 
 .help-viewer-header,
@@ -97,6 +95,18 @@
 
 .help-viewer-header {
     border-bottom: 1px solid var(--border);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+.help-viewer-dialog.is-dragging .help-viewer-header {
+    cursor: grabbing;
+}
+
+.help-viewer-header button,
+.help-viewer-header a {
+    cursor: pointer;
 }
 
 .help-viewer-header h3 {
@@ -194,6 +204,6 @@
     .help-viewer-dialog {
         width: calc(100vw - 1rem);
         max-height: 86vh;
-        margin-top: 2vh;
+        top: 2vh;
     }
 }
