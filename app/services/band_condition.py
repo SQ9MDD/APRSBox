@@ -1483,12 +1483,19 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
         hour_start=current_hour,
     )
     selected = current
+    service_sample = current
     if current["current_segment_count"] < BAND_CONDITION_CURRENT_MIN_SEGMENTS:
         saved = _latest_saved_snapshot(interface)
         saved_hour = _parse_iso_datetime((saved or {}).get("hour_start_utc"))
         previous_hour = current_hour - timedelta(hours=1)
         if saved is not None and saved_hour is not None and saved_hour >= previous_hour:
             selected = saved
+            service_sample = _evaluate_hour(
+                interface_id=interface_id,
+                interface_name=interface_name,
+                band=band,
+                hour_start=saved_hour,
+            )
         else:
             # The aggregator can run just before the hour changes, leaving the
             # newly closed hour unsaved until its next cycle. Evaluate that
@@ -1502,6 +1509,7 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
             )
             if previous.get("condition_index") is not None:
                 selected = previous
+                service_sample = previous
     progress = _model_progress(
         interface_id,
         band,
@@ -1516,6 +1524,7 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
     selected["confidence_score"] = round(displayed_confidence, 4)
     selected["confidence_percent"] = int(round(displayed_confidence * 100.0))
     service_data_keys = (
+        "hour_start_utc",
         "baseline_hour_count",
         "baseline_distance_station_count",
         "baseline_distance_clean_station_count",
@@ -1539,7 +1548,7 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
         "current_segment_count",
         "rx_total",
     )
-    selected["service_data"] = {key: current.get(key) for key in service_data_keys}
+    selected["service_data"] = {key: service_sample.get(key) for key in service_data_keys}
     return selected
 
 

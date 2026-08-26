@@ -2,7 +2,7 @@
 
 ## 1.11.10.dev - 26.08.2026
 - `Mapa / ostatnia ramka`: widżet korzysta teraz z tego samego strumienia ruchu co scroller, więc natychmiast pokazuje jego najnowszy wpis zamiast czekać na cykliczne odświeżenie listy stacji; dane QSY, dystansu i komentarza są uzupełniane z aktualnego rekordu stacji.
-- `Warunki pasma / dane serwisowe`: pod danymi modelu dodano panel diagnostyczny pokazujący wypracowaną bazę odniesienia, medianę i zasięg P90 stacji stałych, automatyczne progi odległości oraz bieżące liczniki stacji, potwierdzonych dalekich odbiorów, obszarów geograficznych i ramek RF.
+- `Warunki pasma / dane serwisowe`: pod danymi modelu dodano panel diagnostyczny pokazujący wypracowaną bazę odniesienia, medianę i zasięg P90 stacji stałych, automatyczne progi odległości oraz liczniki stacji, potwierdzonych dalekich odbiorów, obszarów geograficznych i ramek RF z próbki użytej do widocznej oceny.
 
 ## 1.11.8.dev - 26.08.2026
 - `APRS-IS / transmisja`: uplink działa teraz jednoznacznie w trybie best effort bez buforowania i ponawiania ramek. Pakiet jest wysyłany wyłącznie przez aktualnie aktywny transport; brak połączenia, zamykający się transport, błąd zapisu lub timeout powodują natychmiastowy drop, a reconnect obsługuje tylko nowe ramki i nigdy nie odtwarza wcześniejszych. Log routingu rozróżnia teraz wynik `sent` od `drop` zamiast opisywać bezpośredni zapis jako oczekiwanie w kolejce.

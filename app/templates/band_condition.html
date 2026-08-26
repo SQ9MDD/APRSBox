@@ -222,22 +222,26 @@
                         </section>
 
                         <section>
-                            <h4>{{ t("Current sample") }}</h4>
+                            <h4>{{ t("Assessment sample") }}</h4>
                             <dl class="band-condition-service-stats">
                                 <div>
-                                    <dt>{{ t("Fixed stations now") }}</dt>
+                                    <dt>{{ t("Sample hour (UTC)") }}</dt>
+                                    <dd>{{ item.service_data.hour_start_utc[:16]|replace("T", " ") }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Fixed stations in sample") }}</dt>
                                     <dd>{{ item.service_data.fixed_station_count }}</dd>
                                 </div>
                                 <div>
-                                    <dt>{{ t("Stations with position now") }}</dt>
+                                    <dt>{{ t("Stations with position in sample") }}</dt>
                                     <dd>{{ item.service_data.positioned_station_count }}</dd>
                                 </div>
                                 <div>
-                                    <dt>{{ t("Current median distance") }}</dt>
+                                    <dt>{{ t("Sample median distance") }}</dt>
                                     <dd>{{ distance_km(item.service_data.median_distance_km) }}</dd>
                                 </div>
                                 <div>
-                                    <dt>{{ t("Current P90 reach") }}</dt>
+                                    <dt>{{ t("Sample P90 reach") }}</dt>
                                     <dd>{{ distance_km(item.service_data.p90_distance_km) }}</dd>
                                 </div>
                                 <div>
@@ -261,7 +265,7 @@
                                     <dd>{{ item.service_data.current_segment_count }}</dd>
                                 </div>
                                 <div>
-                                    <dt>{{ t("RF frames in current hour") }}</dt>
+                                    <dt>{{ t("RF frames in sample hour") }}</dt>
                                     <dd>{{ item.service_data.rx_total }}</dd>
                                 </div>
                             </dl>
