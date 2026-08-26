@@ -1134,18 +1134,26 @@ class AprsisClientService:
         self._task = None
 
     async def send_tnc2_line(self, line: str, telemetry: dict[str, Any] | None = None) -> tuple[bool, str]:
+        """Try one immediate APRS-IS write without retaining or retrying the line.
+
+        The APRS-IS uplink is deliberately best-effort.  A line presented while
+        the transport is unavailable (or one whose write fails) is dropped by
+        this call and must never be replayed after a later reconnect.
+        """
         payload_line = str(line or "").rstrip("\r\n")
         if not payload_line:
-            return False, "APRS-IS TX skipped: empty packet line."
+            return False, "APRS-IS TX dropped: empty packet line."
         wire = payload_line.encode("latin-1", errors="replace") + b"\r\n"
         async with self._connection_lock:
-            if self._writer is None:
-                return False, "APRS-IS TX skipped: uplink is not connected."
+            writer = self._writer
+            is_closing = getattr(writer, "is_closing", None) if writer is not None else None
+            if writer is None or (callable(is_closing) and bool(is_closing())):
+                return False, "APRS-IS TX dropped: uplink is not connected."
             try:
-                self._writer.write(wire)
-                await asyncio.wait_for(self._writer.drain(), timeout=APRSIS_TX_DRAIN_TIMEOUT_SECONDS)
-            except (OSError, TimeoutError) as exc:
-                detail = f"APRS-IS TX failed: {exc}"
+                writer.write(wire)
+                await asyncio.wait_for(writer.drain(), timeout=APRSIS_TX_DRAIN_TIMEOUT_SECONDS)
+            except (OSError, RuntimeError, TimeoutError) as exc:
+                detail = f"APRS-IS TX dropped: write failed: {exc}"
                 await self._disconnect_locked(reason=detail, status=APRSIS_STATUS_ERROR, error=str(exc))
                 self._retry_not_before = time.monotonic() + self._reconnect_delay
                 return False, detail
@@ -1163,7 +1171,7 @@ class AprsisClientService:
         if rx_to_aprsis_write_ms is not None:
             metrics_parts.append(f"rx_to_aprsis_write_ms={rx_to_aprsis_write_ms:.3f}")
         log_event("DEBUG", "aprsis_latency", " | ".join(metrics_parts))
-        return True, "APRS-IS TX queued."
+        return True, "APRS-IS TX sent."
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():

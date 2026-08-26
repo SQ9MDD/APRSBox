@@ -2295,7 +2295,7 @@ class DigiFlowRuntimeService:
         else:
             success, detail = await self._aprsis_client.send_tnc2_line(tx_line)
         decision = "tx" if success else "drop"
-        message = detail or ("APRS-IS TX queued." if success else "APRS-IS TX failed.")
+        message = detail or ("APRS-IS TX sent." if success else "APRS-IS TX dropped.")
         uplink_identity = (
             "TCPIP* client-originated"
             if source_kind == LOCAL_TX_SOURCE_KIND

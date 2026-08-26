@@ -1,9 +1,14 @@
 # Changelog
 
+## 1.11.8.dev - 2026-08-26
+- `APRS-IS / Übertragung`: Der Uplink arbeitet jetzt nach einem eindeutigen Best-Effort-Vertrag ohne Pufferung oder Wiederholungsversuche für Frames. Ein Paket wird nur über den aktuell aktiven Transport geschrieben; eine fehlende Verbindung, ein sich schließender Transport, ein Schreibfehler oder Timeout führt zum sofortigen Verwerfen, während ein Reconnect ausschließlich neue Frames verarbeitet und frühere niemals erneut abspielt. Das Routing-Protokoll unterscheidet nun `sent` und `drop`, statt einen direkten Schreibvorgang als eingereiht zu bezeichnen.
+
+## 1.11.7.dev - 2026-08-26
+- `GUI / Hilfe`: Hilfefenster sind nicht modal, bleiben beim Ausfüllen von Formularen geöffnet und lassen sich über den Bildschirm ziehen.
+
 ## 1.11.6.dev - 2026-08-25
 - `Bandbedingungen / Reichweitenmodell`: Die Bewertung W0–W5 wurde so überarbeitet, dass jeder Empfänger seine normale Reichweite aus genau einer repräsentativen Entfernung je ortsfester Station lernt. Außergewöhnliche Fernempfänge werden robust mit Median und MAD herausgefiltert; die Schwellen für entfernte und sehr entfernte Stationen werden automatisch aus dem lokalen RF-Footprint statt aus Einzelbeobachtungen abgeleitet.
 - `Bandbedingungen / Zuverlässigkeit`: Third-Party-Frames gelten nicht mehr als physische RF-Beobachtungen, die Bestätigung einer entfernten Station erfordert nun Empfang in mindestens drei Zeitsegmenten und W3–W5 setzen klarere, wiederholbare Hinweise voraus. Außerdem wurden Referenzbasis, Reifung der Bewertungssicherheit und Modellparameter vereinheitlicht.
-- `GUI / Hilfe`: Alle Hilfefenster sind jetzt nicht modal und lassen sich am Kopfbereich über den gesamten Bildschirm ziehen; Klicks und Eingaben in darunterliegenden Formularen schließen die Hilfe nicht mehr und blockieren die Arbeit nicht.
 
 ## 1.11.5.dev - 2026-08-24
 - `Nachrichten / Gruppen`: Die bisherigen Zielgruppen wurden in `RF-Gruppen` und `APRS-IS-Gruppen` aufgeteilt; bei der ersten Verwendung übernimmt die APRS-IS-Liste die RF-Gruppen und kann anschließend unabhängig konfiguriert werden. APRS-IS-Gruppen werden im `g/...`-Filter der APRS-IS-Verbindung automatisch mit aktivierten Alarmgruppen zusammengeführt.

@@ -175,6 +175,66 @@ class AprsisDiagnosticsTests(unittest.TestCase):
 
 
 class AprsisClientRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_disconnected_line_is_dropped_and_not_replayed_after_reconnect(self) -> None:
+        class RecordingWriter:
+            def __init__(self) -> None:
+                self.writes: list[bytes] = []
+
+            def is_closing(self) -> bool:
+                return False
+
+            def write(self, data: bytes) -> None:
+                self.writes.append(data)
+
+            async def drain(self) -> None:
+                return None
+
+        with temporary_database():
+            service = AprsisClientService()
+            dropped_line = "SQ9MDD-9>APRS,WIDE1-1:>Must not be replayed"
+
+            success, detail = await service.send_tnc2_line(dropped_line)
+
+            self.assertFalse(success)
+            self.assertEqual(detail, "APRS-IS TX dropped: uplink is not connected.")
+
+            writer = RecordingWriter()
+            service._writer = writer  # type: ignore[assignment]
+            service._connected_config = ("rotate.aprs2.net", 14580, "SQ9MDD-4", "12345")
+            service._connected_since = utc_now()
+
+            # Establishing a later connection must not flush the dropped line.
+            await asyncio.sleep(0)
+            self.assertEqual(writer.writes, [])
+
+            fresh_line = "SQ9MDD-9>APRS,WIDE1-1:>Fresh packet"
+            sent, sent_detail = await service.send_tnc2_line(fresh_line)
+            self.assertTrue(sent)
+            self.assertEqual(sent_detail, "APRS-IS TX sent.")
+            self.assertEqual(writer.writes, [fresh_line.encode("latin-1") + b"\r\n"])
+
+    async def test_closing_transport_drops_line_without_write(self) -> None:
+        class ClosingWriter:
+            def __init__(self) -> None:
+                self.write_called = False
+
+            def is_closing(self) -> bool:
+                return True
+
+            def write(self, _data: bytes) -> None:
+                self.write_called = True
+
+        with temporary_database():
+            service = AprsisClientService()
+            writer = ClosingWriter()
+            service._writer = writer  # type: ignore[assignment]
+
+            success, detail = await service.send_tnc2_line("SQ9MDD-9>APRS:>Drop closing")
+
+            self.assertFalse(success)
+            self.assertEqual(detail, "APRS-IS TX dropped: uplink is not connected.")
+            self.assertFalse(writer.write_called)
+
     async def test_send_tnc2_line_times_out_writer_drain_and_disconnects(self) -> None:
         class HangingWriter:
             def __init__(self) -> None:
@@ -202,7 +262,7 @@ class AprsisClientRuntimeTests(unittest.IsolatedAsyncioTestCase):
             elapsed = time.monotonic() - started
 
             self.assertFalse(success)
-            self.assertIn("APRS-IS TX failed", detail)
+            self.assertIn("APRS-IS TX dropped: write failed", detail)
             self.assertLess(elapsed, 1.0)
             self.assertIsNone(service._writer)
 
