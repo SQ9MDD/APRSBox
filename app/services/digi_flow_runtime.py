@@ -60,6 +60,8 @@ DIGI_GUARD_LOCAL_MESSAGE_MY_STATION = "DIGI_GUARD_LOCAL_MESSAGE_MY_STATION"
 DIGI_GUARD_LOCAL_QUERY_MY_STATION = "DIGI_GUARD_LOCAL_QUERY_MY_STATION"
 DIGI_GUARD_LOCAL_MESSAGE_WX = "DIGI_GUARD_LOCAL_MESSAGE_WX"
 DIGI_GUARD_LOCAL_QUERY_WX = "DIGI_GUARD_LOCAL_QUERY_WX"
+DIGI_GUARD_LOCAL_SOURCE_MY_STATION = "DIGI_GUARD_LOCAL_SOURCE_MY_STATION"
+DIGI_GUARD_LOCAL_SOURCE_WX = "DIGI_GUARD_LOCAL_SOURCE_WX"
 DIGI_GUARD_THIRD_PARTY = "DIGI_GUARD_THIRD_PARTY"
 DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL = "DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL"
 _LOCAL_IDENTITY_MY = "my_station"
@@ -1105,6 +1107,32 @@ class DigiFlowRuntimeService:
                 message=_tf(
                     "RF Digipeating Path Rule rejected frame ({reason_code}) because APRS payload starts with third-party encapsulation marker {marker}.",
                     {"reason_code": DIGI_GUARD_THIRD_PARTY, "marker": "}"},
+                ),
+            )
+            return {"decision": "drop"}
+
+        source_identity = _canonical_callsign_identity(parsed.get("source"))
+        source_owner = local_identities.get(source_identity) if source_identity else None
+        if source_owner:
+            if source_owner == _LOCAL_IDENTITY_WX:
+                reason_code = DIGI_GUARD_LOCAL_SOURCE_WX
+                identity_label = _t("WX station")
+            else:
+                reason_code = DIGI_GUARD_LOCAL_SOURCE_MY_STATION
+                identity_label = _t("My station")
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="path_rule",
+                decision="rejected",
+                message=_tf(
+                    "RF Digipeating Path Rule rejected frame ({reason_code}) because its source is local {identity_label} {local_identity}.",
+                    {
+                        "reason_code": reason_code,
+                        "identity_label": identity_label,
+                        "local_identity": source_identity,
+                    },
                 ),
             )
             return {"decision": "drop"}
