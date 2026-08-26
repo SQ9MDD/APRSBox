@@ -2,6 +2,7 @@
 
 ## 1.11.10.dev - 2026-08-26
 - `Mapa / última trama`: el widget usa ahora el mismo flujo de tráfico en vivo que el scroller, por lo que muestra inmediatamente su entrada más reciente en vez de esperar a la actualización periódica de la lista de estaciones; los datos de QSY, distancia y comentario se completan desde el registro actual de la estación.
+- `Condiciones de banda / datos de servicio`: se añadió bajo los datos del modelo un panel de diagnóstico que muestra la base de referencia aprendida, la mediana y el alcance P90 de las estaciones fijas, los umbrales automáticos de distancia y los contadores actuales de estaciones, recepciones lejanas confirmadas, áreas geográficas y tramas RF.
 
 ## 1.11.8.dev - 2026-08-26
 - `APRS-IS / transmisión`: el uplink aplica ahora un contrato explícito de mejor esfuerzo, sin almacenar tramas en búfer ni reintentarlas. Un paquete solo se escribe mediante el transporte activo en ese momento; la ausencia de conexión, un transporte en cierre, un error de escritura o un timeout provoca un descarte inmediato, mientras que la reconexión solo procesa tramas nuevas y nunca reproduce las anteriores. El registro de routing distingue ahora `sent` de `drop` en lugar de describir una escritura directa como encolada.

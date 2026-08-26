@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.11.10.dev - 2026-08-26
+- `Bandbedingungen / Servicedaten`: Unter den Modelldaten wurde ein Diagnosepanel ergänzt, das die gelernte Referenzbasis, Median und P90-Reichweite ortsfester Stationen, automatische Entfernungsschwellen sowie aktuelle Zähler für Stationen, bestätigte Fernempfänge, geografische Gebiete und RF-Frames anzeigt.
+
 ## 1.11.8.dev - 2026-08-26
 - `APRS-IS / Übertragung`: Der Uplink arbeitet jetzt nach einem eindeutigen Best-Effort-Vertrag ohne Pufferung oder Wiederholungsversuche für Frames. Ein Paket wird nur über den aktuell aktiven Transport geschrieben; eine fehlende Verbindung, ein sich schließender Transport, ein Schreibfehler oder Timeout führt zum sofortigen Verwerfen, während ein Reconnect ausschließlich neue Frames verarbeitet und frühere niemals erneut abspielt. Das Routing-Protokoll unterscheidet nun `sent` und `drop`, statt einen direkten Schreibvorgang als eingereiht zu bezeichnen.
 

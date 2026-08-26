@@ -1150,6 +1150,7 @@ def _evaluate_hour(
         "max_confirmed_distance_km": _rounded(max_confirmed_distance),
         "normal_station_count": round(normal_station_count, 1),
         "normal_p90_distance_km": _rounded(normal_p90_distance),
+        "baseline_hour_count": len(baseline),
         "baseline_distance_station_count": int(baseline_distance_model["raw_count"]),
         "baseline_distance_clean_station_count": int(baseline_distance_model["cleaned_count"]),
         "baseline_distance_median_km": _rounded(baseline_distance_model["median_km"]),
@@ -1514,6 +1515,31 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
     )
     selected["confidence_score"] = round(displayed_confidence, 4)
     selected["confidence_percent"] = int(round(displayed_confidence * 100.0))
+    service_data_keys = (
+        "baseline_hour_count",
+        "baseline_distance_station_count",
+        "baseline_distance_clean_station_count",
+        "baseline_distance_median_km",
+        "baseline_distance_mad_km",
+        "baseline_distance_spread_km",
+        "normal_station_count",
+        "normal_p90_distance_km",
+        "far_threshold_km",
+        "very_far_threshold_km",
+        "fixed_station_count",
+        "positioned_station_count",
+        "median_distance_km",
+        "p90_distance_km",
+        "max_confirmed_distance_km",
+        "far_station_count",
+        "confirmed_far_station_count",
+        "very_far_station_count",
+        "confirmed_very_far_station_count",
+        "new_area_count",
+        "current_segment_count",
+        "rx_total",
+    )
+    selected["service_data"] = {key: current.get(key) for key in service_data_keys}
     return selected
 
 
