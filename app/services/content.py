@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from html import escape
 import ipaddress
 import json
@@ -118,10 +119,29 @@ def get_aprs_symbol_set() -> str:
 def _aprs_symbol_icon_path_for_set(symbol: str, symbol_set: str) -> str | None:
     icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
     filename = _aprs_symbol_icon_filename(symbol, extension=extension)
-    candidate = settings.static_dir / "icons" / icon_dir / filename
-    if candidate.exists():
-        return f"icons/{icon_dir}/{filename}"
+    relative_path = f"icons/{icon_dir}/{filename}"
+    if relative_path in _aprs_symbol_icon_inventory():
+        return relative_path
     return None
+
+
+@lru_cache(maxsize=1)
+def _aprs_symbol_icon_inventory() -> frozenset[str]:
+    """Read the packaged icon catalog once, never once per rendered row."""
+    icon_root = settings.static_dir / "icons"
+    paths: set[str] = set()
+    for symbol_set in (APRS_SYMBOL_SET_LEGACY, APRS_SYMBOL_SET_MODERN):
+        icon_dir, _extension = _aprs_symbol_icon_set_parts(symbol_set)
+        directory = icon_root / icon_dir
+        try:
+            paths.update(
+                f"icons/{icon_dir}/{entry.name}"
+                for entry in directory.iterdir()
+                if entry.is_file()
+            )
+        except OSError:
+            continue
+    return frozenset(paths)
 
 
 def _aprs_symbol_icon_filename(symbol: str, *, extension: str) -> str:
@@ -142,9 +162,9 @@ def _aprs_symbol_icon_path_for_resolved_set(symbol: str, symbol_set: str) -> str
             return candidate
     for candidate_set in (symbol_set, alternate_set):
         icon_dir, extension = _aprs_symbol_icon_set_parts(candidate_set)
-        candidate = settings.static_dir / "icons" / icon_dir / f"x.{extension}"
-        if candidate.exists():
-            return f"icons/{icon_dir}/x.{extension}"
+        relative_path = f"icons/{icon_dir}/x.{extension}"
+        if relative_path in _aprs_symbol_icon_inventory():
+            return relative_path
     return "icons/verG/x.gif"
 
 
@@ -152,9 +172,9 @@ def get_aprs_symbol_icon_fallback_path(*, symbol_set: str | None = None) -> str:
     current_set = symbol_set or get_aprs_symbol_set()
     for symbol_set in (current_set, APRS_SYMBOL_SET_LEGACY if current_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN):
         icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
-        candidate = settings.static_dir / "icons" / icon_dir / f"x.{extension}"
-        if candidate.exists():
-            return f"icons/{icon_dir}/x.{extension}"
+        relative_path = f"icons/{icon_dir}/x.{extension}"
+        if relative_path in _aprs_symbol_icon_inventory():
+            return relative_path
     return "icons/verG/x.gif"
 
 

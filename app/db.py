@@ -1035,6 +1035,9 @@ CREATE INDEX IF NOT EXISTS idx_map_station_state_last_seen ON map_station_state(
 INSERT OR IGNORE INTO map_station_state_meta(id, revision, is_ready) VALUES (1, 0, 0);
 CREATE INDEX IF NOT EXISTS idx_aprs_alerts_last_seen_at ON aprs_alerts(last_seen_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_aprs_alerts_updated_at ON aprs_alerts(updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_aprs_alerts_active_last_seen
+    ON aprs_alerts(last_seen_at DESC, id DESC)
+    WHERE superseded_by_alert_id IS NULL AND is_active = 1;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aprs_alert_parts_identity
     ON aprs_alert_parts(part_identity_key);
 CREATE INDEX IF NOT EXISTS idx_aprs_alert_parts_alert_part
@@ -1061,9 +1064,13 @@ CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_job
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_kind_status_scheduled_at ON outbound_jobs(kind, status, scheduled_at, id);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_kind_activity_desc
     ON outbound_jobs(kind, COALESCE(sent_at, started_at, scheduled_at, created_at) DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_aprs_objects_enabled_id ON aprs_objects(is_enabled, id);
+CREATE INDEX IF NOT EXISTS idx_bulletins_enabled_id ON bulletins(is_enabled, id);
 CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_addressee
+    ON aprs_messages(direction, addressee, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
 CREATE INDEX IF NOT EXISTS idx_wx_sources_type_enabled ON wx_sources(source_type, enabled, name);
 CREATE INDEX IF NOT EXISTS idx_wx_mappings_source_enabled ON wx_mappings(source_id, enabled, parameter_name);
@@ -3667,6 +3674,19 @@ def get_app_setting(key: str) -> str | None:
     if row is None:
         return None
     return str(row["value"])
+
+
+def get_app_settings(keys: tuple[str, ...] | list[str]) -> dict[str, str]:
+    """Load a fixed group of settings with one query and one connection."""
+    normalized_keys = tuple(dict.fromkeys(str(key) for key in keys if str(key)))
+    if not normalized_keys:
+        return {}
+    placeholders = ", ".join("?" for _ in normalized_keys)
+    rows = fetch_all(
+        f"SELECT key, value FROM app_settings WHERE key IN ({placeholders})",
+        normalized_keys,
+    )
+    return {str(row["key"]): str(row["value"]) for row in rows}
 
 
 def set_app_setting(key: str, value: str) -> None:

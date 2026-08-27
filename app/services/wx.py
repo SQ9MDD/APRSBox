@@ -8,7 +8,7 @@ import sqlite3
 from typing import Any
 from urllib.parse import urlsplit
 
-from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
+from app.db import connection_scope, fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
 from app.services.content import get_active_tnc_interfaces, get_station_settings
 from app.services.outbound import build_wx_tnc2, enqueue_wx_job
 from app.services.tx_scope import (
@@ -70,10 +70,18 @@ def ensure_wx_defaults() -> None:
 
 
 def get_wx_page_data(*, edit_source_id: int | None = None, source_discovery: dict[str, Any] | None = None) -> dict[str, Any]:
+    with connection_scope():
+        return _get_wx_page_data_scoped(
+            edit_source_id=edit_source_id,
+            source_discovery=source_discovery,
+        )
+
+
+def _get_wx_page_data_scoped(*, edit_source_id: int | None, source_discovery: dict[str, Any] | None) -> dict[str, Any]:
     ensure_wx_defaults()
     config = get_wx_config()
-    mappings = get_wx_mapping_rows()
-    sources = list_wx_sources()
+    mappings = get_wx_mapping_rows(ensure_defaults=False)
+    sources = list_wx_sources(ensure_defaults=False)
     source_form = _build_source_form(get_wx_source(edit_source_id) if edit_source_id is not None else None)
     return {
         "wx_config": config,
@@ -203,8 +211,9 @@ def safe_save_wx_config(payload: dict[str, Any]) -> tuple[bool, str | None]:
     return True, None
 
 
-def list_wx_sources() -> list[dict[str, Any]]:
-    ensure_wx_defaults()
+def list_wx_sources(*, ensure_defaults: bool = True) -> list[dict[str, Any]]:
+    if ensure_defaults:
+        ensure_wx_defaults()
     rows = fetch_all(
         """
         SELECT *
@@ -385,9 +394,10 @@ def safe_save_wx_mappings(payload_by_parameter: dict[str, dict[str, Any]]) -> tu
     return True, None
 
 
-def get_wx_mapping_rows() -> list[dict[str, Any]]:
-    ensure_wx_defaults()
-    source_rows = list_wx_sources()
+def get_wx_mapping_rows(*, ensure_defaults: bool = True) -> list[dict[str, Any]]:
+    if ensure_defaults:
+        ensure_wx_defaults()
+    source_rows = list_wx_sources(ensure_defaults=False)
     sources_by_id = {int(item["id"]): item for item in source_rows}
     cache_rows = {
         str(row["parameter_name"]): dict(row)

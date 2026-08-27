@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import Request
 
-from app.db import fetch_one, get_app_setting
+from app.db import connection_scope, fetch_one, get_app_setting
 from app import get_version
 from app.datetime_utils import format_display_datetime
 from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
@@ -70,6 +70,34 @@ def _resolve_station_identity(station_settings: dict[str, Any] | None = None) ->
 
 
 def build_template_context(
+    request: Request,
+    *,
+    page_title: str,
+    current_user: Any = None,
+    active_nav: str | None = None,
+    perform_alert_maintenance: bool = True,
+    prefetched_station_settings: dict[str, Any] | None = None,
+    prefetched_app_language: str | None = None,
+    prefetched_aprs_symbol_set: str | None = None,
+    prefetched_map_config: dict[str, Any] | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    with connection_scope():
+        return _build_template_context_scoped(
+            request,
+            page_title=page_title,
+            current_user=current_user,
+            active_nav=active_nav,
+            perform_alert_maintenance=perform_alert_maintenance,
+            prefetched_station_settings=prefetched_station_settings,
+            prefetched_app_language=prefetched_app_language,
+            prefetched_aprs_symbol_set=prefetched_aprs_symbol_set,
+            prefetched_map_config=prefetched_map_config,
+            **extra,
+        )
+
+
+def _build_template_context_scoped(
     request: Request,
     *,
     page_title: str,

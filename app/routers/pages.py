@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import wraps
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -273,6 +274,18 @@ from app.services.wx import (
 )
 
 router = APIRouter()
+
+
+def _scoped_read_model(handler: Any) -> Any:
+    """Keep a composed synchronous read-model on one SQLite connection."""
+    @wraps(handler)
+    def scoped(*args: Any, **kwargs: Any) -> Any:
+        with connection_scope():
+            return handler(*args, **kwargs)
+
+    return scoped
+
+
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
 _HELP_ROOT_DIR = _REPO_ROOT_DIR / "help"
 _CHANGELOG_FILES_BY_LANGUAGE: dict[str, Path] = {
@@ -1188,6 +1201,7 @@ def root(request: Request) -> RedirectResponse:
 
 
 @router.get("/dashboard")
+@_scoped_read_model
 def dashboard(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -1226,6 +1240,7 @@ def dashboard(
 
 
 @router.get("/band-condition")
+@_scoped_read_model
 def band_condition_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -1244,6 +1259,7 @@ def band_condition_page(
 
 
 @router.get("/api/band-condition")
+@_scoped_read_model
 def band_condition_snapshot(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
@@ -1251,6 +1267,7 @@ def band_condition_snapshot(
 
 
 @router.get("/api/band-condition/history")
+@_scoped_read_model
 def band_condition_history(
     days: int = 365,
     _: UserIdentity = Depends(get_current_user),
@@ -1259,6 +1276,7 @@ def band_condition_history(
 
 
 @router.get("/stations")
+@_scoped_read_model
 def stations_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -1284,6 +1302,7 @@ def stations_page(
 
 
 @router.get("/stations/{callsign:path}")
+@_scoped_read_model
 def station_detail_page(
     callsign: str,
     request: Request,
@@ -1354,6 +1373,7 @@ def station_detail_message(
 
 
 @router.get("/api/stations/{callsign:path}")
+@_scoped_read_model
 def station_detail_snapshot(
     callsign: str,
     request: Request,
@@ -1372,6 +1392,7 @@ def station_detail_snapshot(
 
 
 @router.get("/api/stations")
+@_scoped_read_model
 def stations_snapshot(
     since_revision: int | None = None,
     _: UserIdentity = Depends(get_current_user),
@@ -1701,7 +1722,7 @@ async def settings_update_channel_set_api(
 ) -> JSONResponse:
     payload = await request.json()
     try:
-        selected = save_update_channel(str(payload.get("channel") or ""))
+        selected = await asyncio.to_thread(save_update_channel, str(payload.get("channel") or ""))
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": _translate(str(exc))}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse({"ok": True, "channel": selected})
@@ -1894,7 +1915,7 @@ async def settings_import_configuration_backup(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
 
-    success, error = safe_import_configuration_backup(payload)
+    success, error = await asyncio.to_thread(safe_import_configuration_backup, payload)
     if not success:
         return JSONResponse(
             {"ok": False, "error": _translate(error or "Failed to import configuration backup.")},
@@ -2598,6 +2619,7 @@ def digi_create(
 
 
 @router.get("/digi-flows")
+@_scoped_read_model
 def digi_flows_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -2741,7 +2763,7 @@ async def digi_flow_create(
         context = _digi_flow_editor_context(request, current_user, form_data=build_digi_flow_editor_payload(), flash=str(exc))
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
-    flow_id, error = safe_create_digi_flow(payload)
+    flow_id, error = await asyncio.to_thread(safe_create_digi_flow, payload)
     if error:
         if wants_json:
             return JSONResponse(
@@ -2796,7 +2818,7 @@ async def digi_flow_update(
         context = _digi_flow_editor_context(request, current_user, flow_id=flow_id, form_data=build_digi_flow_editor_payload(), flash=str(exc))
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
-    error = safe_update_digi_flow(flow_id, payload)
+    error = await asyncio.to_thread(safe_update_digi_flow, flow_id, payload)
     if error:
         if wants_json:
             return JSONResponse(
@@ -2895,6 +2917,7 @@ def digi_flow_delete(
 
 
 @router.get("/objects")
+@_scoped_read_model
 def objects_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -3042,6 +3065,7 @@ def objects_send_now(
 
 
 @router.get("/items")
+@_scoped_read_model
 def items_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -3141,6 +3165,7 @@ def items_delete(
 
 
 @router.get("/bulletins")
+@_scoped_read_model
 def bulletins_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -3308,6 +3333,7 @@ def station_page(
 
 
 @router.get("/map")
+@_scoped_read_model
 def map_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -3340,6 +3366,7 @@ def map_page(
 
 
 @router.get("/api/map/stations-lite")
+@_scoped_read_model
 def map_stations_lite(
     since_revision: int | None = None,
     _: UserIdentity = Depends(get_current_user),
@@ -3348,6 +3375,7 @@ def map_stations_lite(
 
 
 @router.get("/api/map/alert-areas")
+@_scoped_read_model
 def map_alert_areas(
     request: Request,
     _: UserIdentity = Depends(get_current_user),
@@ -3365,6 +3393,7 @@ def map_alert_areas(
 
 
 @router.get("/api/map/stations-details")
+@_scoped_read_model
 def map_station_details(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
@@ -3372,6 +3401,7 @@ def map_station_details(
 
 
 @router.get("/api/map/mobile-tracks")
+@_scoped_read_model
 def map_mobile_tracks(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
@@ -3379,6 +3409,7 @@ def map_mobile_tracks(
 
 
 @router.get("/api/map/stations")
+@_scoped_read_model
 def map_stations(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
@@ -3447,6 +3478,7 @@ async def map_tile_events(
 
 
 @router.get("/wx")
+@_scoped_read_model
 def wx_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -3522,7 +3554,7 @@ async def wx_mappings_update(
             "unit_override": str(form.get(f"unit_override__{normalized}") or "").strip(),
             "cache_max_age_s": str(form.get(f"cache_max_age_s__{normalized}") or "").strip(),
         }
-    success, error = safe_save_wx_mappings(payload_by_parameter)
+    success, error = await asyncio.to_thread(safe_save_wx_mappings, payload_by_parameter)
     if wants_json:
         message = "WX mappings saved." if success else (error or "Failed to save WX mappings.")
         return JSONResponse(
@@ -3784,6 +3816,7 @@ def wx_source_discover(
 
 
 @router.get("/notifications")
+@_scoped_read_model
 def notifications_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -4297,6 +4330,7 @@ def _own_alert_compose_page_context() -> dict[str, Any]:
 
 
 @router.get("/alerts")
+@_scoped_read_model
 def alerts_page(
     request: Request,
     page: int = 1,
@@ -4379,7 +4413,7 @@ async def own_alert_preview(
         payload = await request.json()
         if not isinstance(payload, dict):
             raise ValueError("Invalid alarm payload.")
-        return JSONResponse(preview_own_alert(payload))
+        return JSONResponse(await asyncio.to_thread(preview_own_alert, payload))
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -4396,7 +4430,8 @@ async def own_alert_send(
         payload = await request.json()
         if not isinstance(payload, dict):
             raise ValueError("Invalid alarm payload.")
-        return JSONResponse({"ok": True, **create_own_alert(payload)})
+        result = await asyncio.to_thread(create_own_alert, payload)
+        return JSONResponse({"ok": True, **result})
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -4569,7 +4604,7 @@ async def alerts_delete_selected(
             alert_ids.append(int(str(raw_id)))
         except (TypeError, ValueError):
             continue
-    deleted = delete_alerts(alert_ids)
+    deleted = await asyncio.to_thread(delete_alerts, alert_ids)
     if deleted <= 0:
         return _alerts_redirect(request, "/alerts", "No alerts selected.", success=False)
     return _alerts_redirect(
@@ -4600,6 +4635,7 @@ def traffic_frame_detail_page(
 
 
 @router.get("/traffic")
+@_scoped_read_model
 def traffic_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -4622,6 +4658,7 @@ def traffic_page(
 
 
 @router.get("/statistics")
+@_scoped_read_model
 def statistics_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -4645,6 +4682,7 @@ def statistics_page(
 
 
 @router.get("/messages")
+@_scoped_read_model
 def messages_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -4661,6 +4699,7 @@ def messages_page(
 
 
 @router.get("/api/messages")
+@_scoped_read_model
 def messages_snapshot(
     _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
@@ -4703,10 +4742,15 @@ async def messages_create_conversation(
 ) -> JSONResponse:
     payload = await request.json()
     try:
-        conversation = create_or_update_conversation(str(payload.get("callsign") or ""), path="")
+        conversation = await asyncio.to_thread(
+            create_or_update_conversation,
+            str(payload.get("callsign") or ""),
+            path="",
+        )
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
-    return JSONResponse({"conversation_id": str(conversation.get("id") or ""), "messages_view": get_live_messages_page_data()})
+    messages_view = await asyncio.to_thread(get_live_messages_page_data)
+    return JSONResponse({"conversation_id": str(conversation.get("id") or ""), "messages_view": messages_view})
 
 
 @router.put("/api/messages/settings")
@@ -4716,10 +4760,11 @@ async def messages_save_settings(
 ) -> JSONResponse:
     payload = await request.json()
     try:
-        settings = save_message_settings(payload if isinstance(payload, dict) else {})
+        settings = await asyncio.to_thread(save_message_settings, payload if isinstance(payload, dict) else {})
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
-    return JSONResponse({"ok": True, "settings": settings, "messages_view": get_live_messages_page_data()})
+    messages_view = await asyncio.to_thread(get_live_messages_page_data)
+    return JSONResponse({"ok": True, "settings": settings, "messages_view": messages_view})
 
 
 @router.post("/api/messages/send")
@@ -4731,15 +4776,21 @@ async def messages_send(
     try:
         conversation_id = payload.get("conversation_id")
         if conversation_id not in {None, ""}:
-            update_conversation_path(int(conversation_id), str(payload.get("path") or ""))
-        message = queue_outgoing_message(
+            await asyncio.to_thread(
+                update_conversation_path,
+                int(conversation_id),
+                str(payload.get("path") or ""),
+            )
+        message = await asyncio.to_thread(
+            queue_outgoing_message,
             callsign=str(payload.get("callsign") or ""),
             message_text=str(payload.get("message_text") or ""),
             path=str(payload.get("path") or ""),
         )
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
-    return JSONResponse({"message_id": str(message["id"]), "messages_view": get_live_messages_page_data()})
+    messages_view = await asyncio.to_thread(get_live_messages_page_data)
+    return JSONResponse({"message_id": str(message["id"]), "messages_view": messages_view})
 
 
 @router.post("/api/messages/conversations/{conversation_id}/read")
@@ -4759,10 +4810,11 @@ async def messages_update_path(
 ) -> JSONResponse:
     payload = await request.json()
     try:
-        update_conversation_path(conversation_id, str(payload.get("path") or ""))
+        await asyncio.to_thread(update_conversation_path, conversation_id, str(payload.get("path") or ""))
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
-    return JSONResponse({"ok": True, "messages_view": get_live_messages_page_data()})
+    messages_view = await asyncio.to_thread(get_live_messages_page_data)
+    return JSONResponse({"ok": True, "messages_view": messages_view})
 
 
 @router.post("/api/messages/conversations/{conversation_id}/delete")
@@ -4787,8 +4839,9 @@ async def messages_delete_selected(
         conversation_ids = [int(conversation_id) for conversation_id in raw_ids]
     except (TypeError, ValueError):
         return JSONResponse({"error": "conversation_ids must contain integer IDs."}, status_code=status.HTTP_400_BAD_REQUEST)
-    deleted = delete_message_conversations(conversation_ids)
-    return JSONResponse({"ok": True, "deleted": deleted, "messages_view": get_live_messages_page_data()})
+    deleted = await asyncio.to_thread(delete_message_conversations, conversation_ids)
+    messages_view = await asyncio.to_thread(get_live_messages_page_data)
+    return JSONResponse({"ok": True, "deleted": deleted, "messages_view": messages_view})
 
 
 @router.post("/api/messages/clear")
@@ -4812,7 +4865,7 @@ def messages_retry(
 
 
 @router.get("/api/traffic")
-async def traffic_snapshot(
+def traffic_snapshot(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_traffic_snapshot())

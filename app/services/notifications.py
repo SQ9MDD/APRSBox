@@ -11,7 +11,17 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from app.db import fetch_all, fetch_one, get_connection, get_app_setting, log_event, set_app_setting, utc_now
+from app.db import (
+    connection_scope,
+    fetch_all,
+    fetch_one,
+    get_app_setting,
+    get_app_settings,
+    get_connection,
+    log_event,
+    set_app_setting,
+    utc_now,
+)
 from app.i18n import get_app_language, get_translator
 from app.services.alarm_groups import is_configured_aprs_alarm_group
 from app.services.content import get_station_settings, get_visible_station_snapshots
@@ -34,23 +44,36 @@ def _t(value: object) -> str:
 
 
 def ensure_notification_defaults() -> None:
-    for key in (
+    keys = (
         NOTIFICATION_MESSAGES_ENABLED_KEY,
         NOTIFICATION_MESSAGES_INCLUDE_CONTENT_KEY,
         NOTIFICATION_RADAR_ENABLED_KEY,
         NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY,
-    ):
-        if get_app_setting(key) is None:
+    )
+    existing = get_app_settings(keys)
+    for key in keys:
+        if key not in existing:
             set_app_setting(key, "" if key == NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY else "0")
 
 
-def get_notification_settings() -> dict[str, bool]:
-    ensure_notification_defaults()
+def get_notification_settings(*, ensure_defaults: bool = True) -> dict[str, bool]:
+    if ensure_defaults:
+        ensure_notification_defaults()
+    saved = get_app_settings(
+        (
+            NOTIFICATION_MESSAGES_ENABLED_KEY,
+            NOTIFICATION_MESSAGES_INCLUDE_CONTENT_KEY,
+            NOTIFICATION_RADAR_ENABLED_KEY,
+            NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY,
+        )
+    )
     return {
-        "messages_enabled": _setting_flag(get_app_setting(NOTIFICATION_MESSAGES_ENABLED_KEY)),
-        "messages_include_content": _setting_flag(get_app_setting(NOTIFICATION_MESSAGES_INCLUDE_CONTENT_KEY)),
-        "radar_enabled": _setting_flag(get_app_setting(NOTIFICATION_RADAR_ENABLED_KEY)),
-        "radar_ignored_patterns": _normalize_radar_ignored_patterns(get_app_setting(NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY)),
+        "messages_enabled": _setting_flag(saved.get(NOTIFICATION_MESSAGES_ENABLED_KEY)),
+        "messages_include_content": _setting_flag(saved.get(NOTIFICATION_MESSAGES_INCLUDE_CONTENT_KEY)),
+        "radar_enabled": _setting_flag(saved.get(NOTIFICATION_RADAR_ENABLED_KEY)),
+        "radar_ignored_patterns": _normalize_radar_ignored_patterns(
+            saved.get(NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY)
+        ),
     }
 
 
@@ -80,8 +103,9 @@ def safe_save_notification_settings(payload: dict[str, Any]) -> tuple[bool, str 
     return True, None
 
 
-def list_notification_transports() -> list[dict[str, Any]]:
-    ensure_notification_defaults()
+def list_notification_transports(*, ensure_defaults: bool = True) -> list[dict[str, Any]]:
+    if ensure_defaults:
+        ensure_notification_defaults()
     rows = fetch_all(
         """
         SELECT *
@@ -191,8 +215,9 @@ def test_notification_transport(transport_id: int) -> dict[str, Any]:
     return {"ok": False, "error": error or "Notification test failed."}
 
 
-def list_notification_radar_rules() -> list[dict[str, Any]]:
-    ensure_notification_defaults()
+def list_notification_radar_rules(*, ensure_defaults: bool = True) -> list[dict[str, Any]]:
+    if ensure_defaults:
+        ensure_notification_defaults()
     rows = fetch_all(
         """
         SELECT *
@@ -303,13 +328,21 @@ def clear_radar_notification_history() -> None:
 
 
 def get_notifications_page_data(*, edit_transport_id: int | None = None, edit_rule_id: int | None = None) -> dict[str, Any]:
+    with connection_scope():
+        return _get_notifications_page_data_scoped(
+            edit_transport_id=edit_transport_id,
+            edit_rule_id=edit_rule_id,
+        )
+
+
+def _get_notifications_page_data_scoped(*, edit_transport_id: int | None, edit_rule_id: int | None) -> dict[str, Any]:
     ensure_notification_defaults()
     transport = get_notification_transport(edit_transport_id)
     rule = get_notification_radar_rule(edit_rule_id)
-    transports = list_notification_transports()
-    rules = list_notification_radar_rules()
+    transports = list_notification_transports(ensure_defaults=False)
+    rules = list_notification_radar_rules(ensure_defaults=False)
     radar_logs = list_notification_radar_event_logs()
-    settings = get_notification_settings()
+    settings = get_notification_settings(ensure_defaults=False)
     return {
         "notification_settings": settings,
         "notification_transports": transports,

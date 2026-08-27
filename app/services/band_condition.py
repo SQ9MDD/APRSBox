@@ -5,7 +5,7 @@ import math
 from statistics import median
 from typing import Any
 
-from app.db import fetch_all, fetch_one, get_connection, utc_now
+from app.db import connection_scope, fetch_all, fetch_one, get_connection, utc_now
 from app.services.content import get_station_settings, parse_tnc2_frame
 from app.services.traffic_source import STATISTICS_TRAFFIC_SQL_PREDICATE
 
@@ -1584,14 +1584,16 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
 
 
 def get_band_condition_snapshot(*, now_utc: datetime | None = None) -> dict[str, Any]:
-    now = _normalize_utc_datetime(now_utc or datetime.now(timezone.utc))
-    items = [_interface_snapshot(interface, now_utc=now) for interface in _monitored_interfaces()]
-    return {
-        "generated_at": utc_now(),
-        "interfaces": items,
-        # Retain the historical key for dashboard callers while the value is now interface-specific.
-        "bands": items,
-    }
+    with connection_scope():
+        now = _normalize_utc_datetime(now_utc or datetime.now(timezone.utc))
+        interfaces = _monitored_interfaces()
+        items = [_interface_snapshot(interface, now_utc=now) for interface in interfaces]
+        return {
+            "generated_at": utc_now(),
+            "interfaces": items,
+            # Retain the historical key for dashboard callers while the value is now interface-specific.
+            "bands": items,
+        }
 
 
 def get_band_condition_page_data() -> dict[str, Any]:
@@ -1610,22 +1612,30 @@ def get_band_condition_history(*, days: int = 365) -> dict[str, Any]:
     bucket_count = normalized_days * 24
     labels = [(start_hour + timedelta(hours=index)).isoformat() for index in range(bucket_count)]
     label_index = {label: index for index, label in enumerate(labels)}
-    items: list[dict[str, Any]] = []
-    for interface in _monitored_interfaces():
-        interface_id = int(interface["id"])
-        band = normalize_band(interface.get("band"))
-        rows = fetch_all(
-            """
-            SELECT hour_start_utc, condition_index, confidence_score
+    interfaces = _monitored_interfaces()
+    interface_ids = tuple(int(interface["id"]) for interface in interfaces)
+    rows_by_interface_band: dict[tuple[int, str], list[dict[str, Any]]] = {}
+    if interface_ids:
+        placeholders = ", ".join("?" for _ in interface_ids)
+        history_rows = fetch_all(
+            f"""
+            SELECT interface_id, band, hour_start_utc, condition_index, confidence_score
             FROM band_condition_hourly
-            WHERE interface_id = ?
-              AND band = ?
+            WHERE interface_id IN ({placeholders})
               AND hour_start_utc >= ?
               AND hour_start_utc < ?
-            ORDER BY hour_start_utc ASC
+            ORDER BY interface_id ASC, band ASC, hour_start_utc ASC
             """,
-            (interface_id, band, start_hour.isoformat(), end_hour.isoformat()),
+            (*interface_ids, start_hour.isoformat(), end_hour.isoformat()),
         )
+        for row in history_rows:
+            key = (int(row["interface_id"]), normalize_band(row["band"]))
+            rows_by_interface_band.setdefault(key, []).append(dict(row))
+    items: list[dict[str, Any]] = []
+    for interface in interfaces:
+        interface_id = int(interface["id"])
+        band = normalize_band(interface.get("band"))
+        rows = rows_by_interface_band.get((interface_id, band), [])
         indexes: list[int | None] = [None] * bucket_count
         confidence: list[int | None] = [None] * bucket_count
         for row in rows:
