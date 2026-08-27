@@ -2,6 +2,7 @@
 
 ## 1.12 - 2026-08-27
 - `Stable release`: improved the station map and tracks with overlapping-marker spreading and immediate latest-frame updates. Reworked band-condition assessment and diagnostics, separated RF and APRS-IS groups, streamlined interface and help handling, and clarified APRS-IS best-effort transmission without frame buffering or retries.
+- `Backend / performance`: removed N+1 queries and per-record I/O, batched settings and list-data reads, reduced SQLite connection churn, and added indexes verified with query plans.
 
 ## 1.11.10.dev - 2026-08-26
 - `Map / latest frame`: the widget now uses the same live traffic stream as the scroller, so it immediately shows the newest scroller entry instead of waiting for the periodic station-list refresh; QSY, distance, and comment data are enriched from the current station record.

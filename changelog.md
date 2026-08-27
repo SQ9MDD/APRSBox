@@ -2,6 +2,7 @@
 
 ## 1.12 - 27.08.2026
 - `Wydanie stabilne`: udoskonalono mapę i ślady stacji, dodając rozsuwanie nakładających się markerów oraz natychmiastową aktualizację ostatniej ramki. Przebudowano ocenę warunków pasma i jej diagnostykę, rozdzielono grupy RF i APRS-IS, uproszczono zarządzanie interfejsami i pomocą oraz doprecyzowano transmisję APRS-IS w trybie best effort bez buforowania i ponawiania ramek.
+- `Backend / wydajność`: usunięto zapytania N+1 i operacje I/O wykonywane per rekord, zbatchowano odczyty ustawień i danych listowych, ograniczono liczbę połączeń SQLite oraz dodano indeksy potwierdzone planami zapytań.
 
 ## 1.11.10.dev - 26.08.2026
 - `Mapa / ostatnia ramka`: widżet korzysta teraz z tego samego strumienia ruchu co scroller, więc natychmiast pokazuje jego najnowszy wpis zamiast czekać na cykliczne odświeżenie listy stacji; dane QSY, dystansu i komentarza są uzupełniane z aktualnego rekordu stacji.

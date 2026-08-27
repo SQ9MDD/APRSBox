@@ -2,6 +2,7 @@
 
 ## 1.12 - 2026-08-27
 - `Stabile Version`: Karte und Stationstracks wurden durch das Auffächern überlappender Marker und die sofortige Aktualisierung des neuesten Frames verbessert. Die Bewertung und Diagnose der Bandbedingungen wurde überarbeitet, RF- und APRS-IS-Gruppen wurden getrennt, die Verwaltung von Schnittstellen und Hilfe vereinfacht und die APRS-IS-Best-Effort-Übertragung ohne Frame-Pufferung oder Wiederholungsversuche präzisiert.
+- `Backend / Leistung`: N+1-Abfragen und I/O pro Datensatz wurden entfernt, Einstellungs- und Listendaten gebündelt geladen, SQLite-Verbindungswechsel reduziert und anhand von Abfrageplänen geprüfte Indizes ergänzt.
 
 ## 1.11.10.dev - 2026-08-26
 - `Bandbedingungen / Servicedaten`: Unter den Modelldaten wurde ein Diagnosepanel ergänzt, das die gelernte Referenzbasis, Median und P90-Reichweite ortsfester Stationen, automatische Entfernungsschwellen sowie Zähler für Stationen, bestätigte Fernempfänge, geografische Gebiete und RF-Frames aus der für die sichtbare Bewertung verwendeten Stichprobe anzeigt.
