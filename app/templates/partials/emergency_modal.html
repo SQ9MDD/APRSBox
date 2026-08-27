@@ -2,7 +2,7 @@
     id="aprs-emergency-root"
     data-root-path="{{ request.scope.root_path }}"
     data-static-root="{{ request.scope.root_path }}/static/"
-    data-traffic-stream-endpoint="{{ request.scope.root_path }}{% if active_nav == 'dashboard' %}/api/alerts/stream{% else %}/api/traffic/stream{% endif %}"
+    data-traffic-stream-endpoint="{{ request.scope.root_path }}/api/alerts/stream"
     data-tile-url="{{ alert_modal_map_config.tile_url }}"
     data-tile-attribution="{{ alert_modal_map_config.tile_attribution }}"
     data-tile-min-zoom="{{ alert_modal_map_config.tile_min_zoom }}"

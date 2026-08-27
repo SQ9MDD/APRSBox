@@ -339,7 +339,9 @@ class DashboardHomeTests(unittest.TestCase):
 
     def test_dashboard_template_uses_visual_first_pack(self) -> None:
         template = Path("app/templates/dashboard.html").read_text(encoding="utf-8")
+        base_template = Path("app/templates/base.html").read_text(encoding="utf-8")
         emergency_modal = Path("app/templates/partials/emergency_modal.html").read_text(encoding="utf-8")
+        traffic_template = Path("app/templates/traffic.html").read_text(encoding="utf-8")
         pages_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
         stylesheet = Path("app/static/css/style.css").read_text(encoding="utf-8")
 
@@ -353,9 +355,11 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn("{{ dashboard_activity|tojson }}", template)
         self.assertIn("const fallbackPayload = normalizeApiPayload(payload)", template)
         self.assertNotIn("normalizeLegacyPayload", template)
-        self.assertIn("active_nav == 'dashboard'", emergency_modal)
-        self.assertIn("/api/alerts/stream", emergency_modal)
-        self.assertIn("/api/traffic/stream", emergency_modal)
+        self.assertIn('data-traffic-stream-endpoint="{{ request.scope.root_path }}/api/alerts/stream"', emergency_modal)
+        self.assertNotIn("active_nav == 'dashboard'", emergency_modal)
+        self.assertNotIn("/api/traffic/stream", emergency_modal)
+        self.assertIn('{% include "partials/emergency_modal.html" %}', base_template)
+        self.assertIn("'/api/traffic/stream'", traffic_template)
         self.assertIn('@router.get("/api/alerts/stream")', pages_source)
         self.assertIn('`${rangePrefix}: ${rangeLabel}`', template)
         self.assertIn("dashboard-v2-network-grid", template)
