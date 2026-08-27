@@ -409,7 +409,7 @@
     {% endif %}
     {% block extra_scripts %}{% endblock %}
     {% if current_user %}
-    <script src="{{ request.scope.root_path }}/static/js/map-emergency-modal.js?v={{ app_version }}-alerts-global-7"></script>
+    <script src="{{ request.scope.root_path }}/static/js/map-emergency-modal.js?v={{ app_version }}-alerts-global-8"></script>
     {% endif %}
     {% if current_user and current_user.role in ["admin", "operator"] %}
     <script src="{{ request.scope.root_path }}/static/js/sidebar-beacon.js?v={{ app_version }}-1"></script>

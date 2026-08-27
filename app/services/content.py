@@ -939,6 +939,7 @@ def traffic_snapshot(limit: int = 400, *, alerts_only: bool = False) -> dict[str
             relations.alert_id,
             alerts.source_callsign AS alert_source_callsign,
             alerts.alarm_group AS alert_alarm_group,
+            alerts.area_codes_json AS alert_area_codes_json,
             alerts.event_code AS alert_event_code,
             alerts.logical_alert_id AS alert_logical_alert_id,
             alerts.severity_level AS alert_severity_level,
@@ -977,6 +978,7 @@ def traffic_snapshot(limit: int = 400, *, alerts_only: bool = False) -> dict[str
             relations.alert_id,
             alerts.source_callsign AS alert_source_callsign,
             alerts.alarm_group AS alert_alarm_group,
+            alerts.area_codes_json AS alert_area_codes_json,
             alerts.event_code AS alert_event_code,
             alerts.logical_alert_id AS alert_logical_alert_id,
             alerts.severity_level AS alert_severity_level,
@@ -1183,6 +1185,29 @@ def traffic_snapshot(limit: int = 400, *, alerts_only: bool = False) -> dict[str
         )
         alarm_group_popup_data = None
         if alarm_group_popup:
+            # Imported lazily because alert area assembly reuses alert helpers,
+            # which in turn import the APRS parser from this module.
+            from app.services.alert_areas import build_alert_area_feature_collection
+
+            try:
+                area_codes = json.loads(str(row["alert_area_codes_json"] or "[]"))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                area_codes = []
+            popup_alert = {
+                "id": alert_id,
+                "alarm_group": alarm_group,
+                "area_codes": area_codes,
+                "severity_level": row["alert_severity_level"],
+            }
+            is_popup_candidate_frame = (
+                row["alert_initial_frame_id"] is not None
+                and int(row["alert_initial_frame_id"]) == int(row["id"])
+            )
+            area_feature_collection = (
+                build_alert_area_feature_collection([popup_alert])
+                if is_popup_candidate_frame
+                else {"type": "FeatureCollection", "features": []}
+            )
             popup_summary = " · ".join(
                 value
                 for value in (
@@ -1212,6 +1237,8 @@ def traffic_snapshot(limit: int = 400, *, alerts_only: bool = False) -> dict[str
                     row["alert_logical_alert_id"] or ""
                 ).strip().upper(),
                 "severity_level": row["alert_severity_level"],
+                "area_codes": area_codes,
+                "area_feature_collection": area_feature_collection,
             }
         alert_popup_data = emergency_data or alarm_group_popup_data
         alert_popup_kind = (

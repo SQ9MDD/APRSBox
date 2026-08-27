@@ -1405,6 +1405,21 @@ class AprsAlarmGroupReceiveTests(unittest.TestCase):
             high_candidates[0]["alert_popup_data"]["event_code"],
             "TORNADO3",
         )
+        self.assertEqual(
+            high_candidates[0]["alert_popup_data"]["area_codes"],
+            ["1461", "1462"],
+        )
+        popup_areas = high_candidates[0]["alert_popup_data"][
+            "area_feature_collection"
+        ]
+        self.assertEqual(popup_areas["type"], "FeatureCollection")
+        self.assertEqual(
+            {
+                feature["properties"]["aprsbox_area_code"]
+                for feature in popup_areas["features"]
+            },
+            {"1461", "1462"},
+        )
 
 
 if __name__ == "__main__":
