@@ -1921,7 +1921,19 @@ def dashboard_home_data(
         read_map_station_rf_snapshots(),
         station_settings=station_settings,
     )
-    traffic = dashboard_traffic_summary(heard_snapshots=heard_snapshots)
+    activity_kpis = dict((dashboard_activity or {}).get("kpis") or {})
+    if dashboard_activity is not None:
+        # The five-minute projection is already loaded by the dashboard route.
+        # Avoid scanning raw traffic history again for the same two KPIs.
+        traffic = {
+            "received_frames": int(activity_kpis.get("aprs_frames") or 0),
+            "decoded_aprs": int(activity_kpis.get("aprs_frames") or 0),
+            "unique_sources": int(activity_kpis.get("heard_stations") or 0),
+            "heard_stations": int(activity_kpis.get("heard_stations") or 0),
+            "window_hours": DASHBOARD_KPI_WINDOW_HOURS,
+        }
+    else:
+        traffic = dashboard_traffic_summary(heard_snapshots=heard_snapshots)
     interfaces = get_configured_modem_interfaces()
     enabled_interfaces = [item for item in interfaces if item.get("enabled")]
     disabled_interfaces_count = max(0, len(interfaces) - len(enabled_interfaces))
@@ -2496,7 +2508,6 @@ def dashboard_home_data(
     if igate_enabled:
         hero_summary.append({"label": "APRS-IS", "value": aprsis_runtime_label, "tone": aprsis_runtime_tone})
 
-    activity_kpis = dict((dashboard_activity or {}).get("kpis") or {})
     dashboard_heard_stations = int(activity_kpis.get("heard_stations", traffic["heard_stations"]) or 0)
     dashboard_aprs_frames = int(activity_kpis.get("aprs_frames", traffic["decoded_aprs"]) or 0)
     stats = [

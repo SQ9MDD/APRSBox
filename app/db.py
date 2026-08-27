@@ -999,6 +999,7 @@ CREATE TABLE IF NOT EXISTS radio_activity_aggregator_state (
 
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_id ON traffic_frames(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_map_station_state_revision ON map_station_state(revision);
 CREATE INDEX IF NOT EXISTS idx_map_station_state_last_heard ON map_station_state(is_deleted, last_heard_at DESC, station_key);
@@ -1584,6 +1585,12 @@ def init_db() -> None:
                 ADD COLUMN type_other_unknown_total INTEGER NOT NULL DEFAULT 0
                 """
             )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_id
+    ON traffic_frames(created_at DESC, id DESC)
+"""
+        )
         connection.execute(
             """
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_interface_created_at

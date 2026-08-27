@@ -316,6 +316,11 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                 self.assertIn("direction", columns)
                 self.assertIn("band", columns)
                 self.assertIn("source_kind", columns)
+                traffic_indexes = {
+                    row["name"]
+                    for row in connection.execute("PRAGMA index_list(traffic_frames)").fetchall()
+                }
+                self.assertIn("idx_traffic_frames_created_id", traffic_indexes)
                 modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
                 self.assertIn("tx_blocked", modem_columns)
                 self.assertIn("tx_min_gap_seconds", modem_columns)

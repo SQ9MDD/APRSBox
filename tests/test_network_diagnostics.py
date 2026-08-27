@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from app.services.network_diagnostics import build_web_ui_url, get_network_diagnostics
+from app.services.network_diagnostics import NetworkDiagnosticsCache, build_web_ui_url, get_network_diagnostics
 
 
 class NetworkDiagnosticsTests(unittest.TestCase):
@@ -71,6 +71,29 @@ class NetworkDiagnosticsTests(unittest.TestCase):
             build_web_ui_url(mdns_name="aprsbox.local", scheme="http", port=80),
             "http://aprsbox.local",
         )
+
+
+class NetworkDiagnosticsCacheTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cache_starts_with_non_blocking_placeholder_and_refreshes_in_worker(self) -> None:
+        cache = NetworkDiagnosticsCache(scheme="http", port=8000)
+        self.assertEqual(cache.get()["avahi_status"], "Checking")
+
+        snapshot = {
+            "hostname": "aprsbox",
+            "interface": "eth0",
+            "ipv4": "192.168.1.2",
+            "ipv6": None,
+            "mdns_name": "aprsbox.local",
+            "avahi_status": "Active",
+            "avahi_tone": "ok",
+            "mdns_resolve": "192.168.1.2",
+            "mdns_resolve_tone": "ok",
+            "web_ui_url": "http://aprsbox.local:8000",
+        }
+        with patch("app.services.network_diagnostics.get_network_diagnostics", return_value=snapshot):
+            await cache.refresh()
+
+        self.assertEqual(cache.get(), snapshot)
 
 
 

@@ -241,6 +241,7 @@ class DashboardHomeTests(unittest.TestCase):
                 patch("app.services.map_station_state.read_map_station_rf_snapshots", return_value=[snapshot]),
                 patch("app.services.content.get_rf_heard_station_snapshots", side_effect=AssertionError("raw rebuild")),
                 patch("app.services.content.dashboard_activity_series", side_effect=AssertionError("raw chart")),
+                patch("app.services.content.dashboard_traffic_summary", side_effect=AssertionError("raw KPI scan")),
             ):
                 view = dashboard_home_data(dashboard_activity=activity)
 
@@ -349,6 +350,9 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn("dashboard-kpi-heard-stations", template)
         self.assertIn("dashboard-kpi-aprs-frames", template)
         self.assertIn("rawPayload?.kpis?.heard_stations", template)
+        self.assertIn("{{ dashboard_activity|tojson }}", template)
+        self.assertIn("const fallbackPayload = normalizeApiPayload(payload)", template)
+        self.assertNotIn("normalizeLegacyPayload", template)
         self.assertIn('`${rangePrefix}: ${rangeLabel}`', template)
         self.assertIn("dashboard-v2-network-grid", template)
         self.assertNotIn('t("Network diagnostics")', template)
@@ -374,6 +378,8 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn('const helpViewerModal = document.getElementById("help-viewer-modal")', template)
         self.assertIn('helpViewerObserver.observe(helpViewerModal', template)
         self.assertIn('window.clearTimeout(dashboardRefreshTimer)', template)
+        self.assertIn('void loadRangePayload(activeRange).finally(scheduleDashboardRefresh)', template)
+        self.assertNotIn('window.location.reload()', template)
         self.assertNotIn('const dashboardRefreshTimer = window.setInterval', template)
         self.assertNotIn("dashboard-v2-events-panel", template)
         self.assertNotIn("dashboard-v2-summary-panel", template)

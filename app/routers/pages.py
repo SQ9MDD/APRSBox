@@ -167,7 +167,6 @@ from app.services.band_condition import (
     get_band_condition_page_data,
     get_band_condition_snapshot,
 )
-from app.services.network_diagnostics import get_network_diagnostics
 from app.services.aprsis import (
     aprsis_runtime_badge,
     get_aprsis_config,
@@ -1134,13 +1133,19 @@ def dashboard(
     dashboard_bands = _dashboard_band_condition_cards()
     dashboard_band = _dashboard_band_condition_card(dashboard_bands)
     dashboard_activity = get_dashboard_radio_activity(range_value="24h")
-    https_enabled = bool(https_file_status(request.app.state.settings.ssl_dir)["https_enabled"])
-    direct_scheme = "https" if https_enabled else "http"
-    direct_port = (
-        request.app.state.settings.web_https_port
-        if https_enabled
-        else request.app.state.settings.web_http_port
-    )
+    diagnostics_cache = getattr(request.app.state, "network_diagnostics_cache", None)
+    network_diagnostics = diagnostics_cache.get() if diagnostics_cache is not None else {
+        "hostname": None,
+        "interface": None,
+        "ipv4": None,
+        "ipv6": None,
+        "mdns_name": None,
+        "avahi_status": "Checking",
+        "avahi_tone": "neutral",
+        "mdns_resolve": None,
+        "mdns_resolve_tone": "neutral",
+        "web_ui_url": None,
+    }
     context = build_template_context(
         request,
         page_title="Dashboard",
@@ -1148,12 +1153,9 @@ def dashboard(
         active_nav="dashboard",
         dashboard_band=dashboard_band,
         dashboard_bands=dashboard_bands,
+        dashboard_activity=dashboard_activity,
         dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
-        network_diagnostics=get_network_diagnostics(
-            scheme=direct_scheme,
-            port=direct_port,
-            root_path=request.scope.get("root_path", ""),
-        ),
+        network_diagnostics=network_diagnostics,
     )
     return templates.TemplateResponse("dashboard.html", context)
 
