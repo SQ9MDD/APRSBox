@@ -382,19 +382,79 @@ def _section_template_context(
     flash_success: bool = False,
     form_data: dict[str, object] | None = None,
     initial_modem_type: str | None = None,
+    edit_id: int | None = None,
+) -> dict:
+    with connection_scope():
+        return _section_template_context_scoped(
+            request,
+            current_user,
+            slug,
+            flash=flash,
+            edit_row=edit_row,
+            flash_success=flash_success,
+            form_data=form_data,
+            initial_modem_type=initial_modem_type,
+            edit_id=edit_id,
+        )
+
+
+def _section_template_context_scoped(
+    request: Request,
+    current_user: UserIdentity,
+    slug: str,
+    flash: str | None = None,
+    edit_row: dict | None = None,
+    *,
+    flash_success: bool = False,
+    form_data: dict[str, object] | None = None,
+    initial_modem_type: str | None = None,
+    edit_id: int | None = None,
 ) -> dict:
     definition = SECTION_DEFINITIONS[slug]
+    station_settings = None
+    app_language = None
+    symbol_set = None
+    map_config = None
+    translator = None
+    if slug in {"objects", "items"}:
+        station_settings = get_station_settings(include_tx_runtime=False)
+        app_language = get_app_language()
+        symbol_set = get_aprs_symbol_set()
+        map_config = get_map_page_config(
+            root_path=request.scope.get("root_path", ""),
+            station_settings=station_settings,
+        )
+        translator = get_translator(app_language)
+        if edit_row is None and edit_id is not None:
+            edit_row = get_section_row(
+                slug,
+                edit_id,
+                station_settings=station_settings,
+                symbol_set=symbol_set,
+                translator=translator,
+            )
+    rows = get_section_rows(
+        slug,
+        station_settings=station_settings,
+        symbol_set=symbol_set,
+        translator=translator,
+    )
     context = build_template_context(
         request,
         page_title=definition.title,
         current_user=current_user,
         active_nav=definition.nav_key,
+        perform_alert_maintenance=False,
         section=definition,
-        rows=get_section_rows(slug),
+        rows=rows,
         flash=flash,
         can_edit=current_user.role in definition.create_roles,
         edit_row=edit_row,
         flash_success=flash_success,
+        prefetched_station_settings=station_settings,
+        prefetched_app_language=app_language,
+        prefetched_aprs_symbol_set=symbol_set,
+        prefetched_map_config=map_config,
     )
     if slug == "modems":
         aprsis_config = get_aprsis_config()
@@ -427,12 +487,12 @@ def _section_template_context(
     if slug in {"objects", "items"}:
         context.update(
             {
-                "map_picker_config": get_map_page_config(root_path=request.scope.get("root_path", "")),
+                "map_picker_config": context["alert_modal_map_config"],
                 "symbol_table_options": [
                     {"value": "/", "label": "Primary (/)"},
                     {"value": "\\", "label": "Alternate (\\)"},
                 ],
-                "symbol_code_options": _symbol_code_options(),
+                "symbol_code_options": _symbol_code_options(symbol_set=symbol_set),
             }
         )
     if slug == "objects":
@@ -723,13 +783,14 @@ def _station_form_options(
     }
 
 
-def _symbol_code_options() -> list[dict[str, str]]:
+def _symbol_code_options(*, symbol_set: str | None = None) -> list[dict[str, str]]:
+    symbol_set = symbol_set or get_aprs_symbol_set()
     return [
         {
             "value": symbol_code,
             "label": symbol_code,
-            "primary_icon": get_aprs_symbol_icon_path(f"/{symbol_code}"),
-            "alternate_icon": get_aprs_symbol_icon_path(f"\\{symbol_code}"),
+            "primary_icon": get_aprs_symbol_icon_path(f"/{symbol_code}", symbol_set=symbol_set),
+            "alternate_icon": get_aprs_symbol_icon_path(f"\\{symbol_code}", symbol_set=symbol_set),
             "primary_description": get_aprs_symbol_description("/", symbol_code),
             "alternate_description": get_aprs_symbol_description("\\", symbol_code),
         }
@@ -2842,13 +2903,12 @@ def objects_page(
     success: str | None = None,
 ) -> object:
     templates = request.app.state.templates
-    edit_row = get_section_row("objects", edit) if edit is not None else None
     context = _section_template_context(
         request,
         current_user,
         "objects",
         flash=flash,
-        edit_row=edit_row,
+        edit_id=edit,
     )
     if success is not None:
         context["flash_success"] = str(success).strip() not in {"0", "false", "False"}

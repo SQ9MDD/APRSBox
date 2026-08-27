@@ -739,8 +739,12 @@ def _validate_map_sources_state(connection: Any) -> None:
         raise ValueError("Default map source must be enabled.")
 
 
-def get_map_page_config(*, root_path: str = "") -> dict[str, Any]:
-    station_settings = get_station_settings()
+def get_map_page_config(
+    *,
+    root_path: str = "",
+    station_settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    station_settings = station_settings if station_settings is not None else get_station_settings()
     default_view = _resolve_default_view(station_settings)
     tile_layer = resolve_active_tile_layer(root_path=root_path)
     return {

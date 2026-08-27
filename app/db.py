@@ -1059,6 +1059,8 @@ CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_frame_uid ON digi_flow_event_
 CREATE INDEX IF NOT EXISTS idx_digi_flows_route_pair ON digi_flows(source_kind, source_ref, target_kind, target_ref);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_kind_status_scheduled_at ON outbound_jobs(kind, status, scheduled_at, id);
+CREATE INDEX IF NOT EXISTS idx_outbound_jobs_kind_activity_desc
+    ON outbound_jobs(kind, COALESCE(sent_at, started_at, scheduled_at, created_at) DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);

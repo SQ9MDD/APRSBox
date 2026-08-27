@@ -117,21 +117,21 @@ def get_aprs_symbol_set() -> str:
 
 def _aprs_symbol_icon_path_for_set(symbol: str, symbol_set: str) -> str | None:
     icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
-
-    if len(symbol) != 2:
-        filename = f"x.{extension}"
-    else:
-        table, code = symbol[0], symbol[1]
-        index = ord(code) - 33
-        if index < 0 or index > 93:
-            filename = f"x.{extension}"
-        else:
-            filename = f"{index:02d}.{extension}" if table == "/" else f"a{index:02d}.{extension}"
-
+    filename = _aprs_symbol_icon_filename(symbol, extension=extension)
     candidate = settings.static_dir / "icons" / icon_dir / filename
     if candidate.exists():
         return f"icons/{icon_dir}/{filename}"
     return None
+
+
+def _aprs_symbol_icon_filename(symbol: str, *, extension: str) -> str:
+    if len(symbol) != 2:
+        return f"x.{extension}"
+    table, code = symbol[0], symbol[1]
+    index = ord(code) - 33
+    if index < 0 or index > 93:
+        return f"x.{extension}"
+    return f"{index:02d}.{extension}" if table == "/" else f"a{index:02d}.{extension}"
 
 
 def _aprs_symbol_icon_path_for_resolved_set(symbol: str, symbol_set: str) -> str:
@@ -148,8 +148,8 @@ def _aprs_symbol_icon_path_for_resolved_set(symbol: str, symbol_set: str) -> str
     return "icons/verG/x.gif"
 
 
-def get_aprs_symbol_icon_fallback_path() -> str:
-    current_set = get_aprs_symbol_set()
+def get_aprs_symbol_icon_fallback_path(*, symbol_set: str | None = None) -> str:
+    current_set = symbol_set or get_aprs_symbol_set()
     for symbol_set in (current_set, APRS_SYMBOL_SET_LEGACY if current_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN):
         icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
         candidate = settings.static_dir / "icons" / icon_dir / f"x.{extension}"
@@ -173,20 +173,64 @@ def _is_internal_tx_payload(payload: Any) -> bool:
     return bool(payload.get("internal_tx_only"))
 
 
-def get_section_rows(slug: str) -> list[dict[str, Any]]:
+def get_section_rows(
+    slug: str,
+    *,
+    station_settings: dict[str, Any] | None = None,
+    symbol_set: str | None = None,
+    now: datetime | None = None,
+    translator: Any = None,
+) -> list[dict[str, Any]]:
     definition = SECTION_DEFINITIONS[slug]
-    rows = fetch_all(f"SELECT * FROM {definition.table_name} ORDER BY id DESC")
+    if slug in {"objects", "items"}:
+        rows = fetch_all(
+            f"""
+            SELECT id, name, state, is_enabled, interval_minutes, valid_until_utc,
+                   activation_mode, active_from_utc, active_until_utc, first_activation_utc,
+                   recurrence_duration_minutes, recurrence_interval_value,
+                   recurrence_interval_unit, recurrence_until_utc,
+                   latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment
+                   {', lifetime' if slug == 'objects' else ''}
+            FROM {definition.table_name}
+            ORDER BY id DESC
+            """
+        )
+    else:
+        rows = fetch_all(f"SELECT * FROM {definition.table_name} ORDER BY id DESC")
     result = [dict(row) for row in rows]
     if slug == "modems":
         return _decorate_modem_rows(result)
     if slug in {"objects", "items"}:
-        return [_decorate_aprs_entity_row(slug, row) for row in result]
+        station_settings = station_settings if station_settings is not None else get_station_settings()
+        symbol_set = symbol_set or get_aprs_symbol_set()
+        now = now or datetime.now(timezone.utc)
+        translator = translator or get_translator(get_app_language())
+        return [
+            _decorate_aprs_entity_row(
+                slug,
+                row,
+                station_settings=station_settings,
+                symbol_set=symbol_set,
+                now=now,
+                translator=translator,
+                include_detail=False,
+            )
+            for row in result
+        ]
     if slug == "bulletins":
         return [_decorate_aprs_message_row(row) for row in result]
     return result
 
 
-def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
+def get_section_row(
+    slug: str,
+    row_id: int,
+    *,
+    station_settings: dict[str, Any] | None = None,
+    symbol_set: str | None = None,
+    now: datetime | None = None,
+    translator: Any = None,
+) -> dict[str, Any] | None:
     definition = SECTION_DEFINITIONS[slug]
     row = fetch_one(f"SELECT * FROM {definition.table_name} WHERE id = ?", (row_id,))
     if not row:
@@ -196,7 +240,14 @@ def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
         decorated = _decorate_modem_rows([result])
         return decorated[0] if decorated else result
     if slug in {"objects", "items"}:
-        return _decorate_aprs_entity_row(slug, result)
+        return _decorate_aprs_entity_row(
+            slug,
+            result,
+            station_settings=station_settings if station_settings is not None else get_station_settings(),
+            symbol_set=symbol_set or get_aprs_symbol_set(),
+            now=now or datetime.now(timezone.utc),
+            translator=translator or get_translator(get_app_language()),
+        )
     if slug == "bulletins":
         return _decorate_aprs_message_row(result)
     return result
@@ -462,14 +513,18 @@ def set_modem_enabled(row_id: int, enabled: bool) -> None:
     log_event("INFO", "config", f"Interface {row_id} {state}")
 
 
-def get_station_settings() -> dict[str, Any]:
+def get_station_settings(*, include_tx_runtime: bool = True) -> dict[str, Any]:
     row = fetch_one("SELECT * FROM station_settings WHERE id = 1")
     if not row:
         return {}
     result = dict(row)
     result.setdefault("beacon_interface_id", None)
     result["beacon_tx_scope"] = normalize_tx_scope(result.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
-    result["beacon_internal_tx"] = _setting_flag(get_app_setting(STATION_TX_INTERNAL_MODE_SETTING_KEY))
+    result["beacon_internal_tx"] = (
+        _setting_flag(get_app_setting(STATION_TX_INTERNAL_MODE_SETTING_KEY))
+        if include_tx_runtime
+        else False
+    )
     result.setdefault("default_units", "metric")
     result["beacon_interval_mode"] = normalize_beacon_interval_mode(
         result.get("beacon_interval_mode"),
@@ -4934,7 +4989,11 @@ def _aprs_symbol_icon_path(symbol: str) -> str:
     return get_aprs_symbol_icon_fallback_path()
 
 
-def get_aprs_symbol_icon_path(symbol: str) -> str:
+def get_aprs_symbol_icon_path(symbol: str, *, symbol_set: str | None = None) -> str:
+    if symbol_set is not None:
+        icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
+        filename = _aprs_symbol_icon_filename(symbol, extension=extension)
+        return f"icons/{icon_dir}/{filename}"
     return _aprs_symbol_icon_path(symbol)
 
 
@@ -5396,7 +5455,16 @@ def _validate_coordinate(value: str, *, minimum: float, maximum: float, label: s
         raise ValueError(f"{label} is out of range.")
 
 
-def _decorate_aprs_entity_row(slug: str, row: dict[str, Any]) -> dict[str, Any]:
+def _decorate_aprs_entity_row(
+    slug: str,
+    row: dict[str, Any],
+    *,
+    station_settings: dict[str, Any] | None = None,
+    symbol_set: str | None = None,
+    now: datetime | None = None,
+    translator: Any = None,
+    include_detail: bool = True,
+) -> dict[str, Any]:
     result = dict(row)
     symbol_table = str(result.get("symbol_table") or "/").strip()
     if symbol_table not in {"/", "\\"}:
@@ -5404,9 +5472,21 @@ def _decorate_aprs_entity_row(slug: str, row: dict[str, Any]) -> dict[str, Any]:
     result["symbol_table"] = symbol_table
     result["symbol_overlay"] = _coerce_symbol_overlay_value(result.get("symbol_overlay"), symbol_table=symbol_table)
     symbol_code = str(result.get("symbol_code") or ">")
-    result["symbol_icon"] = get_aprs_symbol_icon_path(f"{symbol_table}{symbol_code}")
-    result["raw_frame_preview"] = _build_aprs_entity_preview(slug, result)
-    _decorate_activation_schedule(result)
+    result["symbol_icon"] = get_aprs_symbol_icon_path(
+        f"{symbol_table}{symbol_code}",
+        symbol_set=symbol_set,
+    )
+    result["raw_frame_preview"] = _build_aprs_entity_preview(
+        slug,
+        result,
+        station_settings=station_settings,
+    )
+    _decorate_activation_schedule(
+        result,
+        now=now,
+        translator=translator,
+        include_detail=include_detail,
+    )
     return result
 
 
@@ -5423,14 +5503,22 @@ def _decorate_aprs_message_row(row: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _decorate_activation_schedule(row: dict[str, Any]) -> None:
-    now = datetime.now(timezone.utc)
+def _decorate_activation_schedule(
+    row: dict[str, Any],
+    *,
+    now: datetime | None = None,
+    translator: Any = None,
+    include_detail: bool = True,
+) -> None:
+    now = now or datetime.now(timezone.utc)
     state = compute_activation_state(row, now)
     row["activation_active_now"] = state.active_now
+    row["activation_summary"] = schedule_summary(row, now, translator=translator)
+    row["activation_short_label"] = schedule_short_label(row, now, translator=translator)
+    if not include_detail:
+        return
     row["activation_reason"] = state.reason
-    row["activation_summary"] = schedule_summary(row, now)
-    row["activation_short_label"] = schedule_short_label(row, now)
-    row["activation_warnings"] = schedule_warnings(row)
+    row["activation_warnings"] = schedule_warnings(row, translator=translator)
     mode = str(row.get("activation_mode") or "manual").strip().lower()
     if mode == "manual":
         row["activation_form_active_from_utc"] = None
@@ -5443,8 +5531,13 @@ def _decorate_activation_schedule(row: dict[str, Any]) -> None:
         row["activation_form_active_until_utc"] = row.get("active_until_utc")
 
 
-def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:
-    station_settings = get_station_settings()
+def _build_aprs_entity_preview(
+    slug: str,
+    payload: dict[str, Any],
+    *,
+    station_settings: dict[str, Any] | None = None,
+) -> str:
+    station_settings = station_settings if station_settings is not None else get_station_settings()
     source = _build_preview_source(station_settings)
     latitude = _parse_coordinate(payload.get("latitude"))
     longitude = _parse_coordinate(payload.get("longitude"))
