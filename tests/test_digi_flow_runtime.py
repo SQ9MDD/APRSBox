@@ -1362,6 +1362,16 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                         source_ref="TNC-1",
                         raw_payload="SQ2IBK-3>APBOX0,SR5DLA*,WIDE2-1::SP5XYZ-9 :tekst{1U",
                     ),
+                    "local_source_my": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ9MDD-4>APBOX0,ED7YAF-3*,WIDE2-1:!3645.20N/00318.20W-Test",
+                    ),
+                    "local_source_wx": runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload="SQ9MDD-7>APBOX0,ED7YAF-3*,WIDE2-1:_WX test",
+                    ),
                     "third_party_position": runtime.enqueue_tnc2_frame(
                         source_kind="receiver_rf",
                         source_ref="TNC-1",
@@ -1399,6 +1409,8 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(_has_reason("third_party_message", "DIGI_GUARD_THIRD_PARTY"))
             self.assertTrue(_has_reason("third_party_position", "DIGI_GUARD_THIRD_PARTY"))
             self.assertTrue(_has_reason("already_repeated_local", "DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL"))
+            self.assertTrue(_has_reason("local_source_my", "DIGI_GUARD_LOCAL_SOURCE_MY_STATION"))
+            self.assertTrue(_has_reason("local_source_wx", "DIGI_GUARD_LOCAL_SOURCE_WX"))
 
             self.assertFalse(any("DIGI_GUARD_LOCAL_MESSAGE" in str(row["message"] or "") for row in rows["message_foreign"]))
             self.assertTrue(any(row["event_type"] == "path_rule" and row["decision"] == "trace" for row in rows["message_foreign"]))
@@ -1420,6 +1432,8 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 "query_wx",
                 "third_party_message",
                 "already_repeated_local",
+                "local_source_my",
+                "local_source_wx",
                 "third_party_position",
             ):
                 self.assertFalse(any(row["event_type"] == "output_action" for row in rows[blocked_name]), blocked_name)

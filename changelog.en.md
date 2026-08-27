@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.12 - 2026-08-27
+- `Stable release`: improved the station map and tracks with overlapping-marker spreading and immediate latest-frame updates. Reworked band-condition assessment and diagnostics, separated RF and APRS-IS groups, streamlined interface and help handling, and clarified APRS-IS best-effort transmission without frame buffering or retries.
+
+## 1.11.10.dev - 2026-08-26
+- `Map / latest frame`: the widget now uses the same live traffic stream as the scroller, so it immediately shows the newest scroller entry instead of waiting for the periodic station-list refresh; QSY, distance, and comment data are enriched from the current station record.
+- `Band conditions / service data`: added a diagnostic panel below the model data showing the learned reference baseline, fixed-station median and P90 reach, automatic distance thresholds, and counters for stations, confirmed distant receptions, geographic areas, and RF frames from the sample used by the visible assessment.
+
+## 1.11.8.dev - 2026-08-26
+- `APRS-IS / transmission`: the uplink now has an explicit best-effort contract with no frame buffering or retries. A packet is written only through the currently active transport; a missing connection, closing transport, write error, or timeout causes an immediate drop, while reconnect handles new frames only and never replays earlier ones. Routing logs now distinguish `sent` from `drop` instead of describing a direct write as queued.
+
+## 1.11.7.dev - 2026-08-26
+- `GUI / help`: help windows are non-modal, stay open while editing forms, and can be dragged across the screen.
+
+## 1.11.6.dev - 2026-08-25
+- `Band conditions / reach model`: rebuilt the W0–W5 assessment so that each receiver learns its normal reach from one representative distance per fixed station. Exceptional long-distance receptions are filtered with a robust median/MAD method, while far and very-far station thresholds are derived automatically from the local RF footprint instead of individual observations.
+- `Band conditions / reliability`: third-party frames are no longer treated as physical RF observations, confirming a distant station now requires reception in at least three time segments, and W3–W5 require clearer, repeatable evidence. The reference baseline, confidence maturation, and model tuning parameters were also made more consistent.
+
+## 1.11.5.dev - 2026-08-24
+- `Messages / groups`: split the previous target groups into `RF groups` and `APRS-IS groups`; on first use, the APRS-IS list inherits the RF groups and can then be configured independently. APRS-IS groups are automatically combined with enabled alarm groups in the APRS-IS connection's `g/...` filter.
+- `Map / sources and tracks`: station icons now use the latest chronological position frame from the currently visible sources, keeping each marker at the end of its matching track both with all sources enabled and after selecting a single interface. One visible point still positions the icon without drawing an artificial polyline, while repeated observations at the same position retain the newest source and timestamp.
+
+## 1.11.3.dev - 2026-08-21
+- `Interfaces / quick actions`: added a contextual enable or disable button to the interface list, matching the action used for routing rules; changing the status no longer requires opening the editor, updates only the interface activity state, and uses the shared progress modal with a localized result message and error handling.
+
+## 1.11.2.dev - 2026-08-20
+- `Map / marker spiderfy`: vendored `OverlappingMarkerSpiderfier` and added optional spreading of overlapping individual markers at high zoom while preserving APRS icons and tooltips. On desktop, hover spreads a group, clicking always opens the selected station's details, and leaving the group's padded area collapses it after a short delay; touch devices retain the safe first-tap-to-spread, second-tap-for-details flow. The threshold is calculated relative to `map.getMaxZoom()`, `Leaflet.markercluster` hands markers over at the same zoom, and spread geometry follows the selected icon-set size.
+- `Settings / map`: Global Settings now include a marker-spreading switch, the number of levels before maximum zoom (default `2`), and the overlap distance in pixels (default `20`); values are validated, persisted through application settings, and included in configuration backup v2.
+
 ## 1.11 - 2026-08-20
 - `Stable release`: consolidated changes from `1.10.7.dev–1.10.16.dev`, including a substantially faster map and station list backed by persistent station-state projection, a redesigned Dashboard with clearer station-readiness assessment, complete HTTPS support for systemd and OpenRC, safer updates, and consistent dialogs, help, and GUI icons. APRS message compatibility was extended, conversations were reorganized into a compact list with selection and bulk deletion, and optional clustering of overlapping map stations remains disabled by default.
 

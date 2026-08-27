@@ -683,6 +683,8 @@ class DigiFlowsTests(unittest.TestCase):
             self.assertEqual(type_meta["filter_path"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_path"]["runtime_label"], "Runtime")
             self.assertEqual(type_meta["filter_path"]["help_page"], "application/packet_routing_flow_path_rule_and_digi_guard")
+            self.assertIn("Mandatory DIGI protection", type_meta["filter_path"]["description"])
+            self.assertIn("frames sourced by My station or WX station", type_meta["filter_path"]["editor_help_lines"])
             self.assertIn("WIDE1-1", type_meta["filter_path"]["config_fields"][1]["help_lines"])
             self.assertEqual(type_meta["filter_direct_only"]["runtime_status"], "implemented")
             self.assertEqual(type_meta["filter_direct_only"]["runtime_label"], "Runtime")

@@ -58,6 +58,16 @@ class MessagesTemplateTests(unittest.TestCase):
         self.assertIn('/^[A-Z0-9]{1,9}$/', template_source)
         self.assertIn('groups.join(", ")', template_source)
         self.assertIn('target_groups: groupValidation.groups', template_source)
+        self.assertIn('aprsis_target_groups: aprsisGroupValidation.groups', template_source)
+
+    def test_rf_and_aprsis_group_fields_share_one_row(self) -> None:
+        template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn('{{ t("RF groups") }}', template_source)
+        self.assertIn('{{ t("APRS-IS groups") }}', template_source)
+        self.assertIn('id="messages-aprsis-target-groups"', template_source)
+        self.assertIn(".messages-settings-group-fields {", stylesheet_source)
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", stylesheet_source)
 
     def test_messages_path_prefers_local_storage_and_not_server_conversation_path(self) -> None:
         template_source = Path("app/templates/messages.html").read_text(encoding="utf-8")

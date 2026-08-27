@@ -4,6 +4,7 @@ This is the key block for flows ending in `TX RF`. It performs DIGI protection f
 
 The guard part rejects:
 
+- frames sourced by local `My station` or local `WX station`, preventing a locally transmitted frame from being repeated after it returns through another digi,
 - third-party frames,
 - APRS messages addressed to local `My station`,
 - APRS queries addressed to local `My station`,

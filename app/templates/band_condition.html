@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% macro distance_km(value) -%}
+{% if value is not none %}{{ "%.1f"|format(value) }} km{% else %}—{% endif %}
+{%- endmacro %}
+
 {% block content %}
 <section class="band-condition-layout">
     {% if interfaces %}
@@ -164,6 +168,109 @@
                         </div>
                     </div>
 
+                </section>
+                </div>
+            </article>
+
+            <article class="panel band-condition-service-card">
+                <div class="panel-body">
+                <section class="band-condition-service-data" aria-label="{{ t('Service data') }}">
+                    <div class="band-condition-model-heading">
+                        <div>
+                            <h3>{{ t("Service data") }}</h3>
+                            <p class="muted">{{ t("Technical values currently used by the propagation model.") }}</p>
+                        </div>
+                    </div>
+
+                    <div class="band-condition-service-groups">
+                        <section>
+                            <h4>{{ t("Reference baseline") }}</h4>
+                            <dl class="band-condition-service-stats">
+                                <div>
+                                    <dt>{{ t("Baseline hourly periods") }}</dt>
+                                    <dd>{{ item.service_data.baseline_hour_count }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Usual fixed stations") }}</dt>
+                                    <dd>{{ "%.1f"|format(item.service_data.normal_station_count|default(0, true)) }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Distance baseline stations") }}</dt>
+                                    <dd>{{ item.service_data.baseline_distance_clean_station_count }} / {{ item.service_data.baseline_distance_station_count }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Baseline median distance") }}</dt>
+                                    <dd>{{ distance_km(item.service_data.baseline_distance_median_km) }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Baseline P90 reach") }}</dt>
+                                    <dd>{{ distance_km(item.service_data.normal_p90_distance_km) }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Baseline distance MAD") }}</dt>
+                                    <dd>{{ distance_km(item.service_data.baseline_distance_mad_km) }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Far station threshold") }}</dt>
+                                    <dd>{{ distance_km(item.service_data.far_threshold_km) }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Very far station threshold") }}</dt>
+                                    <dd>{{ distance_km(item.service_data.very_far_threshold_km) }}</dd>
+                                </div>
+                            </dl>
+                        </section>
+
+                        <section>
+                            <h4>{{ t("Assessment sample") }}</h4>
+                            <dl class="band-condition-service-stats">
+                                <div>
+                                    <dt>{{ t("Sample hour (UTC)") }}</dt>
+                                    <dd>{{ item.service_data.hour_start_utc[:16]|replace("T", " ") }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Fixed stations in sample") }}</dt>
+                                    <dd>{{ item.service_data.fixed_station_count }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Stations with position in sample") }}</dt>
+                                    <dd>{{ item.service_data.positioned_station_count }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Sample median distance") }}</dt>
+                                    <dd>{{ distance_km(item.service_data.median_distance_km) }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Sample P90 reach") }}</dt>
+                                    <dd>{{ distance_km(item.service_data.p90_distance_km) }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Maximum confirmed distance") }}</dt>
+                                    <dd>{{ distance_km(item.service_data.max_confirmed_distance_km) }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Far stations confirmed / total") }}</dt>
+                                    <dd>{{ item.service_data.confirmed_far_station_count }} / {{ item.service_data.far_station_count }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Very far stations confirmed / total") }}</dt>
+                                    <dd>{{ item.service_data.confirmed_very_far_station_count }} / {{ item.service_data.very_far_station_count }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("New geographic areas") }}</dt>
+                                    <dd>{{ item.service_data.new_area_count }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("Observed time segments") }}</dt>
+                                    <dd>{{ item.service_data.current_segment_count }}</dd>
+                                </div>
+                                <div>
+                                    <dt>{{ t("RF frames in sample hour") }}</dt>
+                                    <dd>{{ item.service_data.rx_total }}</dd>
+                                </div>
+                            </dl>
+                        </section>
+                    </div>
                 </section>
                 </div>
             </article>

@@ -78,6 +78,7 @@ from app.services.content import (
     station_summary,
     traffic_snapshot as get_traffic_snapshot,
     safe_create_section_row,
+    set_modem_enabled,
     safe_update_section_row,
 )
 from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, INTERNAL_TX_INTERFACE_OPTION_VALUE
@@ -206,7 +207,15 @@ from app.services.https_files import (
 from app.services.map_service import (
     COVERAGE_FILL_OPACITY_SETTING_KEY,
     DEFAULT_COVERAGE_FILL_OPACITY_PERCENT,
+    DEFAULT_MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_PX,
+    DEFAULT_MAP_MARKER_SPIDERFY_ZOOM_LEVELS,
+    MAP_MARKER_SPIDERFY_ENABLED_SETTING_KEY,
+    MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY,
+    MAP_MARKER_SPIDERFY_ZOOM_LEVELS_SETTING_KEY,
     get_map_marker_clustering_enabled,
+    get_map_marker_spiderfy_enabled,
+    get_map_marker_spiderfy_nearby_distance_px,
+    get_map_marker_spiderfy_zoom_levels,
     get_map_source,
     list_map_sources,
     get_coverage_fill_opacity_percent,
@@ -224,6 +233,8 @@ from app.services.map_service import (
     get_station_detail_map_config,
     get_station_detail_track_payload,
     normalize_coverage_fill_opacity_percent,
+    normalize_map_marker_spiderfy_nearby_distance_px,
+    normalize_map_marker_spiderfy_zoom_levels,
     save_map_marker_clustering_enabled,
 )
 from app.services.map_station_state import read_map_station_rf_snapshots, read_map_station_state
@@ -984,6 +995,9 @@ def _settings_page_context(
     traffic_retention_minutes = _normalize_traffic_retention_minutes_option(get_traffic_retention_minutes())
     coverage_fill_opacity = get_coverage_fill_opacity_percent()
     map_marker_clustering_enabled = get_map_marker_clustering_enabled()
+    map_marker_spiderfy_enabled = get_map_marker_spiderfy_enabled()
+    map_marker_spiderfy_zoom_levels = get_map_marker_spiderfy_zoom_levels()
+    map_marker_spiderfy_nearby_distance_px = get_map_marker_spiderfy_nearby_distance_px()
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
     update_channel_options = [
@@ -994,7 +1008,8 @@ def _settings_page_context(
     aprs_alarm_enabled = get_aprs_alarm_enabled()
     aprs_alarm_groups = get_aprs_alarm_groups()
     effective_rf_message_groups = get_effective_message_target_groups(
-        alarm_groups=aprs_alarm_groups
+        alarm_groups=aprs_alarm_groups,
+        source_kind="rf",
     )
     automatic_aprsis_alarm_filter = build_automatic_aprsis_alarm_filter(
         aprs_alarm_groups
@@ -1057,6 +1072,9 @@ def _settings_page_context(
         ],
         coverage_fill_opacity=coverage_fill_opacity,
         map_marker_clustering_enabled=map_marker_clustering_enabled,
+        map_marker_spiderfy_enabled=map_marker_spiderfy_enabled,
+        map_marker_spiderfy_zoom_levels=map_marker_spiderfy_zoom_levels,
+        map_marker_spiderfy_nearby_distance_px=map_marker_spiderfy_nearby_distance_px,
         database_vacuum_blocked=database_vacuum_blocked,
         database_maintenance_snapshot=db_maintenance_snapshot,
         database_path=str(db_maintenance_snapshot.get("database_path") or ""),
@@ -1484,6 +1502,41 @@ def modems_delete(
 ) -> RedirectResponse:
     delete_section_row("modems", record_id)
     return RedirectResponse(url=_path(request, "/settings/modems"), status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/settings/modems/{record_id}/toggle")
+def modems_toggle(
+    record_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+    enabled: int = Form(...),
+) -> object:
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
+    try:
+        set_modem_enabled(record_id, bool(enabled))
+    except ValueError as exc:
+        if wants_json:
+            return JSONResponse(
+                {"ok": False, "error": _translate(str(exc))},
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        return RedirectResponse(
+            url=_path(request, f"/settings/modems?flash={quote(str(exc))}&success=0"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    if wants_json:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _translate("Interface status updated."),
+                "reload": True,
+                "redirect": _path(request, "/settings/modems"),
+            }
+        )
+    return RedirectResponse(
+        url=_path(request, "/settings/modems?flash=Interface%20status%20updated.&success=1"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get("/settings/servers")
@@ -1943,6 +1996,9 @@ def settings_update_global(
     event_log_debug_enabled: str | None = Form(None),
     coverage_fill_opacity: str = Form(str(DEFAULT_COVERAGE_FILL_OPACITY_PERCENT)),
     map_marker_clustering_enabled: str | None = Form(None),
+    map_marker_spiderfy_enabled: str | None = Form(None),
+    map_marker_spiderfy_zoom_levels: str = Form(str(DEFAULT_MAP_MARKER_SPIDERFY_ZOOM_LEVELS)),
+    map_marker_spiderfy_nearby_distance_px: str = Form(str(DEFAULT_MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_PX)),
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     raw_language = str(language or "").strip().lower()
@@ -1960,6 +2016,15 @@ def settings_update_global(
     raw_coverage_fill_opacity = str(coverage_fill_opacity or "").strip()
     selected_coverage_fill_opacity = normalize_coverage_fill_opacity_percent(raw_coverage_fill_opacity)
     selected_map_marker_clustering_enabled = _map_source_checkbox(map_marker_clustering_enabled)
+    selected_map_marker_spiderfy_enabled = _map_source_checkbox(map_marker_spiderfy_enabled)
+    raw_map_marker_spiderfy_zoom_levels = str(map_marker_spiderfy_zoom_levels or "").strip()
+    selected_map_marker_spiderfy_zoom_levels = normalize_map_marker_spiderfy_zoom_levels(
+        raw_map_marker_spiderfy_zoom_levels
+    )
+    raw_map_marker_spiderfy_nearby_distance_px = str(map_marker_spiderfy_nearby_distance_px or "").strip()
+    selected_map_marker_spiderfy_nearby_distance_px = normalize_map_marker_spiderfy_nearby_distance_px(
+        raw_map_marker_spiderfy_nearby_distance_px
+    )
     station_settings = get_station_settings()
     current_default_units = station_settings.get("default_units", "metric")
     if selected_language not in SUPPORTED_LANGUAGE_CODES or selected_language != raw_language:
@@ -1982,6 +2047,16 @@ def settings_update_global(
             {"ok": False, "error": _translate("Unsupported coverage fill opacity selection.")},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
+    if raw_map_marker_spiderfy_zoom_levels != str(selected_map_marker_spiderfy_zoom_levels):
+        return JSONResponse(
+            {"ok": False, "error": _translate("Unsupported marker spiderfy zoom threshold.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if raw_map_marker_spiderfy_nearby_distance_px != str(selected_map_marker_spiderfy_nearby_distance_px):
+        return JSONResponse(
+            {"ok": False, "error": _translate("Unsupported overlapping marker distance.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
 
     station_payload = dict(station_settings)
     station_payload["default_units"] = selected_default_units
@@ -2000,6 +2075,12 @@ def settings_update_global(
     set_app_setting(EVENT_LOG_DEBUG_ENABLED_SETTING_KEY, "1" if selected_event_log_debug_enabled else "0")
     set_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY, str(selected_coverage_fill_opacity))
     save_map_marker_clustering_enabled(selected_map_marker_clustering_enabled)
+    set_app_setting(MAP_MARKER_SPIDERFY_ENABLED_SETTING_KEY, "1" if selected_map_marker_spiderfy_enabled else "0")
+    set_app_setting(MAP_MARKER_SPIDERFY_ZOOM_LEVELS_SETTING_KEY, str(selected_map_marker_spiderfy_zoom_levels))
+    set_app_setting(
+        MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY,
+        str(selected_map_marker_spiderfy_nearby_distance_px),
+    )
     return JSONResponse(
         {
             "ok": True,
@@ -2013,6 +2094,9 @@ def settings_update_global(
             "event_log_debug_enabled": selected_event_log_debug_enabled,
             "coverage_fill_opacity": selected_coverage_fill_opacity,
             "map_marker_clustering_enabled": selected_map_marker_clustering_enabled,
+            "map_marker_spiderfy_enabled": selected_map_marker_spiderfy_enabled,
+            "map_marker_spiderfy_zoom_levels": selected_map_marker_spiderfy_zoom_levels,
+            "map_marker_spiderfy_nearby_distance_px": selected_map_marker_spiderfy_nearby_distance_px,
             "reload": True,
         }
     )

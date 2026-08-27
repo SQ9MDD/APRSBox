@@ -449,6 +449,19 @@ def delete_section_row(slug: str, row_id: int) -> None:
     log_event("INFO", "config", f"Deleted record {row_id} from {definition.table_name}")
 
 
+def set_modem_enabled(row_id: int, enabled: bool) -> None:
+    timestamp = utc_now()
+    with get_connection() as connection:
+        cursor = connection.execute(
+            "UPDATE modems SET enabled = ?, updated_at = ? WHERE id = ?",
+            (int(enabled), timestamp, row_id),
+        )
+        if cursor.rowcount == 0:
+            raise ValueError("Interface not found.")
+    state = "enabled" if enabled else "disabled"
+    log_event("INFO", "config", f"Interface {row_id} {state}")
+
+
 def get_station_settings() -> dict[str, Any]:
     row = fetch_one("SELECT * FROM station_settings WHERE id = 1")
     if not row:
@@ -1780,12 +1793,35 @@ def _dashboard_age_seconds(timestamp: str | None) -> int | None:
 def _dashboard_last_rf_rx_at() -> str | None:
     row = fetch_one(
         f"""
-        SELECT created_at
-        FROM traffic_frames
-        WHERE UPPER(COALESCE(direction, '')) = 'RX'
-          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
-        ORDER BY created_at DESC, id DESC
-        LIMIT 1
+        SELECT MAX(rx_at) AS created_at
+        FROM (
+            SELECT rx_at
+            FROM (
+                SELECT created_at AS rx_at
+                FROM traffic_frames
+                WHERE CASE
+                        WHEN UPPER(TRIM(COALESCE(direction, ''))) IN ('RX', 'TX')
+                            THEN UPPER(TRIM(direction))
+                        WHEN UPPER(TRIM(COALESCE(format, ''))) LIKE '%-TX'
+                            THEN 'TX'
+                        ELSE 'RX'
+                    END = 'RX'
+                  AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+            )
+
+            UNION ALL
+
+            SELECT rx_at
+            FROM (
+                SELECT bucket_end_utc AS rx_at
+                FROM radio_activity_5m
+                WHERE rx_total > 0
+                ORDER BY bucket_start_utc DESC
+                LIMIT 1
+            )
+        )
         """
     )
     if row is None:

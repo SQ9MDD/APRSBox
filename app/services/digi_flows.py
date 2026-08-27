@@ -249,9 +249,10 @@ STEP_TYPE_META: dict[str, dict[str, Any]] = {
         "palette_kind": "rule",
         "scope_label": "RF → RF",
         "scope_tone": "rf-to-rf",
-        "description": "Protects the digi path and handles the first unconsumed hop for RF repeating.",
+        "description": "Mandatory DIGI protection: blocks local-source loops and other unsafe repeats, then handles the first unconsumed RF path hop.",
         "help_page": "application/packet_routing_flow_path_rule_and_digi_guard",
         "editor_help_lines": (
+            "frames sourced by My station or WX station",
             "messages/queries addressed to My station",
             "messages/queries addressed to WX station",
             "third-party frames",

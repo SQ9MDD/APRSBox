@@ -4,6 +4,7 @@ Es el bloque clave para flujos que terminan en `TX RF`. Primero hace la protecci
 
 La parte de proteccion rechaza:
 
+- tramas cuyo origen es la `My station` local o la estacion `WX` local, evitando que una trama transmitida localmente se repita al regresar a traves de otro digi,
 - tramas third-party,
 - mensajes APRS dirigidos a la `My station` local,
 - queries APRS dirigidas a la `My station` local,

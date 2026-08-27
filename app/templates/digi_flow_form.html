@@ -1692,6 +1692,24 @@
                         helpBlock.appendChild(helpButton);
                         editor.appendChild(helpBlock);
                     }
+                    if (step.step_type === "filter_path") {
+                        const guardNote = document.createElement("div");
+                        guardNote.className = "full muted small";
+                        guardNote.textContent = stepMeta.description || "";
+                        editor.appendChild(guardNote);
+
+                        const guardItems = Array.isArray(stepMeta.editor_help_lines) ? stepMeta.editor_help_lines : [];
+                        if (guardItems.length) {
+                            const guardList = document.createElement("ul");
+                            guardList.className = "full muted small";
+                            for (const guardItem of guardItems) {
+                                const item = document.createElement("li");
+                                item.textContent = guardItem;
+                                guardList.appendChild(item);
+                            }
+                            editor.appendChild(guardList);
+                        }
+                    }
                     if (aprsisSystemStrictStep || aprsisSourceSystemStep) {
                         const lockedNote = document.createElement("div");
                         lockedNote.className = "full muted small";

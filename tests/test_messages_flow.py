@@ -233,6 +233,7 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
     def test_default_message_groups_apply_only_until_user_saves_a_value(self) -> None:
         with temporary_database():
             self.assertEqual(get_message_settings()["target_groups"], ["ALL", "QST", "CQ"])
+            self.assertEqual(get_message_settings()["aprsis_target_groups"], ["ALL", "QST", "CQ"])
 
             interface_id = insert_modem()
             update_station_settings(station_payload(interface_id))
@@ -259,6 +260,51 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(saved["default_path"], "WIDE2-1")
             self.assertTrue(saved["receive_any_ssid"])
             self.assertEqual(saved["target_groups"], ["YAESU", "LOCAL"])
+            self.assertEqual(saved["aprsis_target_groups"], ["YAESU", "LOCAL"])
+
+    def test_rf_and_aprsis_groups_can_be_saved_and_received_independently(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            saved = save_message_settings(
+                {
+                    "default_path": "",
+                    "receive_any_ssid": False,
+                    "target_groups": ["RFONLY"],
+                    "aprsis_target_groups": ["ISONLY"],
+                }
+            )
+            self.assertEqual(saved["target_groups"], ["RFONLY"])
+            self.assertEqual(saved["aprsis_target_groups"], ["ISONLY"])
+
+            process_incoming_tnc2_message(
+                "SP8ABC>APRS::RFONLY   :RF accepted{01",
+                timestamp="2026-01-01T00:01:00+00:00",
+                source_kind="rf",
+            )
+            process_incoming_tnc2_message(
+                "SP8ABC>APRS::ISONLY   :IS rejected on RF{02",
+                timestamp="2026-01-01T00:02:00+00:00",
+                source_kind="rf",
+            )
+            process_incoming_tnc2_message(
+                "SP9XYZ>APRS::ISONLY   :IS accepted{03",
+                timestamp="2026-01-01T00:03:00+00:00",
+                source_kind="aprsis",
+            )
+            process_incoming_tnc2_message(
+                "SP9XYZ>APRS::RFONLY   :RF rejected on IS{04",
+                timestamp="2026-01-01T00:04:00+00:00",
+                source_kind="aprsis",
+            )
+
+            rows = fetch_all(
+                "SELECT addressee, message_text FROM aprs_messages WHERE direction = 'rx' ORDER BY id"
+            )
+            self.assertEqual(
+                [(row["addressee"], row["message_text"]) for row in rows],
+                [("RFONLY", "RF accepted"), ("ISONLY", "IS accepted")],
+            )
 
     def test_conventional_group_is_received_only_when_explicitly_configured(self) -> None:
         with temporary_database():
@@ -381,6 +427,21 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
             queued_acks = fetch_one("SELECT COUNT(*) AS total FROM outbound_jobs WHERE kind = 'message'")
             assert queued_acks is not None
             self.assertEqual(int(queued_acks["total"]), 0)
+
+    def test_ack_to_other_local_ssid_is_not_stored_or_notified(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            save_message_settings({"default_path": "", "receive_any_ssid": True, "target_groups": []})
+
+            with patch("app.services.messages.queue_aprs_message_notification") as notification_mock:
+                process_incoming_tnc2_message(
+                    "SP8ABC>APRS::SQ9MDD-7 :ack01",
+                    timestamp="2026-01-01T00:01:00+00:00",
+                )
+
+            self.assertIsNone(fetch_one("SELECT id FROM aprs_messages WHERE direction = 'rx'"))
+            notification_mock.assert_not_called()
 
     def test_message_text_allows_extended_printable_ascii_punctuation(self) -> None:
         allowed = r''',.:?/\()<>-_+=[]{}"'&$@#!'''

@@ -24,6 +24,21 @@
         .map((token) => token.trim())
         .filter((token) => token.length > 0);
     const markerClusteringEnabled = root.dataset.markerClusteringEnabled === "true";
+    const markerSpiderfyEnabled = root.dataset.markerSpiderfyEnabled === "true";
+    const configuredMarkerSpiderfyZoomLevels = Number.parseInt(
+        root.dataset.markerSpiderfyZoomLevelsBeforeMax || "2",
+        10
+    );
+    const markerSpiderfyZoomLevelsBeforeMax = Number.isInteger(configuredMarkerSpiderfyZoomLevels)
+        ? Math.min(10, Math.max(0, configuredMarkerSpiderfyZoomLevels))
+        : 2;
+    const configuredMarkerSpiderfyNearbyDistance = Number.parseInt(
+        root.dataset.markerSpiderfyNearbyDistancePx || "20",
+        10
+    );
+    const markerSpiderfyNearbyDistancePx = Number.isInteger(configuredMarkerSpiderfyNearbyDistance)
+        ? Math.min(100, Math.max(1, configuredMarkerSpiderfyNearbyDistance))
+        : 20;
 
     const centerOutput = document.getElementById("map-center");
     const zoomOutput = document.getElementById("map-zoom");
@@ -94,7 +109,10 @@
     });
     const coverageLayerGroup = window.L.layerGroup();
     const trackLayerGroup = window.L.layerGroup();
-    const markerLayerGroup = buildStationMarkerLayerGroup();
+    let markerLayerGroup = null;
+    let markerSpiderfier = null;
+    let markerSpiderfierActive = false;
+    let markerSpiderfyActivationZoom = Number.POSITIVE_INFINITY;
     const rulerLayer = window.L.layerGroup();
     const maidenheadGridLayer = window.L.layerGroup();
     let alertAreaLayer = null;
@@ -119,6 +137,8 @@
     const isModernAprsSymbolSet = String(document.documentElement.getAttribute("data-aprs-symbol-set") || "").trim().toLowerCase() === "modern";
     const aprsIconSize = isModernAprsSymbolSet ? [32, 32] : [20, 20];
     const aprsIconAnchor = isModernAprsSymbolSet ? [16, 16] : [10, 10];
+    const markerSpiderfyHoverEnabled = typeof window.matchMedia === "function"
+        && window.matchMedia("(any-hover: hover) and (any-pointer: fine)").matches;
     let refreshTimer = null;
     let alertRefreshTimer = null;
     let initialAlertLoadTimer = null;
@@ -147,6 +167,10 @@
     let firstStationRefreshSettled = false;
     let markerRenderGeneration = 0;
     let markerRenderFrame = null;
+    let markerSpiderfyHoverTimer = null;
+    let markerSpiderfyHoverMarker = null;
+    let markerSpiderfyCollapseTimer = null;
+    let markerSpiderfyHoverBounds = null;
     let lastAlertAreasSignature = "";
     let lastAlertPanelSignature = "";
     let latestAlertAreaCollection = { type: "FeatureCollection", features: [] };
@@ -718,6 +742,19 @@
     map.on("resize zoom move", syncMapMaskLayerViewport);
     mapMaskLayer = ensureMapMaskLayer(map);
     const tileLayer = window.L.tileLayer(tileUrl, tileLayerOptions).addTo(map);
+    const mapMaximumZoom = map.getMaxZoom();
+    if (
+        markerSpiderfyEnabled
+        && typeof window.OverlappingMarkerSpiderfier === "function"
+        && Number.isFinite(mapMaximumZoom)
+    ) {
+        markerSpiderfyActivationZoom = Math.max(
+            map.getMinZoom(),
+            mapMaximumZoom - markerSpiderfyZoomLevelsBeforeMax
+        );
+    }
+    markerLayerGroup = buildStationMarkerLayerGroup();
+    markerSpiderfier = buildStationMarkerSpiderfier();
     const alertAreasPaneName = "alert-areas-pane";
     const alertAreasPane = map.createPane(alertAreasPaneName);
     alertAreasPane.style.zIndex = "350";
@@ -753,6 +790,8 @@
     coverageLayerGroup.addTo(map);
     trackLayerGroup.addTo(map);
     markerLayerGroup.addTo(map);
+    syncMarkerSpiderfierActivation();
+    map.on("zoomend", syncMarkerSpiderfierActivation);
     rulerLayer.addTo(map);
     maidenheadGridLayer.addTo(map);
 
@@ -1317,13 +1356,6 @@
         return visibleInterfaceIds.has(interfaceId);
     }
 
-    function filteredStations(stations, interfacesById, visibleInterfaceIds) {
-        return (stations || []).filter((station) => {
-            const interfaceId = normalizeInterfaceId(station && station.interface_id);
-            return isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds);
-        });
-    }
-
     function isSameTrackPointPosition(previous, current) {
         const previousLatitude = Number(previous && previous.latitude);
         const previousLongitude = Number(previous && previous.longitude);
@@ -1346,6 +1378,9 @@
             }
             const previous = rebuilt[rebuilt.length - 1];
             if (previous && isSameTrackPointPosition(previous, point)) {
+                // Keep the newest observation at an unchanged position so the
+                // marker source and timestamp still follow the latest frame.
+                rebuilt[rebuilt.length - 1] = point;
                 continue;
             }
             rebuilt.push(point);
@@ -1353,14 +1388,19 @@
         return rebuilt.slice(-mobileTrackMaxRenderedPoints);
     }
 
-    function filteredMobileTracks(mobileTracks, interfacesById, visibleInterfaceIds) {
+    function filteredMobileTrackData(mobileTracks, interfacesById, visibleInterfaceIds) {
         const filteredTracks = [];
+        const visiblePointsByStationKey = new Map();
         for (const track of mobileTracks || []) {
             const rebuiltPoints = rebuildVisibleTrackPoints(
                 track.points,
                 interfacesById,
                 visibleInterfaceIds
             );
+            const stationKey = String(track.display_callsign || "").trim();
+            if (stationKey && rebuiltPoints.length > 0) {
+                visiblePointsByStationKey.set(stationKey, rebuiltPoints);
+            }
             if (rebuiltPoints.length < 2) {
                 continue;
             }
@@ -1369,14 +1409,66 @@
                 points: rebuiltPoints,
             });
         }
-        return filteredTracks;
+        return { filteredTracks, visiblePointsByStationKey };
+    }
+
+    function trackPointAgeSeconds(heardAt, fallbackAgeSeconds) {
+        const heardAtMs = Date.parse(String(heardAt || ""));
+        if (!Number.isFinite(heardAtMs)) {
+            return fallbackAgeSeconds;
+        }
+        return Math.max(0, (Date.now() - heardAtMs) / 1000);
+    }
+
+    function stationsAtLatestVisibleTrackPoints(
+        stations,
+        visiblePointsByStationKey,
+        interfacesById,
+        visibleInterfaceIds
+    ) {
+        const resolvedStations = [];
+        for (const station of stations || []) {
+            const stationKey = stationIdentityKey(station);
+            const visiblePoints = visiblePointsByStationKey.get(stationKey) || [];
+            const latestPoint = visiblePoints[visiblePoints.length - 1];
+            if (latestPoint) {
+                const interfaceId = normalizeInterfaceId(latestPoint.interface_id);
+                const interfaceItem = interfaceId === null ? null : interfacesById.get(interfaceId);
+                const heardAt = String(latestPoint.heard_at || "").trim();
+                resolvedStations.push({
+                    ...station,
+                    latitude: Number(latestPoint.latitude),
+                    longitude: Number(latestPoint.longitude),
+                    interface_id: interfaceId,
+                    source: String((interfaceItem && interfaceItem.name) || station.source || "").trim(),
+                    last_heard_at: heardAt || station.last_heard_at,
+                    last_heard_age_s: trackPointAgeSeconds(heardAt, station.last_heard_age_s),
+                });
+                continue;
+            }
+            const interfaceId = normalizeInterfaceId(station && station.interface_id);
+            if (isStationInterfaceVisible(interfaceId, interfacesById, visibleInterfaceIds)) {
+                resolvedStations.push(station);
+            }
+        }
+        return resolvedStations;
     }
 
     function filteredMapData(stations, mobileTracks, interfaces) {
         const { interfacesById, visibleInterfaceIds } = interfaceVisibilityContext(interfaces);
+        const { filteredTracks, visiblePointsByStationKey } = filteredMobileTrackData(
+            mobileTracks,
+            interfacesById,
+            visibleInterfaceIds
+        );
         return {
-            stations: filteredStations(stations, interfacesById, visibleInterfaceIds),
-            mobileTracks: filteredMobileTracks(mobileTracks, interfacesById, visibleInterfaceIds),
+            stations: stationsAtLatestVisibleTrackPoints(
+                stations,
+                visiblePointsByStationKey,
+                interfacesById,
+                visibleInterfaceIds
+            ),
+            mobileTracks: filteredTracks,
         };
     }
 
@@ -1419,7 +1511,7 @@
         return [
             normalizeRevision(latestStationRevision),
             normalizeRevision(latestStationDetailsRevision),
-            tracksVisible ? normalizeRevision(latestTrackRevision) : "tracks-off",
+            normalizeRevision(latestTrackRevision),
             coverageVisible ? normalizeRevision(latestStationDetailsRevision) : "coverage-off",
             String(latestStations.length),
             String(latestMobileTracks.length),
@@ -1967,7 +2059,7 @@
         }
         // Cluster only markers that visually overlap; the radius is close to the
         // icon size so spread-out stations keep rendering as individual markers.
-        const clusterGroup = window.L.markerClusterGroup({
+        const clusterOptions = {
             maxClusterRadius: 28,
             showCoverageOnHover: false,
             zoomToBoundsOnClick: true,
@@ -1980,7 +2072,13 @@
             chunkedLoading: false,
             spiderLegPolylineOptions: { weight: 1.5, color: "#7a8a94", opacity: 0.85 },
             iconCreateFunction: buildStationClusterIcon,
-        });
+        };
+        if (Number.isFinite(markerSpiderfyActivationZoom)) {
+            // At this zoom OMS takes over individual markers, so a marker is
+            // never controlled by both spiderfying implementations at once.
+            clusterOptions.disableClusteringAtZoom = markerSpiderfyActivationZoom;
+        }
+        const clusterGroup = window.L.markerClusterGroup(clusterOptions);
         clusterGroup.on("clustermouseover", function (event) {
             const cluster = event.propagatedFrom || event.layer;
             if (!cluster || typeof cluster.getAllChildMarkers !== "function") {
@@ -2015,6 +2113,256 @@
             }
         });
         return clusterGroup;
+    }
+
+    function buildStationMarkerSpiderfier() {
+        if (
+            !markerSpiderfyEnabled
+            || !Number.isFinite(markerSpiderfyActivationZoom)
+            || typeof window.OverlappingMarkerSpiderfier !== "function"
+        ) {
+            return null;
+        }
+        const spiderfier = new window.OverlappingMarkerSpiderfier(map, {
+            keepSpiderfied: false,
+            nearbyDistance: markerSpiderfyNearbyDistancePx,
+            circleFootSeparation: isModernAprsSymbolSet ? 42 : 32,
+            spiralFootSeparation: isModernAprsSymbolSet ? 44 : 34,
+            spiralLengthStart: isModernAprsSymbolSet ? 16 : 12,
+            spiralLengthFactor: isModernAprsSymbolSet ? 7 : 5.5,
+            legWeight: 1.5,
+        });
+        spiderfier.legColors.usual = "#7a8a94";
+        spiderfier.legColors.highlighted = "#f59e0b";
+        spiderfier.addListener("click", function (marker) {
+            const station = marker && marker.aprsStation;
+            if (station && station.detail_href) {
+                window.location.href = station.detail_href;
+            }
+        });
+        spiderfier.addListener("spiderfy", function (markers) {
+            updateMarkerSpiderfyHoverBounds(markers);
+        });
+        spiderfier.addListener("unspiderfy", function () {
+            markerSpiderfyHoverBounds = null;
+            cancelMarkerSpiderfyCollapse();
+        });
+        if (markerSpiderfyHoverEnabled) {
+            const mapContainer = map.getContainer();
+            mapContainer.addEventListener("pointermove", handleMarkerSpiderfyPointerMove);
+            mapContainer.addEventListener("pointerleave", scheduleMarkerSpiderfyCollapse);
+            map.on("movestart", collapseHoverSpiderfyImmediately);
+        }
+        return spiderfier;
+    }
+
+    function cancelMarkerSpiderfyHover() {
+        if (markerSpiderfyHoverTimer !== null) {
+            window.clearTimeout(markerSpiderfyHoverTimer);
+            markerSpiderfyHoverTimer = null;
+        }
+        markerSpiderfyHoverMarker = null;
+    }
+
+    function cancelMarkerSpiderfyCollapse() {
+        if (markerSpiderfyCollapseTimer !== null) {
+            window.clearTimeout(markerSpiderfyCollapseTimer);
+            markerSpiderfyCollapseTimer = null;
+        }
+    }
+
+    function collapseHoverSpiderfyImmediately() {
+        cancelMarkerSpiderfyHover();
+        cancelMarkerSpiderfyCollapse();
+        markerSpiderfyHoverBounds = null;
+        if (markerSpiderfier && markerSpiderfier.spiderfied) {
+            markerSpiderfier.unspiderfy();
+        }
+    }
+
+    function scheduleMarkerSpiderfyCollapse() {
+        if (!markerSpiderfyHoverEnabled || !markerSpiderfier || !markerSpiderfier.spiderfied) {
+            return;
+        }
+        cancelMarkerSpiderfyCollapse();
+        markerSpiderfyCollapseTimer = window.setTimeout(function () {
+            markerSpiderfyCollapseTimer = null;
+            markerSpiderfyHoverBounds = null;
+            markerSpiderfier.unspiderfy();
+        }, 400);
+    }
+
+    function updateMarkerSpiderfyHoverBounds(markers) {
+        if (!markerSpiderfyHoverEnabled || !Array.isArray(markers) || !markers.length) {
+            markerSpiderfyHoverBounds = null;
+            return;
+        }
+        const points = [];
+        for (const marker of markers) {
+            points.push(map.latLngToContainerPoint(marker.getLatLng()));
+            if (marker._omsData && marker._omsData.usualPosition) {
+                points.push(map.latLngToContainerPoint(marker._omsData.usualPosition));
+            }
+        }
+        const padding = Math.max(aprsIconSize[0], aprsIconSize[1]) / 2 + 28;
+        let minX = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+        for (const point of points) {
+            minX = Math.min(minX, point.x);
+            maxX = Math.max(maxX, point.x);
+            minY = Math.min(minY, point.y);
+            maxY = Math.max(maxY, point.y);
+        }
+        markerSpiderfyHoverBounds = {
+            minX: minX - padding,
+            maxX: maxX + padding,
+            minY: minY - padding,
+            maxY: maxY + padding,
+        };
+        cancelMarkerSpiderfyCollapse();
+    }
+
+    function handleMarkerSpiderfyPointerMove(event) {
+        if (!markerSpiderfyHoverBounds || !markerSpiderfier || !markerSpiderfier.spiderfied) {
+            return;
+        }
+        const point = map.mouseEventToContainerPoint(event);
+        const inside = point.x >= markerSpiderfyHoverBounds.minX
+            && point.x <= markerSpiderfyHoverBounds.maxX
+            && point.y >= markerSpiderfyHoverBounds.minY
+            && point.y <= markerSpiderfyHoverBounds.maxY;
+        if (inside) {
+            cancelMarkerSpiderfyCollapse();
+        } else {
+            scheduleMarkerSpiderfyCollapse();
+        }
+    }
+
+    function collectMarkersNearSpiderfyMarker(marker) {
+        if (!markerSpiderfier || !marker || !map.hasLayer(marker)) {
+            return { nearby: [], nonNearby: [] };
+        }
+        const markerPoint = map.latLngToLayerPoint(marker.getLatLng());
+        const maximumDistanceSquared = markerSpiderfyNearbyDistancePx * markerSpiderfyNearbyDistancePx;
+        const nearby = [];
+        const nonNearby = [];
+        for (const candidate of markerSpiderfier.getMarkers()) {
+            if (!map.hasLayer(candidate)) {
+                continue;
+            }
+            const candidatePoint = map.latLngToLayerPoint(candidate.getLatLng());
+            const deltaX = candidatePoint.x - markerPoint.x;
+            const deltaY = candidatePoint.y - markerPoint.y;
+            if (deltaX * deltaX + deltaY * deltaY < maximumDistanceSquared) {
+                nearby.push({ marker: candidate, markerPt: candidatePoint });
+            } else {
+                nonNearby.push(candidate);
+            }
+        }
+        return { nearby, nonNearby };
+    }
+
+    function scheduleMarkerSpiderfyOnHover(marker) {
+        if (!markerSpiderfyHoverEnabled || !markerSpiderfierActive || !markerSpiderfier) {
+            return;
+        }
+        if (markerSpiderfier.spiderfied) {
+            cancelMarkerSpiderfyCollapse();
+            return;
+        }
+        cancelMarkerSpiderfyHover();
+        markerSpiderfyHoverMarker = marker;
+        markerSpiderfyHoverTimer = window.setTimeout(function () {
+            markerSpiderfyHoverTimer = null;
+            const hoveredMarker = markerSpiderfyHoverMarker;
+            markerSpiderfyHoverMarker = null;
+            const candidates = collectMarkersNearSpiderfyMarker(hoveredMarker);
+            if (candidates.nearby.length > 1) {
+                markerSpiderfier.spiderfy(candidates.nearby, candidates.nonNearby);
+            }
+        }, 150);
+    }
+
+    function attachMarkerSpiderfyHover(marker) {
+        if (!markerSpiderfyHoverEnabled || marker.aprsboxSpiderfyMouseOverHandler) {
+            return;
+        }
+        marker.aprsboxSpiderfyMouseOverHandler = function () {
+            scheduleMarkerSpiderfyOnHover(marker);
+        };
+        marker.aprsboxSpiderfyMouseOutHandler = function () {
+            if (markerSpiderfyHoverMarker === marker) {
+                cancelMarkerSpiderfyHover();
+            }
+        };
+        marker.on("mouseover", marker.aprsboxSpiderfyMouseOverHandler);
+        marker.on("mouseout", marker.aprsboxSpiderfyMouseOutHandler);
+    }
+
+    function detachMarkerSpiderfyHover(marker) {
+        if (marker.aprsboxSpiderfyMouseOverHandler) {
+            marker.off("mouseover", marker.aprsboxSpiderfyMouseOverHandler);
+            marker.off("mouseout", marker.aprsboxSpiderfyMouseOutHandler);
+            delete marker.aprsboxSpiderfyMouseOverHandler;
+            delete marker.aprsboxSpiderfyMouseOutHandler;
+        }
+        if (markerSpiderfyHoverMarker === marker) {
+            cancelMarkerSpiderfyHover();
+        }
+    }
+
+    function detachMarkerSpiderfierClick(marker) {
+        if (!markerSpiderfyHoverEnabled || !markerSpiderfier || !marker || !marker._oms) {
+            return;
+        }
+        const markerIndex = markerSpiderfier.markers.indexOf(marker);
+        if (markerIndex < 0) {
+            return;
+        }
+        const clickListener = markerSpiderfier.markerListeners[markerIndex];
+        marker.removeEventListener("click", clickListener);
+        // Keep the arrays aligned so the upstream remove/clear methods remain safe.
+        markerSpiderfier.markerListeners[markerIndex] = window.L.Util.falseFn;
+    }
+
+    function addMarkerToSpiderfier(marker) {
+        if (markerSpiderfier && markerSpiderfierActive && marker && !marker._oms) {
+            markerSpiderfier.addMarker(marker);
+            detachMarkerSpiderfierClick(marker);
+            attachMarkerSpiderfyHover(marker);
+        }
+    }
+
+    function removeMarkerFromSpiderfier(marker) {
+        if (markerSpiderfier && marker && marker._oms) {
+            detachMarkerSpiderfyHover(marker);
+            markerSpiderfier.removeMarker(marker);
+        }
+    }
+
+    function syncMarkerSpiderfierActivation() {
+        if (!markerSpiderfier) {
+            markerSpiderfierActive = false;
+            return;
+        }
+        const shouldBeActive = map.getZoom() >= markerSpiderfyActivationZoom;
+        if (shouldBeActive === markerSpiderfierActive) {
+            return;
+        }
+        markerSpiderfierActive = shouldBeActive;
+        if (!shouldBeActive) {
+            collapseHoverSpiderfyImmediately();
+            for (const record of markerLayersByKey.values()) {
+                detachMarkerSpiderfyHover(record.layer);
+            }
+            markerSpiderfier.clearMarkers();
+            return;
+        }
+        for (const record of markerLayersByKey.values()) {
+            addMarkerToSpiderfier(record.layer);
+        }
     }
 
     function buildStationClusterIcon(cluster) {
@@ -2315,18 +2663,28 @@
                 sticky: true,
             });
         }
-        marker.off("click");
+        if (marker.aprsboxClickHandler) {
+            marker.off("click", marker.aprsboxClickHandler);
+            delete marker.aprsboxClickHandler;
+        }
         if (station.detail_href) {
-            marker.on("click", function () {
+            marker.aprsboxClickHandler = function () {
+                if (markerSpiderfierActive && !markerSpiderfyHoverEnabled) {
+                    return;
+                }
                 window.location.href = station.detail_href;
-            });
+            };
+            marker.on("click", marker.aprsboxClickHandler);
         }
     }
 
-    function removeMissingLayerRecords(recordsByKey, layerGroup, nextKeys) {
+    function removeMissingLayerRecords(recordsByKey, layerGroup, nextKeys, beforeRemove = null) {
         for (const [key, record] of Array.from(recordsByKey.entries())) {
             if (nextKeys.has(key)) {
                 continue;
+            }
+            if (typeof beforeRemove === "function") {
+                beforeRemove(record.layer);
             }
             layerGroup.removeLayer(record.layer);
             recordsByKey.delete(key);
@@ -2439,6 +2797,7 @@
             marker.aprsStation = station;
             syncMarkerInteractions(marker, station, nextTooltipContent);
             markerLayerGroup.addLayer(marker);
+            addMarkerToSpiderfier(marker);
             markerLayersByKey.set(key, {
                 layer: marker,
                 markerSignature: nextMarkerSignature,
@@ -2455,6 +2814,9 @@
             if (positionChanged) {
                 // The cluster group indexes markers by position, so a moved
                 // marker has to be re-added for clustering to stay correct.
+                if (markerSpiderfier) {
+                    markerSpiderfier.unspiderfy();
+                }
                 markerLayerGroup.removeLayer(existing.layer);
                 existing.layer.setLatLng([station.latitude, station.longitude]);
                 existing.layer.setIcon(buildStationIcon(station));
@@ -2516,7 +2878,12 @@
             nextKeys.add(key);
             records.push({ key, sourceIndex, station });
         }
-        removeMissingLayerRecords(markerLayersByKey, markerLayerGroup, nextKeys);
+        removeMissingLayerRecords(
+            markerLayersByKey,
+            markerLayerGroup,
+            nextKeys,
+            removeMarkerFromSpiderfier
+        );
         const prioritizedRecords = prioritizeMarkerRecords(records);
         renderMarkerBatch(prioritizedRecords, 0, renderGeneration, initialMarkerBatchSize);
     }
@@ -2679,7 +3046,7 @@
             if (latestStationDetailsRevision !== targetRevision) {
                 void loadStationDetails(targetRevision);
             }
-            if (tracksVisible && latestTrackRevision !== targetRevision) {
+            if (latestTrackRevision !== targetRevision) {
                 void loadMobileTracks(targetRevision);
             }
         });

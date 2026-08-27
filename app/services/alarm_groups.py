@@ -307,14 +307,14 @@ def build_automatic_aprsis_alarm_filter(groups: Any | None = None) -> str:
 
 
 def build_effective_aprsis_filter(user_filter: Any, groups: Any | None = None) -> str:
-    """Append only missing alarm-group subscriptions to the user's filter."""
+    """Append missing alarm and message-group subscriptions to the user's filter."""
     raw_user_filter = str(user_filter or "").strip()
     normalized_user_filter = (
         normalize_aprsis_filter(raw_user_filter)
         if raw_user_filter
         else ""
     )
-    normalized_groups = (
+    normalized_alarm_groups = (
         (
             get_aprs_alarm_groups()
             if groups is None
@@ -322,6 +322,13 @@ def build_effective_aprsis_filter(user_filter: Any, groups: Any | None = None) -
         )
         if get_aprs_alarm_enabled()
         else []
+    )
+    # Import lazily because messages also uses the alarm-group service.
+    from app.services.messages import get_message_settings
+
+    normalized_message_groups = get_message_settings()["aprsis_target_groups"]
+    normalized_groups = list(
+        dict.fromkeys([*normalized_alarm_groups, *normalized_message_groups])
     )
 
     subscribed_groups: set[str] = set()
@@ -339,7 +346,7 @@ def build_effective_aprsis_filter(user_filter: Any, groups: Any | None = None) -
         for group in normalized_groups
         if group not in subscribed_groups
     ]
-    automatic_filter = build_automatic_aprsis_alarm_filter(missing_groups)
+    automatic_filter = f"g/{'/'.join(missing_groups)}" if missing_groups else ""
     if not automatic_filter:
         return normalized_user_filter
     if not normalized_user_filter:

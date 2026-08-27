@@ -331,6 +331,7 @@ def process_normalized_tnc2_rx(
         timestamp=occurred_at,
         allow_automatic_responses=collect_statistics or normalized_kind == APRSIS_SOURCE_KIND,
         automatic_response_internal_tx_only=normalized_kind == APRSIS_SOURCE_KIND,
+        source_kind=normalized_kind,
     )
     queue_radar_notifications(timestamp=occurred_at)
     return True

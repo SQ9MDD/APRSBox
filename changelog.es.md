@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.12 - 2026-08-27
+- `Versión estable`: se mejoraron el mapa y los recorridos de estaciones con la separación de marcadores superpuestos y la actualización inmediata de la última trama. Se rediseñaron la evaluación y el diagnóstico de las condiciones de banda, se separaron los grupos RF y APRS-IS, se simplificó la gestión de interfaces y ayuda, y se aclaró la transmisión APRS-IS de mejor esfuerzo sin búfer ni reintentos de tramas.
+
+## 1.11.10.dev - 2026-08-26
+- `Mapa / última trama`: el widget usa ahora el mismo flujo de tráfico en vivo que el scroller, por lo que muestra inmediatamente su entrada más reciente en vez de esperar a la actualización periódica de la lista de estaciones; los datos de QSY, distancia y comentario se completan desde el registro actual de la estación.
+- `Condiciones de banda / datos de servicio`: se añadió bajo los datos del modelo un panel de diagnóstico que muestra la base de referencia aprendida, la mediana y el alcance P90 de las estaciones fijas, los umbrales automáticos de distancia y los contadores de estaciones, recepciones lejanas confirmadas, áreas geográficas y tramas RF de la muestra utilizada por la evaluación visible.
+
+## 1.11.8.dev - 2026-08-26
+- `APRS-IS / transmisión`: el uplink aplica ahora un contrato explícito de mejor esfuerzo, sin almacenar tramas en búfer ni reintentarlas. Un paquete solo se escribe mediante el transporte activo en ese momento; la ausencia de conexión, un transporte en cierre, un error de escritura o un timeout provoca un descarte inmediato, mientras que la reconexión solo procesa tramas nuevas y nunca reproduce las anteriores. El registro de routing distingue ahora `sent` de `drop` en lugar de describir una escritura directa como encolada.
+
+## 1.11.7.dev - 2026-08-26
+- `GUI / ayuda`: las ventanas de ayuda no son modales, permanecen abiertas al editar formularios y pueden arrastrarse por la pantalla.
+
+## 1.11.6.dev - 2026-08-25
+- `Condiciones de banda / modelo de alcance`: se rediseñó la evaluación W0–W5 para que cada receptor aprenda su alcance normal a partir de una distancia representativa por estación fija. Las recepciones lejanas excepcionales se filtran mediante mediana y MAD, y los umbrales de estaciones lejanas y muy lejanas se obtienen automáticamente de la huella RF local en lugar de observaciones aisladas.
+- `Condiciones de banda / fiabilidad`: las tramas third-party ya no se consideran observaciones RF físicas, confirmar una estación distante exige ahora recibirla en al menos tres segmentos temporales y W3–W5 requieren indicios más claros y repetibles. También se hicieron más coherentes la base de referencia, la maduración de la confianza y los parámetros de ajuste del modelo.
+
+## 1.11.5.dev - 2026-08-24
+- `Mensajes / grupos`: los grupos de destino anteriores se dividieron en `Grupos RF` y `Grupos APRS-IS`; en el primer uso, la lista APRS-IS hereda los grupos RF y después puede configurarse de forma independiente. Los grupos APRS-IS se combinan automáticamente con los grupos de alarma habilitados en el filtro `g/...` de la conexión APRS-IS.
+- `Mapa / fuentes y recorridos`: los iconos de estación usan ahora la última trama de posición cronológica de las fuentes visibles, de modo que cada marcador permanece al final de su recorrido correspondiente tanto con todas las fuentes activadas como tras seleccionar una sola interfaz. Un único punto visible sigue posicionando el icono sin dibujar una polilínea artificial, y las observaciones repetidas en la misma posición conservan la fuente y la marca de tiempo más recientes.
+
+## 1.11.3.dev - 2026-08-21
+- `Interfaces / acciones rápidas`: se añadió a la lista de interfaces un botón contextual para activar o desactivar, equivalente a la acción de las reglas de enrutamiento; el cambio de estado ya no requiere abrir el editor, actualiza únicamente el estado de actividad de la interfaz y utiliza el modal de progreso compartido con un mensaje de resultado localizado y gestión de errores.
+
+## 1.11.2.dev - 2026-08-20
+- `Mapa / separación de marcadores`: se incorporó localmente `OverlappingMarkerSpiderfier` y se añadió la separación opcional de marcadores individuales superpuestos con zoom alto, conservando los iconos APRS y los tooltips. En escritorio, pasar el ratón separa el grupo, un clic siempre abre los detalles de la estación elegida y salir del área ampliada del grupo lo vuelve a cerrar tras un breve retardo; en dispositivos táctiles se mantiene el flujo seguro de primer toque para separar y segundo toque para abrir detalles. El umbral se calcula respecto a `map.getMaxZoom()`, `Leaflet.markercluster` entrega los marcadores en el mismo zoom y la geometría considera el tamaño del conjunto de iconos.
+- `Ajustes / mapa`: los Ajustes globales incluyen ahora un interruptor para separar marcadores, el número de niveles antes del zoom máximo (valor predeterminado `2`) y la distancia de superposición en píxeles (valor predeterminado `20`); los valores se validan, se guardan mediante los ajustes de la aplicación y se incluyen en las copias de configuración v2.
+
 ## 1.11 - 2026-08-20
 - `Versión estable`: se integraron los cambios de `1.10.7.dev–1.10.16.dev`, entre ellos un mapa y una lista de estaciones mucho más rápidos gracias a la proyección persistente del estado, un Panel rediseñado con una evaluación más clara de la preparación de la estación, compatibilidad HTTPS completa para systemd y OpenRC, actualizaciones más seguras y diálogos, ayuda e iconos de GUI uniformes. Se amplió la compatibilidad de los mensajes APRS, las conversaciones se reorganizaron en una lista compacta con selección y eliminación múltiple, y la agrupación opcional de estaciones superpuestas en el mapa permanece desactivada de forma predeterminada.
 

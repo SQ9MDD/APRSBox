@@ -137,6 +137,40 @@
                 >
                 <span>{{ t("Group overlapping station icons on the map") }}</span>
             </label>
+            <label class="full checkbox-row">
+                <input
+                    type="checkbox"
+                    name="map_marker_spiderfy_enabled"
+                    value="1"
+                    {% if map_marker_spiderfy_enabled %}checked{% endif %}
+                    {% if can_manage_global_settings %}form="global-settings-form"{% else %}disabled{% endif %}
+                >
+                <span>{{ t("Enable spreading overlapping markers") }}</span>
+            </label>
+            <label>
+                <span>{{ t("Activate X levels before maximum zoom") }}</span>
+                <input
+                    type="number"
+                    name="map_marker_spiderfy_zoom_levels"
+                    min="0"
+                    max="10"
+                    step="1"
+                    value="{{ map_marker_spiderfy_zoom_levels }}"
+                    {% if can_manage_global_settings %}form="global-settings-form"{% else %}disabled{% endif %}
+                >
+            </label>
+            <label>
+                <span>{{ t("Overlapping marker distance [px]") }}</span>
+                <input
+                    type="number"
+                    name="map_marker_spiderfy_nearby_distance_px"
+                    min="1"
+                    max="100"
+                    step="1"
+                    value="{{ map_marker_spiderfy_nearby_distance_px }}"
+                    {% if can_manage_global_settings %}form="global-settings-form"{% else %}disabled{% endif %}
+                >
+            </label>
         </div>
         {% if can_manage_global_settings %}
         <div class="form-actions">

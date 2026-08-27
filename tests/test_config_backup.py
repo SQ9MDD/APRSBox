@@ -192,6 +192,20 @@ class ConfigBackupTests(unittest.TestCase):
             self.assertTrue(ok, error)
             self.assertEqual(get_app_setting("map_marker_clustering_enabled"), "0")
 
+    def test_import_accepts_older_v2_backup_without_marker_spiderfy_settings(self) -> None:
+        with temporary_database():
+            payload = export_configuration_backup()
+            del payload["app_settings"]["map_marker_spiderfy_enabled"]
+            del payload["app_settings"]["map_marker_spiderfy_zoom_levels_before_max"]
+            del payload["app_settings"]["map_marker_spiderfy_nearby_distance_px"]
+
+            ok, error = safe_import_configuration_backup(json.dumps(payload).encode("utf-8"))
+
+            self.assertTrue(ok, error)
+            self.assertEqual(get_app_setting("map_marker_spiderfy_enabled"), "0")
+            self.assertEqual(get_app_setting("map_marker_spiderfy_zoom_levels_before_max"), "2")
+            self.assertEqual(get_app_setting("map_marker_spiderfy_nearby_distance_px"), "20")
+
     def test_export_and_import_restores_messages_and_notification_configuration(self) -> None:
         with temporary_database():
             for key, value in (

@@ -4,6 +4,7 @@ Dies ist der zentrale Block fur Flows, die in `TX RF` enden. Er fuehrt zuerst de
 
 Der Schutzteil lehnt ab:
 
+- Frames mit lokaler `My station` oder lokaler `WX station` als Quelle; dadurch wird verhindert, dass ein lokal gesendeter Frame nach seiner Rückkehr über ein anderes Digi erneut gesendet wird,
 - Third-Party-Frames,
 - APRS-Nachrichten an lokale `My station`,
 - APRS-Queries an lokale `My station`,

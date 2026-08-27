@@ -4,6 +4,7 @@ To najważniejszy blok dla ścieżek `... -> TX RF`. Ten krok robi dwie rzeczy n
 
 Najpierw część ochronna odrzuca:
 
+- ramki, których źródłem jest lokalna `My station` albo lokalna stacja `WX` — zapobiega to ponownemu nadaniu własnej ramki wracającej przez inne digi,
 - ramki third-party,
 - wiadomości APRS do lokalnej `My station`,
 - query APRS do lokalnej `My station`,

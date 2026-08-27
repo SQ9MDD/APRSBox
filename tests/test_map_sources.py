@@ -11,6 +11,9 @@ from app.services.map_service import (
     delete_map_source,
     get_map_page_config,
     get_map_marker_clustering_enabled,
+    get_map_marker_spiderfy_enabled,
+    get_map_marker_spiderfy_nearby_distance_px,
+    get_map_marker_spiderfy_zoom_levels,
     get_map_source,
     list_map_sources,
     move_map_source,
@@ -244,6 +247,29 @@ class MapSourcesTests(unittest.TestCase):
 
             self.assertTrue(get_map_marker_clustering_enabled())
             self.assertTrue(get_map_page_config()["marker_clustering_enabled"])
+
+    def test_map_marker_spiderfy_defaults_and_config_are_exposed(self) -> None:
+        with temporary_database():
+            self.assertFalse(get_map_marker_spiderfy_enabled())
+            self.assertEqual(get_map_marker_spiderfy_zoom_levels(), 2)
+            self.assertEqual(get_map_marker_spiderfy_nearby_distance_px(), 20)
+
+            set_app_setting("map_marker_spiderfy_enabled", "1")
+            set_app_setting("map_marker_spiderfy_zoom_levels_before_max", "4")
+            set_app_setting("map_marker_spiderfy_nearby_distance_px", "32")
+
+            config = get_map_page_config()
+            self.assertTrue(config["marker_spiderfy_enabled"])
+            self.assertEqual(config["marker_spiderfy_zoom_levels_before_max"], 4)
+            self.assertEqual(config["marker_spiderfy_nearby_distance_px"], 32)
+
+    def test_map_marker_spiderfy_invalid_numbers_use_defaults(self) -> None:
+        with temporary_database():
+            set_app_setting("map_marker_spiderfy_zoom_levels_before_max", "11")
+            set_app_setting("map_marker_spiderfy_nearby_distance_px", "0")
+
+            self.assertEqual(get_map_marker_spiderfy_zoom_levels(), 2)
+            self.assertEqual(get_map_marker_spiderfy_nearby_distance_px(), 20)
 
     def test_clear_map_source_cache_removes_files_and_resets_stats(self) -> None:
         with temporary_database():

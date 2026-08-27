@@ -542,6 +542,11 @@ class BandConditionHelpersTests(unittest.TestCase):
             self.assertEqual(snapshot["label"], "Normal conditions")
             self.assertEqual(snapshot["fixed_station_count"], 10)
             self.assertEqual(snapshot["rx_total"], 50)
+            self.assertEqual(snapshot["service_data"]["hour_start_utc"], saved_hour.isoformat())
+            self.assertEqual(snapshot["service_data"]["fixed_station_count"], 10)
+            self.assertEqual(snapshot["service_data"]["rx_total"], 50)
+            self.assertIn("baseline_hour_count", snapshot["service_data"])
+            self.assertIn("baseline_distance_median_km", snapshot["service_data"])
 
             finalization = finalize_band_condition_hours(
                 now_utc=current_hour + timedelta(minutes=30),
@@ -713,6 +718,7 @@ class BandConditionHelpersTests(unittest.TestCase):
         self.assertIn("band-condition-interface-stack", template)
         self.assertIn('<article class="panel band-condition-card">', template)
         self.assertIn('<article class="panel band-condition-model-card">', template)
+        self.assertIn('<article class="panel band-condition-service-card">', template)
         self.assertIn("band-condition-index-legend", template)
         self.assertIn("<strong>W0</strong>", template)
         self.assertIn("<strong>W5</strong>", template)
@@ -722,6 +728,12 @@ class BandConditionHelpersTests(unittest.TestCase):
             template.index("<strong>W0</strong>"),
         )
         self.assertIn("band-condition-model-data", template)
+        self.assertIn("band-condition-service-data", template)
+        self.assertIn("Service data", template)
+        self.assertIn("Assessment sample", template)
+        self.assertIn("Sample hour (UTC)", template)
+        self.assertIn("Baseline median distance", template)
+        self.assertIn("Far stations confirmed / total", template)
         self.assertIn("30-day baseline", template)
         self.assertIn("/api/band-condition/history?days=365", template)
         self.assertIn("const historyRangeHours = Object.freeze([24, 168, 720, 8760]);", template)
@@ -738,6 +750,10 @@ class BandConditionHelpersTests(unittest.TestCase):
         self.assertLess(
             template.index('<article class="panel band-condition-card">'),
             template.index('<article class="panel band-condition-model-card">'),
+        )
+        self.assertLess(
+            template.index('<article class="panel band-condition-model-card">'),
+            template.index('<article class="panel band-condition-service-card">'),
         )
         self.assertNotIn("reference-stations", template)
 

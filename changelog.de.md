@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.12 - 2026-08-27
+- `Stabile Version`: Karte und Stationstracks wurden durch das Auffächern überlappender Marker und die sofortige Aktualisierung des neuesten Frames verbessert. Die Bewertung und Diagnose der Bandbedingungen wurde überarbeitet, RF- und APRS-IS-Gruppen wurden getrennt, die Verwaltung von Schnittstellen und Hilfe vereinfacht und die APRS-IS-Best-Effort-Übertragung ohne Frame-Pufferung oder Wiederholungsversuche präzisiert.
+
+## 1.11.10.dev - 2026-08-26
+- `Bandbedingungen / Servicedaten`: Unter den Modelldaten wurde ein Diagnosepanel ergänzt, das die gelernte Referenzbasis, Median und P90-Reichweite ortsfester Stationen, automatische Entfernungsschwellen sowie Zähler für Stationen, bestätigte Fernempfänge, geografische Gebiete und RF-Frames aus der für die sichtbare Bewertung verwendeten Stichprobe anzeigt.
+
+## 1.11.8.dev - 2026-08-26
+- `APRS-IS / Übertragung`: Der Uplink arbeitet jetzt nach einem eindeutigen Best-Effort-Vertrag ohne Pufferung oder Wiederholungsversuche für Frames. Ein Paket wird nur über den aktuell aktiven Transport geschrieben; eine fehlende Verbindung, ein sich schließender Transport, ein Schreibfehler oder Timeout führt zum sofortigen Verwerfen, während ein Reconnect ausschließlich neue Frames verarbeitet und frühere niemals erneut abspielt. Das Routing-Protokoll unterscheidet nun `sent` und `drop`, statt einen direkten Schreibvorgang als eingereiht zu bezeichnen.
+
+## 1.11.7.dev - 2026-08-26
+- `GUI / Hilfe`: Hilfefenster sind nicht modal, bleiben beim Ausfüllen von Formularen geöffnet und lassen sich über den Bildschirm ziehen.
+
+## 1.11.6.dev - 2026-08-25
+- `Bandbedingungen / Reichweitenmodell`: Die Bewertung W0–W5 wurde so überarbeitet, dass jeder Empfänger seine normale Reichweite aus genau einer repräsentativen Entfernung je ortsfester Station lernt. Außergewöhnliche Fernempfänge werden robust mit Median und MAD herausgefiltert; die Schwellen für entfernte und sehr entfernte Stationen werden automatisch aus dem lokalen RF-Footprint statt aus Einzelbeobachtungen abgeleitet.
+- `Bandbedingungen / Zuverlässigkeit`: Third-Party-Frames gelten nicht mehr als physische RF-Beobachtungen, die Bestätigung einer entfernten Station erfordert nun Empfang in mindestens drei Zeitsegmenten und W3–W5 setzen klarere, wiederholbare Hinweise voraus. Außerdem wurden Referenzbasis, Reifung der Bewertungssicherheit und Modellparameter vereinheitlicht.
+
+## 1.11.5.dev - 2026-08-24
+- `Nachrichten / Gruppen`: Die bisherigen Zielgruppen wurden in `RF-Gruppen` und `APRS-IS-Gruppen` aufgeteilt; bei der ersten Verwendung übernimmt die APRS-IS-Liste die RF-Gruppen und kann anschließend unabhängig konfiguriert werden. APRS-IS-Gruppen werden im `g/...`-Filter der APRS-IS-Verbindung automatisch mit aktivierten Alarmgruppen zusammengeführt.
+- `Karte / Quellen und Tracks`: Stationssymbole verwenden jetzt den chronologisch neuesten Positionsframe aus den aktuell sichtbaren Quellen, sodass der Marker sowohl bei aktivierten Quellen als auch nach Auswahl einer einzelnen Schnittstelle am Ende des zugehörigen Tracks bleibt. Ein einzelner sichtbarer Punkt positioniert das Symbol weiterhin, ohne eine künstliche Polylinie zu zeichnen; wiederholte Beobachtungen an derselben Position behalten die neueste Quelle und den neuesten Zeitstempel.
+
+## 1.11.3.dev - 2026-08-21
+- `Schnittstellen / Schnellaktionen`: In der Schnittstellenliste wurde eine kontextabhängige Schaltfläche zum Aktivieren oder Deaktivieren ergänzt, entsprechend der Aktion bei Routing-Regeln; die Statusänderung erfordert kein Öffnen des Editors, aktualisiert ausschließlich den Aktivitätszustand der Schnittstelle und verwendet das gemeinsame Fortschrittsmodal mit lokalisierter Ergebnismeldung und Fehlerbehandlung.
+
+## 1.11.2.dev - 2026-08-20
+- `Karte / Marker auffächern`: `OverlappingMarkerSpiderfier` wurde lokal eingebunden und das optionale Auffächern überlappender Einzelmarker bei hohem Zoom ergänzt; APRS-Symbole und Tooltips bleiben erhalten. Am Desktop fächert Hover die Gruppe auf, ein Klick öffnet immer die Details der gewählten Station, und das Verlassen des erweiterten Gruppenbereichs klappt sie verzögert wieder zusammen; auf Touch-Geräten gilt weiterhin erster Tap zum Auffächern, zweiter Tap für Details. Der Schwellenwert wird relativ zu `map.getMaxZoom()` berechnet, `Leaflet.markercluster` übergibt Marker ab derselben Zoomstufe und die Geometrie berücksichtigt die Größe des Symbolsatzes.
+- `Einstellungen / Karte`: Die globalen Einstellungen enthalten jetzt einen Schalter zum Auffächern von Markern, die Anzahl der Stufen vor dem maximalen Zoom (Standard `2`) und den Überlappungsabstand in Pixeln (Standard `20`); die Werte werden validiert, in den Anwendungseinstellungen gespeichert und in Konfigurationssicherungen v2 aufgenommen.
+
 ## 1.11 - 2026-08-20
 - `Stabile Version`: Die Änderungen aus `1.10.7.dev–1.10.16.dev` wurden zusammengeführt, darunter eine deutlich schnellere Karte und Stationsliste auf Basis einer persistenten Stationszustandsprojektion, ein neu gestaltetes Dashboard mit klarerer Bewertung der Stationsbereitschaft, vollständige HTTPS-Unterstützung für systemd und OpenRC, sicherere Aktualisierungen sowie einheitliche Dialoge, Hilfe und GUI-Symbole. Die Kompatibilität von APRS-Nachrichten wurde erweitert, Konversationen wurden als kompakte Liste mit Auswahl und Sammellöschung neu organisiert und die optionale Gruppierung überlappender Kartenstationen bleibt standardmäßig deaktiviert.
 

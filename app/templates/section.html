@@ -218,6 +218,27 @@
                             {% endif %}
                             {% if can_edit and section.supports_delete %}
                             <td>
+                                <div class="digi-flows-actions">
+                                {% if section.slug == 'modems' %}
+                                <form
+                                    method="post"
+                                    action="{{ request.scope.root_path }}/settings/modems/{{ row.id }}/toggle"
+                                    class="table-action-form"
+                                    data-interface-toggle-action
+                                    onclick="event.stopPropagation();"
+                                    onsubmit="event.stopPropagation(); return true;"
+                                >
+                                    <input type="hidden" name="enabled" value="{{ 0 if row.enabled else 1 }}">
+                                    <button
+                                        type="submit"
+                                        class="table-icon-button"
+                                        title="{{ t('Disable interface') if row.enabled else t('Enable interface') }}"
+                                        aria-label="{{ (t('Disable interface') if row.enabled else t('Enable interface')) }} {{ row.name }}"
+                                    >
+                                        <img src="{{ request.scope.root_path }}/static/icons/{{ 'pause-circle-outline.svg' if row.enabled else 'play-circle-outline.svg' }}" alt="">
+                                    </button>
+                                </form>
+                                {% endif %}
                                 <form method="post" action="{{ request.scope.root_path }}/settings/{{ section.slug }}/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation();{% if section.slug not in ['objects', 'bulletins'] %} return confirm({{ t(delete_confirm_message)|tojson }});{% endif %}"{% if section.slug == 'objects' %} data-object-modal-action data-object-confirm="{{ t(delete_confirm_message) }}"{% elif section.slug == 'bulletins' %} data-bulletin-modal-action data-bulletin-confirm="{{ t(delete_confirm_message) }}"{% endif %}>
                                     <button
                                         type="submit"
@@ -228,6 +249,7 @@
                                         <img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt="">
                                     </button>
                                 </form>
+                                </div>
                             </td>
                             {% endif %}
                         </tr>
@@ -929,6 +951,58 @@
                     showSaveProgress(`${failedMessage}${detail}`, true);
                 });
             });
+
+            for (const toggleForm of document.querySelectorAll("form[data-interface-toggle-action]")) {
+                toggleForm.addEventListener("submit", (event) => {
+                    if (event.defaultPrevented) return;
+                    event.preventDefault();
+                    const toggleControls = Array.from(toggleForm.querySelectorAll("button[type='submit'], input[type='submit']"));
+                    toggleForm.setAttribute("aria-busy", "true");
+                    for (const control of toggleControls) control.disabled = true;
+                    showSaveProgress(savingMessage);
+                    const startedAt = Date.now();
+
+                    void window.fetch(toggleForm.action, {
+                        method: "POST",
+                        body: new FormData(toggleForm),
+                        credentials: "same-origin",
+                        headers: {
+                            "X-Requested-With": "XMLHttpRequest",
+                            "Accept": "application/json",
+                        },
+                    }).then(async (response) => {
+                        let payload = null;
+                        try {
+                            payload = await response.json();
+                        } catch (_error) {
+                            payload = null;
+                        }
+                        const remaining = Math.max(0, 500 - (Date.now() - startedAt));
+                        if (remaining) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+                        if (!response.ok || !payload || payload.ok !== true) {
+                            const detail = payload && (payload.error || payload.detail)
+                                ? ` ${payload.error || payload.detail}`
+                                : ` HTTP ${response.status}`;
+                            throw new Error(detail.trim());
+                        }
+
+                        toggleForm.removeAttribute("aria-busy");
+                        for (const control of toggleControls) control.disabled = false;
+                        showSaveProgress(payload.message, true);
+                        if (payload.reload) {
+                            window.setTimeout(() => {
+                                if (payload.redirect) window.location.assign(payload.redirect);
+                                else window.location.reload();
+                            }, 1200);
+                        }
+                    }).catch((error) => {
+                        toggleForm.removeAttribute("aria-busy");
+                        for (const control of toggleControls) control.disabled = false;
+                        const detail = error && error.message ? ` ${error.message}` : "";
+                        showSaveProgress(`${failedMessage}${detail}`, true);
+                    });
+                });
+            }
         }
 
         for (const slug of ["objects", "items"]) {

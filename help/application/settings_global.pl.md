@@ -21,5 +21,8 @@ Ten panel steruje wspólnymi ustawieniami wyglądu, retencji i logowania. Admini
 - `Krycie obrysu zasięgu` dotyczy tylko obramowania i jest zapisywane lokalnie w bieżącej przeglądarce.
 - Wartość `0%` ukrywa odpowiednio wypełnienie albo obrys.
 - `Grupuj nakładające się ikony stacji na mapie` zastępuje blisko położone symbole niebieską ikoną z liczbą stacji. Opcja jest domyślnie wyłączona, aby mapa pokazywała osobne symbole APRS, dopóki operator świadomie nie włączy agregacji.
+- `Włącz rozsuwanie nakładających się markerów` rozsuwa nachodzące na siebie pojedyncze markery po najechaniu myszą blisko maksymalnego zoomu; kliknięcie rozsuniętej ikony otwiera szczegóły stacji, a wyjście kursora poza obszar grupy ponownie ją składa. Na urządzeniach dotykowych pierwszy tap rozsuwa grupę, a drugi otwiera wybraną stację.
+- `Aktywuj X poziomów przed maksymalnym zoomem` wyznacza próg względem maksymalnego zoomu aktywnego źródła mapy. Domyślne `2` oznacza aktywację od zoomu 14, 16 albo 18, gdy maksimum wynosi odpowiednio 16, 18 albo 20.
+- `Odległość nakładania markerów [px]` określa, jak blisko mogą znajdować się środki widocznych markerów, zanim zostaną uznane za nakładające się. Wartość domyślna to `20` px.
 
 Przycisk `Zapisz globalne ustawienia` zapisuje wartości globalne.

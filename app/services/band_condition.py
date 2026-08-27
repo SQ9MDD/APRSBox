@@ -10,13 +10,117 @@ from app.services.content import get_station_settings, parse_tnc2_frame
 from app.services.traffic_source import STATISTICS_TRAFFIC_SQL_PREDICATE
 
 
+# ============================================================
+# BAND CONDITION MODEL TUNING
+# ============================================================
+#
+# All model knobs are intentionally kept in this section so the propagation
+# model can be tuned without changing the implementation below.
+#
+
+# Interfaces / retention
 MONITORED_BANDS = ("2m", "70cm")
 BAND_CONDITION_HISTORY_DAYS = 370
 BAND_CONDITION_STATION_HISTORY_DAYS = 35
+
+# Baseline / model readiness
 BAND_CONDITION_BASELINE_DAYS = 28
+BAND_CONDITION_BASELINE_MAX_INDEX = 2
+BAND_CONDITION_BASELINE_SAME_HOUR_MIN_ROWS = 3
 BAND_CONDITION_MIN_MODEL_HOURS = 24
 BAND_CONDITION_MIN_BASELINE_ROWS = 12
 BAND_CONDITION_CURRENT_MIN_SEGMENTS = 3
+
+# Packet eligibility
+# Third-party frames MUST NOT be treated as RF propagation observations.
+# The inner packet describes an encapsulated station, not the transmitter
+# physically heard by this receiver.
+BAND_CONDITION_IGNORE_THIRD_PARTY = True
+
+# Station classification / persistence
+BAND_CONDITION_MOBILE_HISTORY_MIN_HOURS = 2
+BAND_CONDITION_PROFILE_REPEATABLE_MIN_HOURS = 2
+BAND_CONDITION_CONFIRM_SEGMENTS = 3
+
+# Distance model
+#
+# Far / very-far thresholds are learned automatically from baseline stations.
+# The baseline sample contains one distance per unique station, so stations
+# beaconing more often do not receive a larger statistical weight.
+#
+# Obvious long-distance outliers are removed from the baseline with a robust
+# median/MAD fence.  These are internal model constants, not user settings.
+BAND_CONDITION_DISTANCE_PERCENTILE = 0.90
+BAND_CONDITION_BASELINE_DISTANCE_MIN_STATIONS = 8
+BAND_CONDITION_BASELINE_MAD_SCALE = 1.4826
+BAND_CONDITION_BASELINE_FAR_MAD_Z = 3.5
+BAND_CONDITION_BASELINE_VERY_FAR_MAD_Z = 5.0
+BAND_CONDITION_BASELINE_OUTLIER_PASSES = 2
+
+# New geographic area detection
+BAND_CONDITION_NEW_AREA_CELL_DEGREES = 0.5
+BAND_CONDITION_NEW_AREA_HISTORY_DIVISOR = 20
+BAND_CONDITION_NEW_AREA_MIN_HISTORY_HOURS = 1
+
+# Level 3 - Moderate opening
+BAND_CONDITION_LEVEL3_COUNT_RATIO = 0.35
+BAND_CONDITION_LEVEL3_COUNT_MIN_EXTRA = 2.0
+BAND_CONDITION_LEVEL3_REACH_RATIO = 1.30
+BAND_CONDITION_LEVEL3_MIN_CONFIRMED_FAR = 1
+
+# Level 4 - Strong opening
+BAND_CONDITION_LEVEL4_MIN_CONFIRMED_VERY_FAR = 1
+BAND_CONDITION_LEVEL4_MIN_VERY_FAR = 2
+BAND_CONDITION_LEVEL4_MIN_CONFIRMED_FAR = 2
+BAND_CONDITION_LEVEL4_FAR_REACH_RATIO = 1.60
+BAND_CONDITION_LEVEL4_MIN_FAR_FOR_REACH = 1
+
+# Level 5 - Very strong opening
+BAND_CONDITION_LEVEL5_MIN_VERY_FAR = 3
+BAND_CONDITION_LEVEL5_MIN_CONFIRMED_VERY_FAR = 2
+BAND_CONDITION_LEVEL5_FALLBACK_VERY_FAR = 5
+BAND_CONDITION_LEVEL5_MIN_NEW_AREAS = 2
+BAND_CONDITION_LEVEL5_MIN_STATIONS = 3
+BAND_CONDITION_LEVEL5_REACH_RATIO = 1.55
+
+# Degraded conditions
+BAND_CONDITION_SEVERELY_DEGRADED_RATIO = 0.25
+BAND_CONDITION_DEGRADED_RATIO = 0.65
+BAND_CONDITION_DEGRADED_MIN_NORMAL_COUNT = 1.0
+
+# Stable station heuristic
+BAND_CONDITION_STABLE_MIN_HOURS = 2
+BAND_CONDITION_STABLE_MAX_HOURS = 12
+BAND_CONDITION_STABLE_HISTORY_DIVISOR = 12
+
+# Confidence model
+BAND_CONDITION_CONFIDENCE_HISTORY_DAYS = 28.0
+BAND_CONDITION_CONFIDENCE_COVERAGE_HOURS = 24.0 * 14.0
+BAND_CONDITION_CONFIDENCE_BASELINE_ROWS = 14.0
+BAND_CONDITION_CONFIDENCE_STABLE_STATIONS = 16.0
+BAND_CONDITION_CONFIDENCE_CURRENT_SEGMENTS = 6.0
+BAND_CONDITION_CONFIDENCE_CURRENT_STATIONS = 8.0
+BAND_CONDITION_CONFIDENCE_CURRENT_SEGMENT_WEIGHT = 0.55
+BAND_CONDITION_CONFIDENCE_CURRENT_STATION_WEIGHT = 0.45
+
+BAND_CONDITION_CONFIDENCE_WEIGHT_HISTORY = 0.32
+BAND_CONDITION_CONFIDENCE_WEIGHT_COVERAGE = 0.18
+BAND_CONDITION_CONFIDENCE_WEIGHT_BASELINE = 0.16
+BAND_CONDITION_CONFIDENCE_WEIGHT_STATIONS = 0.14
+BAND_CONDITION_CONFIDENCE_WEIGHT_POSITION = 0.10
+BAND_CONDITION_CONFIDENCE_WEIGHT_CURRENT = 0.10
+BAND_CONDITION_CONFIDENCE_MAX = 0.97
+
+# Confidence maturity curve
+BAND_CONDITION_MATURITY_INITIAL_DAYS = 1.0
+BAND_CONDITION_MATURITY_EARLY_DAYS = 7.0
+BAND_CONDITION_MATURITY_FULL_DAYS = 30.0
+BAND_CONDITION_MATURITY_FINAL_RAMP_DAYS = 60.0
+BAND_CONDITION_MATURITY_INITIAL_CEILING = 0.30
+BAND_CONDITION_MATURITY_EARLY_CEILING = 0.55
+BAND_CONDITION_MATURITY_FULL_CEILING = 0.90
+BAND_CONDITION_MATURITY_FINAL_CEILING = 0.97
+
 
 CONDITION_LABELS = {
     0: "Severely degraded",
@@ -26,7 +130,6 @@ CONDITION_LABELS = {
     4: "Strong opening",
     5: "Very strong opening",
 }
-
 CONDITION_SUMMARIES = {
     0: "Usual fixed stations have largely disappeared despite continuing RF activity.",
     1: "Fewer usual fixed stations are audible, especially near the normal coverage edge.",
@@ -35,7 +138,6 @@ CONDITION_SUMMARIES = {
     4: "Distant fixed stations provide clear evidence of a strong propagation opening.",
     5: "Many very distant fixed stations across several areas indicate a very strong opening.",
 }
-
 CONDITION_TONES = {
     0: "bad",
     1: "caution",
@@ -161,10 +263,98 @@ def _bit_count(value: Any) -> int:
         return 0
 
 
+
+def _robust_distance_spread(values: list[float]) -> tuple[float | None, float | None, float | None]:
+    """Return median, MAD and robust sigma-equivalent spread for distances."""
+    ordered = sorted(float(value) for value in values if math.isfinite(float(value)) and float(value) >= 0.0)
+    if not ordered:
+        return None, None, None
+
+    center = float(median(ordered))
+    deviations = [abs(value - center) for value in ordered]
+    mad = float(median(deviations)) if deviations else 0.0
+    spread = mad * BAND_CONDITION_BASELINE_MAD_SCALE
+
+    # MAD can legitimately collapse to zero when many stations have nearly the
+    # same distance.  Use the interquartile range as another robust estimate.
+    if spread <= 0.0 and len(ordered) >= 4:
+        q25 = _percentile(ordered, 0.25)
+        q75 = _percentile(ordered, 0.75)
+        if q25 is not None and q75 is not None and q75 > q25:
+            spread = (q75 - q25) / 1.349
+
+    return center, mad, spread if spread > 0.0 else None
+
+
+def _clean_baseline_distances(values: list[float]) -> dict[str, Any]:
+    """Build an automatically learned distance envelope from baseline stations."""
+    working = sorted(
+        float(value)
+        for value in values
+        if math.isfinite(float(value)) and float(value) >= 0.0
+    )
+    raw_count = len(working)
+
+    if raw_count < BAND_CONDITION_BASELINE_DISTANCE_MIN_STATIONS:
+        return {
+            "raw": working,
+            "cleaned": working,
+            "raw_count": raw_count,
+            "cleaned_count": raw_count,
+            "median_km": float(median(working)) if working else None,
+            "mad_km": None,
+            "spread_km": None,
+            "far_threshold_km": None,
+            "very_far_threshold_km": None,
+        }
+
+    # Remove only upper-tail outliers.  Very short paths are harmless for a
+    # propagation reach model and should remain part of the local RF footprint.
+    for _ in range(max(1, int(BAND_CONDITION_BASELINE_OUTLIER_PASSES))):
+        center, mad, spread = _robust_distance_spread(working)
+        if center is None or spread is None:
+            break
+        upper_fence = center + (BAND_CONDITION_BASELINE_FAR_MAD_Z * spread)
+        cleaned = [value for value in working if value <= upper_fence]
+        if len(cleaned) < BAND_CONDITION_BASELINE_DISTANCE_MIN_STATIONS or len(cleaned) == len(working):
+            break
+        working = cleaned
+
+    center, mad, spread = _robust_distance_spread(working)
+    far_threshold = None
+    very_far_threshold = None
+    if (
+        center is not None
+        and spread is not None
+        and len(working) >= BAND_CONDITION_BASELINE_DISTANCE_MIN_STATIONS
+    ):
+        far_threshold = center + (BAND_CONDITION_BASELINE_FAR_MAD_Z * spread)
+        very_far_threshold = center + (BAND_CONDITION_BASELINE_VERY_FAR_MAD_Z * spread)
+
+    return {
+        "raw": sorted(
+            float(value)
+            for value in values
+            if math.isfinite(float(value)) and float(value) >= 0.0
+        ),
+        "cleaned": working,
+        "raw_count": raw_count,
+        "cleaned_count": len(working),
+        "median_km": center,
+        "mad_km": mad,
+        "spread_km": spread,
+        "far_threshold_km": far_threshold,
+        "very_far_threshold_km": very_far_threshold,
+    }
+
+
 def _geographic_cell(latitude: float | None, longitude: float | None) -> str:
     if latitude is None or longitude is None:
         return ""
-    return f"{math.floor(latitude * 2.0) / 2.0:.1f}:{math.floor(longitude * 2.0) / 2.0:.1f}"
+    size = max(0.01, float(BAND_CONDITION_NEW_AREA_CELL_DEGREES))
+    cell_latitude = math.floor(latitude / size) * size
+    cell_longitude = math.floor(longitude / size) * size
+    return f"{cell_latitude:.3f}:{cell_longitude:.3f}"
 
 
 def _monitored_interfaces() -> list[dict[str, Any]]:
@@ -192,12 +382,10 @@ def aggregate_band_condition_bucket(
     bucket_end_utc: datetime,
 ) -> dict[str, int]:
     """Aggregate one closed five-minute RF bucket into idempotent hourly station masks."""
-
     interfaces = _monitored_interfaces()
     interface_by_id = {int(item["id"]): item for item in interfaces}
     if not interface_by_id:
         return {"frames": 0, "stations": 0}
-
     placeholders = ", ".join("?" for _ in interface_by_id)
     frame_rows = fetch_all(
         f"""
@@ -245,7 +433,6 @@ def aggregate_band_condition_parsed_bucket(
     interface_by_id = {int(item["id"]): item for item in interfaces}
     if not interface_by_id or not parsed_frame_rows:
         return {"frames": 0, "stations": 0}
-
     station_settings = get_station_settings()
     receiver_latitude = _parse_coordinate(station_settings.get("latitude"))
     receiver_longitude = _parse_coordinate(station_settings.get("longitude"))
@@ -254,7 +441,6 @@ def aggregate_band_condition_parsed_bucket(
     segment_mask = 1 << segment_index
     grouped: dict[tuple[int, str], dict[str, Any]] = {}
     parsed_frames = 0
-
     for row in parsed_frame_rows:
         try:
             interface_id = int(row["interface_id"])
@@ -267,7 +453,11 @@ def aggregate_band_condition_parsed_bucket(
         if not isinstance(parsed_value, dict):
             continue
         parsed = parsed_value
-        if bool(parsed.get("is_third_party")) and not bool(parsed.get("third_party_inner_valid")):
+
+        # A third-party inner frame is not the RF transmitter physically heard
+        # by this receiver. Using its logical source, path or position would
+        # create false DX observations and poison the learned station profile.
+        if BAND_CONDITION_IGNORE_THIRD_PARTY and bool(parsed.get("is_third_party")):
             continue
 
         aprs_data = dict(parsed.get("aprs_data") or {})
@@ -277,7 +467,6 @@ def aggregate_band_condition_parsed_bucket(
         station_key = str(parsed.get("logical_source_key") or parsed.get("source_key") or "").strip().upper()
         if not station_key:
             continue
-
         parsed_frames += 1
         key = (interface_id, station_key)
         observation = grouped.setdefault(
@@ -301,7 +490,6 @@ def aggregate_band_condition_parsed_bucket(
             observation["mobile_hint"] = 1
         elif classification == "fixed":
             observation["fixed_hint"] = 1
-
         if _path_is_direct(parsed.get("logical_path") or parsed.get("path")):
             observation["direct_segment_mask"] |= segment_mask
         latitude = _parse_coordinate(aprs_data.get("latitude"))
@@ -315,10 +503,8 @@ def aggregate_band_condition_parsed_bucket(
                 latitude,
                 longitude,
             )
-
     if not grouped:
         return {"frames": parsed_frames, "stations": 0}
-
     timestamp = utc_now()
     with get_connection() as connection:
         for observation in grouped.values():
@@ -394,7 +580,10 @@ def _station_rows_for_hour(interface_id: int, band: str, hour_start: datetime) -
         historical_mobile = int(item.get("historical_mobile_hours") or 0)
         historical_fixed = int(item.get("historical_fixed_hours") or 0)
         explicitly_mobile = bool(item.get("mobile_hint"))
-        if explicitly_mobile or (historical_mobile > historical_fixed and historical_mobile >= 2):
+        if explicitly_mobile or (
+            historical_mobile > historical_fixed
+            and historical_mobile >= BAND_CONDITION_MOBILE_HISTORY_MIN_HOURS
+        ):
             continue
         result.append(item)
     return result
@@ -410,7 +599,7 @@ def _baseline_candidate_rows(interface_id: int, band: str, hour_start: datetime)
           AND band = ?
           AND hour_start_utc >= ?
           AND hour_start_utc < ?
-          AND (condition_index IS NULL OR condition_index BETWEEN 1 AND 3)
+          AND (condition_index IS NULL OR condition_index BETWEEN 1 AND ?)
         ORDER BY hour_start_utc ASC
         """,
         (
@@ -418,6 +607,7 @@ def _baseline_candidate_rows(interface_id: int, band: str, hour_start: datetime)
             normalize_band(band),
             cutoff.isoformat(),
             _floor_to_hour(hour_start).isoformat(),
+            int(BAND_CONDITION_BASELINE_MAX_INDEX),
         ),
     )
     return [dict(row) for row in rows]
@@ -432,7 +622,90 @@ def _select_baseline_rows(
         for row in candidate_rows
         if (_parse_iso_datetime(row.get("hour_start_utc")) or hour_start).hour == _floor_to_hour(hour_start).hour
     ]
-    return same_hour if len(same_hour) >= 3 else candidate_rows
+    return same_hour if len(same_hour) >= BAND_CONDITION_BASELINE_SAME_HOUR_MIN_ROWS else candidate_rows
+
+
+
+def _baseline_station_distances(
+    interface_id: int,
+    band: str,
+    baseline_rows: list[dict[str, Any]],
+) -> list[float]:
+    """Return one representative distance per unique baseline station.
+
+    Using one value per station prevents beacon frequency and the number of
+    baseline hours in which a station appears from biasing the learned reach.
+    """
+    baseline_hours = {
+        str(row.get("hour_start_utc") or "").strip()
+        for row in baseline_rows
+        if str(row.get("hour_start_utc") or "").strip()
+    }
+    if not baseline_hours:
+        return []
+
+    # A 28-day baseline contains at most 672 hourly values, which stays below
+    # SQLite's common parameter limit.  Keep a little headroom and split if the
+    # retention/model parameters are changed later.
+    hours = sorted(baseline_hours)
+    station_distances: dict[str, list[float]] = {}
+
+    for offset in range(0, len(hours), 800):
+        chunk = hours[offset : offset + 800]
+        placeholders = ", ".join("?" for _ in chunk)
+        rows = fetch_all(
+            f"""
+            SELECT
+                current.station_key,
+                current.distance_km,
+                current.mobile_hint,
+                COALESCE(profile.fixed_hours, 0) AS historical_fixed_hours,
+                COALESCE(profile.mobile_hours, 0) AS historical_mobile_hours
+            FROM band_condition_station_hours AS current
+            LEFT JOIN band_condition_station_profiles AS profile
+              ON profile.interface_id = current.interface_id
+             AND profile.band = current.band
+             AND profile.station_key = current.station_key
+            WHERE current.interface_id = ?
+              AND current.band = ?
+              AND current.hour_start_utc IN ({placeholders})
+              AND current.distance_km IS NOT NULL
+            """,
+            (
+                int(interface_id),
+                normalize_band(band),
+                *chunk,
+            ),
+        )
+        for row in rows:
+            item = dict(row)
+            if bool(item.get("mobile_hint")):
+                continue
+            historical_mobile = int(item.get("historical_mobile_hours") or 0)
+            historical_fixed = int(item.get("historical_fixed_hours") or 0)
+            if (
+                historical_mobile > historical_fixed
+                and historical_mobile >= BAND_CONDITION_MOBILE_HISTORY_MIN_HOURS
+            ):
+                continue
+            try:
+                distance = float(item["distance_km"])
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(distance) or distance < 0.0:
+                continue
+            station_key = str(item.get("station_key") or "").strip().upper()
+            if not station_key:
+                continue
+            station_distances.setdefault(station_key, []).append(distance)
+
+    # A fixed station should have an effectively constant distance, but median
+    # also makes this robust against stale/moved position reports.
+    return [
+        float(median(values))
+        for values in station_distances.values()
+        if values
+    ]
 
 
 def _history_summary(interface_id: int, band: str, hour_start: datetime) -> dict[str, Any]:
@@ -464,14 +737,20 @@ def _profile_summary(interface_id: int, band: str, hour_start: datetime) -> dict
         SELECT
             COUNT(*) AS learned_station_count,
             SUM(CASE WHEN positioned_hours > 0 THEN 1 ELSE 0 END) AS learned_positioned_station_count,
-            SUM(CASE WHEN observed_hours >= 2 THEN 1 ELSE 0 END) AS repeatable_station_count
+            SUM(CASE WHEN observed_hours >= ? THEN 1 ELSE 0 END) AS repeatable_station_count
         FROM band_condition_station_profiles
         WHERE interface_id = ?
           AND band = ?
           AND last_heard_at >= ?
-          AND NOT (mobile_hours > fixed_hours AND mobile_hours >= 2)
+          AND NOT (mobile_hours > fixed_hours AND mobile_hours >= ?)
         """,
-        (int(interface_id), normalize_band(band), cutoff.isoformat()),
+        (
+            int(BAND_CONDITION_PROFILE_REPEATABLE_MIN_HOURS),
+            int(interface_id),
+            normalize_band(band),
+            cutoff.isoformat(),
+            int(BAND_CONDITION_MOBILE_HISTORY_MIN_HOURS),
+        ),
     )
     item = dict(row) if row is not None else {}
     return {
@@ -500,16 +779,15 @@ def _model_progress(interface_id: int, band: str, hour_start: datetime, *, model
         0,
         int(math.ceil(BAND_CONDITION_MIN_MODEL_HOURS - history_span_hours)),
     )
-    mature_hours = 30 * 24
+    mature_hours = int(BAND_CONDITION_MATURITY_FULL_DAYS * 24)
     maturity_percent = int(round(min(1.0, history_span_hours / float(mature_hours)) * 100.0))
     days_to_mature = max(0, int(math.ceil((mature_hours - history_span_hours) / 24.0)))
-
     if not model_ready:
         stage_label = "Collecting data"
         stage_summary = (
             "The first assessment appears after 24 hours. At first it will intentionally have low confidence."
         )
-    elif history_span_hours < 7 * 24:
+    elif history_span_hours < BAND_CONDITION_MATURITY_EARLY_DAYS * 24:
         stage_label = "Initial assessment"
         stage_summary = "The assessment is available, but the first days can still noticeably change the learned norm."
     elif history_span_hours < mature_hours:
@@ -520,7 +798,6 @@ def _model_progress(interface_id: int, band: str, hour_start: datetime, *, model
         stage_summary = (
             "At least 30 days have been collected; confidence still depends on regular traffic and known positions."
         )
-
     return {
         "history_hours": history_hours,
         "data_hours": data_hours,
@@ -564,38 +841,61 @@ def _score_condition(
     confirmed_very_far_station_count: int,
     new_area_count: int,
     rx_total: int,
-) -> int | None:
+) -> tuple[int | None, str]:
     if rx_total <= 0 and fixed_station_count <= 0:
-        return None
+        return None, "no_rf_activity"
 
     normal_count = max(0.0, float(normal_station_count))
-    count_lift_threshold = normal_count + max(2.0, normal_count * 0.30)
+    count_lift_threshold = normal_count + max(
+        BAND_CONDITION_LEVEL3_COUNT_MIN_EXTRA,
+        normal_count * BAND_CONDITION_LEVEL3_COUNT_RATIO,
+    )
     reach_ratio = 1.0
     if current_p90_distance_km is not None and normal_p90_distance_km and normal_p90_distance_km > 0:
         reach_ratio = current_p90_distance_km / normal_p90_distance_km
 
     if (
-        very_far_station_count >= 3
-        and (confirmed_very_far_station_count >= 2 or very_far_station_count >= 5)
-        and new_area_count >= 2
-        and fixed_station_count >= max(3, int(math.ceil(normal_count)))
-        and reach_ratio >= 1.55
+        very_far_station_count >= BAND_CONDITION_LEVEL5_MIN_VERY_FAR
+        and (
+            confirmed_very_far_station_count >= BAND_CONDITION_LEVEL5_MIN_CONFIRMED_VERY_FAR
+            or very_far_station_count >= BAND_CONDITION_LEVEL5_FALLBACK_VERY_FAR
+        )
+        and new_area_count >= BAND_CONDITION_LEVEL5_MIN_NEW_AREAS
+        and fixed_station_count >= max(
+            BAND_CONDITION_LEVEL5_MIN_STATIONS,
+            int(math.ceil(normal_count)),
+        )
+        and reach_ratio >= BAND_CONDITION_LEVEL5_REACH_RATIO
     ):
-        return 5
+        return 5, "very_strong_multi_area_opening"
+
+    if confirmed_very_far_station_count >= BAND_CONDITION_LEVEL4_MIN_CONFIRMED_VERY_FAR:
+        return 4, "confirmed_very_far"
+    if very_far_station_count >= BAND_CONDITION_LEVEL4_MIN_VERY_FAR:
+        return 4, "multiple_very_far"
+    if confirmed_far_station_count >= BAND_CONDITION_LEVEL4_MIN_CONFIRMED_FAR:
+        return 4, "multiple_confirmed_far"
     if (
-        confirmed_very_far_station_count >= 1
-        or very_far_station_count >= 2
-        or confirmed_far_station_count >= 2
-        or (far_station_count >= 1 and reach_ratio >= 1.60)
+        far_station_count >= BAND_CONDITION_LEVEL4_MIN_FAR_FOR_REACH
+        and reach_ratio >= BAND_CONDITION_LEVEL4_FAR_REACH_RATIO
     ):
-        return 4
-    if fixed_station_count >= count_lift_threshold or far_station_count >= 1 or reach_ratio >= 1.20:
-        return 3
-    if normal_count > 0 and fixed_station_count <= max(0.0, normal_count * 0.25):
-        return 0
-    if normal_count > 1 and fixed_station_count < normal_count * 0.65:
-        return 1
-    return 2
+        return 4, "far_with_strong_reach_lift"
+
+    if fixed_station_count >= count_lift_threshold:
+        return 3, "station_count_lift"
+    if confirmed_far_station_count >= BAND_CONDITION_LEVEL3_MIN_CONFIRMED_FAR:
+        return 3, "confirmed_far"
+    if reach_ratio >= BAND_CONDITION_LEVEL3_REACH_RATIO:
+        return 3, "reach_lift"
+
+    if (
+        normal_count >= BAND_CONDITION_DEGRADED_MIN_NORMAL_COUNT
+        and fixed_station_count <= max(0.0, normal_count * BAND_CONDITION_SEVERELY_DEGRADED_RATIO)
+    ):
+        return 0, "station_count_severely_degraded"
+    if normal_count > 1 and fixed_station_count < normal_count * BAND_CONDITION_DEGRADED_RATIO:
+        return 1, "station_count_degraded"
+    return 2, "within_learned_normal"
 
 
 def _confidence_score(
@@ -609,37 +909,70 @@ def _confidence_score(
     fixed_station_count: int,
 ) -> float:
     history_days = max(0.0, history_span_hours / 24.0)
-    history_factor = min(1.0, math.log1p(history_days) / math.log1p(28.0))
-    coverage_factor = min(1.0, history_hours / float(24 * 14))
-    baseline_factor = min(1.0, baseline_rows / 14.0)
-    station_factor = min(1.0, stable_station_count / 16.0)
+    history_factor = min(
+        1.0,
+        math.log1p(history_days) / math.log1p(BAND_CONDITION_CONFIDENCE_HISTORY_DAYS),
+    )
+    coverage_factor = min(1.0, history_hours / BAND_CONDITION_CONFIDENCE_COVERAGE_HOURS)
+    baseline_factor = min(1.0, baseline_rows / BAND_CONDITION_CONFIDENCE_BASELINE_ROWS)
+    station_factor = min(1.0, stable_station_count / BAND_CONDITION_CONFIDENCE_STABLE_STATIONS)
     position_factor = max(0.0, min(1.0, positioned_ratio))
     current_factor = min(
         1.0,
-        (min(1.0, current_segment_count / 6.0) * 0.55)
-        + (min(1.0, fixed_station_count / 8.0) * 0.45),
+        (
+            min(1.0, current_segment_count / BAND_CONDITION_CONFIDENCE_CURRENT_SEGMENTS)
+            * BAND_CONDITION_CONFIDENCE_CURRENT_SEGMENT_WEIGHT
+        )
+        + (
+            min(1.0, fixed_station_count / BAND_CONDITION_CONFIDENCE_CURRENT_STATIONS)
+            * BAND_CONDITION_CONFIDENCE_CURRENT_STATION_WEIGHT
+        ),
     )
     score = (
-        (history_factor * 0.32)
-        + (coverage_factor * 0.18)
-        + (baseline_factor * 0.16)
-        + (station_factor * 0.14)
-        + (position_factor * 0.10)
-        + (current_factor * 0.10)
+        (history_factor * BAND_CONDITION_CONFIDENCE_WEIGHT_HISTORY)
+        + (coverage_factor * BAND_CONDITION_CONFIDENCE_WEIGHT_COVERAGE)
+        + (baseline_factor * BAND_CONDITION_CONFIDENCE_WEIGHT_BASELINE)
+        + (station_factor * BAND_CONDITION_CONFIDENCE_WEIGHT_STATIONS)
+        + (position_factor * BAND_CONDITION_CONFIDENCE_WEIGHT_POSITION)
+        + (current_factor * BAND_CONDITION_CONFIDENCE_WEIGHT_CURRENT)
     )
     maturity_ceiling = _confidence_maturity_ceiling(history_span_hours)
-    return max(0.0, min(0.97, maturity_ceiling, score))
+    return max(0.0, min(BAND_CONDITION_CONFIDENCE_MAX, maturity_ceiling, score))
 
 
 def _confidence_maturity_ceiling(history_span_hours: float) -> float:
     history_days = max(0.0, float(history_span_hours) / 24.0)
-    if history_days <= 1.0:
-        return history_days * 0.30
-    if history_days <= 7.0:
-        return 0.30 + (((history_days - 1.0) / 6.0) * 0.25)
-    if history_days <= 30.0:
-        return 0.55 + (((history_days - 7.0) / 23.0) * 0.35)
-    return 0.90 + (min(1.0, (history_days - 30.0) / 60.0) * 0.07)
+    if history_days <= BAND_CONDITION_MATURITY_INITIAL_DAYS:
+        return (
+            history_days / BAND_CONDITION_MATURITY_INITIAL_DAYS
+        ) * BAND_CONDITION_MATURITY_INITIAL_CEILING
+    if history_days <= BAND_CONDITION_MATURITY_EARLY_DAYS:
+        progress = (
+            (history_days - BAND_CONDITION_MATURITY_INITIAL_DAYS)
+            / (BAND_CONDITION_MATURITY_EARLY_DAYS - BAND_CONDITION_MATURITY_INITIAL_DAYS)
+        )
+        return BAND_CONDITION_MATURITY_INITIAL_CEILING + (
+            progress
+            * (BAND_CONDITION_MATURITY_EARLY_CEILING - BAND_CONDITION_MATURITY_INITIAL_CEILING)
+        )
+    if history_days <= BAND_CONDITION_MATURITY_FULL_DAYS:
+        progress = (
+            (history_days - BAND_CONDITION_MATURITY_EARLY_DAYS)
+            / (BAND_CONDITION_MATURITY_FULL_DAYS - BAND_CONDITION_MATURITY_EARLY_DAYS)
+        )
+        return BAND_CONDITION_MATURITY_EARLY_CEILING + (
+            progress
+            * (BAND_CONDITION_MATURITY_FULL_CEILING - BAND_CONDITION_MATURITY_EARLY_CEILING)
+        )
+    progress = min(
+        1.0,
+        (history_days - BAND_CONDITION_MATURITY_FULL_DAYS)
+        / BAND_CONDITION_MATURITY_FINAL_RAMP_DAYS,
+    )
+    return BAND_CONDITION_MATURITY_FULL_CEILING + (
+        progress
+        * (BAND_CONDITION_MATURITY_FINAL_CEILING - BAND_CONDITION_MATURITY_FULL_CEILING)
+    )
 
 
 def _evaluate_hour(
@@ -661,35 +994,36 @@ def _evaluate_hour(
     positioned_station_count = len(distances)
     direct_station_count = sum(1 for row in station_rows if int(row.get("direct_segment_mask") or 0) > 0)
     current_median_distance = float(median(distances)) if distances else None
-    current_p90_distance = _percentile(distances, 0.90)
+    current_p90_distance = _percentile(distances, BAND_CONDITION_DISTANCE_PERCENTILE)
     confirmed_distances = [
         float(row["distance_km"])
         for row in station_rows
-        if row.get("distance_km") is not None and _bit_count(row.get("segment_mask")) >= 2
+        if row.get("distance_km") is not None
+        and _bit_count(row.get("segment_mask")) >= BAND_CONDITION_CONFIRM_SEGMENTS
     ]
     max_confirmed_distance = max(confirmed_distances) if confirmed_distances else None
-
     baseline_candidates = _baseline_candidate_rows(interface_id, normalized_band, hour)
     baseline = _select_baseline_rows(baseline_candidates, hour)
     baseline_counts = [float(row.get("fixed_station_count") or 0) for row in baseline]
-    baseline_p90_values = [
-        float(row["p90_distance_km"])
-        for row in baseline
-        if row.get("p90_distance_km") is not None and float(row["p90_distance_km"]) > 0
-    ]
     normal_station_count = float(median(baseline_counts)) if baseline_counts else 0.0
-    normal_p90_distance = float(median(baseline_p90_values)) if baseline_p90_values else None
-    moderate_far_threshold = (
-        max(normal_p90_distance * 1.25, normal_p90_distance + 40.0)
-        if normal_p90_distance is not None
-        else None
-    )
-    very_far_threshold = (
-        max(normal_p90_distance * 1.75, normal_p90_distance + 120.0)
-        if normal_p90_distance is not None
-        else None
-    )
 
+    # Learn the RF reach from the stations that actually form this receiver's
+    # baseline.  Each callsign contributes only once.  Strong upper-tail
+    # outliers are removed with median/MAD before thresholds are calculated.
+    baseline_station_distances = _baseline_station_distances(
+        interface_id,
+        normalized_band,
+        baseline,
+    )
+    baseline_distance_model = _clean_baseline_distances(baseline_station_distances)
+    cleaned_baseline_distances = list(baseline_distance_model["cleaned"])
+
+    normal_p90_distance = _percentile(
+        cleaned_baseline_distances,
+        BAND_CONDITION_DISTANCE_PERCENTILE,
+    )
+    moderate_far_threshold = baseline_distance_model["far_threshold_km"]
+    very_far_threshold = baseline_distance_model["very_far_threshold_km"]
     far_rows = [
         row
         for row in station_rows
@@ -704,15 +1038,26 @@ def _evaluate_hour(
         and row.get("distance_km") is not None
         and float(row["distance_km"]) >= very_far_threshold
     ]
-    confirmed_far_count = sum(1 for row in far_rows if _bit_count(row.get("segment_mask")) >= 2)
-    confirmed_very_far_count = sum(1 for row in very_far_rows if _bit_count(row.get("segment_mask")) >= 2)
+    confirmed_far_count = sum(
+        1
+        for row in far_rows
+        if _bit_count(row.get("segment_mask")) >= BAND_CONDITION_CONFIRM_SEGMENTS
+    )
+    confirmed_very_far_count = sum(
+        1
+        for row in very_far_rows
+        if _bit_count(row.get("segment_mask")) >= BAND_CONDITION_CONFIRM_SEGMENTS
+    )
+    rarity_limit = max(
+        BAND_CONDITION_NEW_AREA_MIN_HISTORY_HOURS,
+        len(baseline) // max(1, BAND_CONDITION_NEW_AREA_HISTORY_DIVISOR),
+    )
     new_cells = {
         _geographic_cell(_parse_coordinate(row.get("latitude")), _parse_coordinate(row.get("longitude")))
         for row in far_rows
-        if int(row.get("historical_hours") or 0) <= max(1, len(baseline) // 20)
+        if int(row.get("historical_hours") or 0) <= rarity_limit
     }
     new_cells.discard("")
-
     history = _history_summary(interface_id, normalized_band, hour)
     history_hours = int(history.get("history_hours") or 0)
     data_hours = int(history.get("data_hours") or 0)
@@ -727,10 +1072,17 @@ def _evaluate_hour(
         current_segment_mask |= int(row.get("segment_mask") or 0)
     current_segment_count = _bit_count(current_segment_mask)
     rx_total = _hour_rx_total(interface_id, hour)
+    stable_threshold = max(
+        BAND_CONDITION_STABLE_MIN_HOURS,
+        min(
+            BAND_CONDITION_STABLE_MAX_HOURS,
+            history_hours // max(1, BAND_CONDITION_STABLE_HISTORY_DIVISOR),
+        ),
+    )
     stable_station_count = sum(
         1
         for row in station_rows
-        if int(row.get("historical_hours") or 0) >= max(2, min(12, history_hours // 12))
+        if int(row.get("historical_hours") or 0) >= stable_threshold
     )
     positioned_ratio = positioned_station_count / float(max(1, fixed_station_count))
     confidence = _confidence_score(
@@ -742,18 +1094,18 @@ def _evaluate_hour(
         current_segment_count=current_segment_count,
         fixed_station_count=fixed_station_count,
     )
-
-    # The time-of-day subset becomes useful after three matching hours, but model
-    # readiness must use the full candidate pool. Otherwise readiness disappears
-    # between the third and twelfth daily sample.
+    # The time-of-day subset becomes useful after enough matching hours, but
+    # readiness must use the full candidate pool. Otherwise readiness can
+    # disappear when the same-hour subset starts being selected.
     model_ready = (
         history_hours >= BAND_CONDITION_MIN_MODEL_HOURS
         and history_span_hours >= BAND_CONDITION_MIN_MODEL_HOURS
         and len(baseline_candidates) >= BAND_CONDITION_MIN_BASELINE_ROWS
     )
     condition_index = None
+    score_reason = "model_not_ready"
     if model_ready:
-        condition_index = _score_condition(
+        condition_index, score_reason = _score_condition(
             fixed_station_count=fixed_station_count,
             normal_station_count=normal_station_count,
             current_p90_distance_km=current_p90_distance,
@@ -765,7 +1117,6 @@ def _evaluate_hour(
             new_area_count=len(new_cells),
             rx_total=rx_total,
         )
-
     label = CONDITION_LABELS.get(condition_index, "Collecting data")
     summary = CONDITION_SUMMARIES.get(
         condition_index,
@@ -784,6 +1135,7 @@ def _evaluate_hour(
         "label": label,
         "diagnosis_summary": summary,
         "diagnosis_tone": CONDITION_TONES.get(condition_index, "learning"),
+        "score_reason": score_reason,
         "confidence_score": round(confidence, 4),
         "confidence_percent": int(round(confidence * 100.0)),
         "history_hours": history_hours,
@@ -798,8 +1150,18 @@ def _evaluate_hour(
         "max_confirmed_distance_km": _rounded(max_confirmed_distance),
         "normal_station_count": round(normal_station_count, 1),
         "normal_p90_distance_km": _rounded(normal_p90_distance),
+        "baseline_hour_count": len(baseline),
+        "baseline_distance_station_count": int(baseline_distance_model["raw_count"]),
+        "baseline_distance_clean_station_count": int(baseline_distance_model["cleaned_count"]),
+        "baseline_distance_median_km": _rounded(baseline_distance_model["median_km"]),
+        "baseline_distance_mad_km": _rounded(baseline_distance_model["mad_km"]),
+        "baseline_distance_spread_km": _rounded(baseline_distance_model["spread_km"]),
+        "far_threshold_km": _rounded(moderate_far_threshold),
+        "very_far_threshold_km": _rounded(very_far_threshold),
         "far_station_count": len(far_rows),
+        "confirmed_far_station_count": confirmed_far_count,
         "very_far_station_count": len(very_far_rows),
+        "confirmed_very_far_station_count": confirmed_very_far_count,
         "new_area_count": len(new_cells),
         "current_segment_count": current_segment_count,
         "rx_total": rx_total,
@@ -846,7 +1208,6 @@ def _save_hourly_evaluation(evaluation: dict[str, Any]) -> bool:
         inserted = cursor.rowcount > 0
         if not inserted:
             return False
-
         station_rows = connection.execute(
             """
             SELECT station_key, segment_mask, direct_segment_mask, fixed_hint, mobile_hint,
@@ -998,7 +1359,6 @@ def finalize_band_condition_hours(*, now_utc: datetime | None = None) -> dict[st
     now = _normalize_utc_datetime(now_utc or datetime.now(timezone.utc))
     latest_closed_hour = _floor_to_hour(now) - timedelta(hours=1)
     processed = 0
-
     for interface in _monitored_interfaces():
         interface_id = int(interface["id"])
         band = normalize_band(interface.get("band"))
@@ -1026,7 +1386,6 @@ def finalize_band_condition_hours(*, now_utc: datetime | None = None) -> dict[st
                 (dict(oldest_station_row) if oldest_station_row is not None else {}).get("oldest_hour")
             )
             next_hour = oldest_station_hour or latest_closed_hour
-
         hours_guard = 0
         while next_hour <= latest_closed_hour and hours_guard < 72:
             evaluation = _evaluate_hour(
@@ -1039,7 +1398,6 @@ def finalize_band_condition_hours(*, now_utc: datetime | None = None) -> dict[st
                 processed += 1
             next_hour += timedelta(hours=1)
             hours_guard += 1
-
     history_cutoff = (now - timedelta(days=BAND_CONDITION_HISTORY_DAYS)).isoformat()
     station_cutoff = (now - timedelta(days=BAND_CONDITION_STATION_HISTORY_DAYS)).isoformat()
     with get_connection() as connection:
@@ -1091,7 +1449,6 @@ def _latest_saved_snapshot(interface: dict[str, Any]) -> dict[str, Any] | None:
             band=normalize_band(interface.get("band")),
             hour_start=_parse_iso_datetime(item.get("hour_start_utc")) or datetime.now(timezone.utc),
         )
-
     model_ready = True
     label = CONDITION_LABELS.get(condition_index, "Collecting data")
     summary = CONDITION_SUMMARIES.get(
@@ -1105,6 +1462,7 @@ def _latest_saved_snapshot(interface: dict[str, Any]) -> dict[str, Any] | None:
             "label": label,
             "diagnosis_summary": summary,
             "diagnosis_tone": CONDITION_TONES.get(condition_index, "learning"),
+            "score_reason": "saved_hour",
             "confidence_percent": int(round(float(item.get("confidence_score") or 0.0) * 100.0)),
             "history_days": round(float(item.get("history_hours") or 0) / 24.0, 1),
             "model_ready": model_ready,
@@ -1125,12 +1483,19 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
         hour_start=current_hour,
     )
     selected = current
+    service_sample = current
     if current["current_segment_count"] < BAND_CONDITION_CURRENT_MIN_SEGMENTS:
         saved = _latest_saved_snapshot(interface)
         saved_hour = _parse_iso_datetime((saved or {}).get("hour_start_utc"))
         previous_hour = current_hour - timedelta(hours=1)
         if saved is not None and saved_hour is not None and saved_hour >= previous_hour:
             selected = saved
+            service_sample = _evaluate_hour(
+                interface_id=interface_id,
+                interface_name=interface_name,
+                band=band,
+                hour_start=saved_hour,
+            )
         else:
             # The aggregator can run just before the hour changes, leaving the
             # newly closed hour unsaved until its next cycle. Evaluate that
@@ -1144,6 +1509,7 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
             )
             if previous.get("condition_index") is not None:
                 selected = previous
+                service_sample = previous
     progress = _model_progress(
         interface_id,
         band,
@@ -1157,6 +1523,32 @@ def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict
     )
     selected["confidence_score"] = round(displayed_confidence, 4)
     selected["confidence_percent"] = int(round(displayed_confidence * 100.0))
+    service_data_keys = (
+        "hour_start_utc",
+        "baseline_hour_count",
+        "baseline_distance_station_count",
+        "baseline_distance_clean_station_count",
+        "baseline_distance_median_km",
+        "baseline_distance_mad_km",
+        "baseline_distance_spread_km",
+        "normal_station_count",
+        "normal_p90_distance_km",
+        "far_threshold_km",
+        "very_far_threshold_km",
+        "fixed_station_count",
+        "positioned_station_count",
+        "median_distance_km",
+        "p90_distance_km",
+        "max_confirmed_distance_km",
+        "far_station_count",
+        "confirmed_far_station_count",
+        "very_far_station_count",
+        "confirmed_very_far_station_count",
+        "new_area_count",
+        "current_segment_count",
+        "rx_total",
+    )
+    selected["service_data"] = {key: service_sample.get(key) for key in service_data_keys}
     return selected
 
 
@@ -1188,7 +1580,6 @@ def get_band_condition_history(*, days: int = 365) -> dict[str, Any]:
     labels = [(start_hour + timedelta(hours=index)).isoformat() for index in range(bucket_count)]
     label_index = {label: index for index, label in enumerate(labels)}
     items: list[dict[str, Any]] = []
-
     for interface in _monitored_interfaces():
         interface_id = int(interface["id"])
         band = normalize_band(interface.get("band"))

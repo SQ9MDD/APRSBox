@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.12 - 27.08.2026
+- `Wydanie stabilne`: udoskonalono mapę i ślady stacji, dodając rozsuwanie nakładających się markerów oraz natychmiastową aktualizację ostatniej ramki. Przebudowano ocenę warunków pasma i jej diagnostykę, rozdzielono grupy RF i APRS-IS, uproszczono zarządzanie interfejsami i pomocą oraz doprecyzowano transmisję APRS-IS w trybie best effort bez buforowania i ponawiania ramek.
+
+## 1.11.10.dev - 26.08.2026
+- `Mapa / ostatnia ramka`: widżet korzysta teraz z tego samego strumienia ruchu co scroller, więc natychmiast pokazuje jego najnowszy wpis zamiast czekać na cykliczne odświeżenie listy stacji; dane QSY, dystansu i komentarza są uzupełniane z aktualnego rekordu stacji.
+- `Warunki pasma / dane serwisowe`: pod danymi modelu dodano panel diagnostyczny pokazujący wypracowaną bazę odniesienia, medianę i zasięg P90 stacji stałych, automatyczne progi odległości oraz liczniki stacji, potwierdzonych dalekich odbiorów, obszarów geograficznych i ramek RF z próbki użytej do widocznej oceny.
+
+## 1.11.8.dev - 26.08.2026
+- `APRS-IS / transmisja`: uplink działa teraz jednoznacznie w trybie best effort bez buforowania i ponawiania ramek. Pakiet jest wysyłany wyłącznie przez aktualnie aktywny transport; brak połączenia, zamykający się transport, błąd zapisu lub timeout powodują natychmiastowy drop, a reconnect obsługuje tylko nowe ramki i nigdy nie odtwarza wcześniejszych. Log routingu rozróżnia teraz wynik `sent` od `drop` zamiast opisywać bezpośredni zapis jako oczekiwanie w kolejce.
+
+## 1.11.7.dev - 26.08.2026
+- `GUI / pomoc`: okna pomocy są niemodalne, pozostają otwarte podczas pracy z formularzem i można je przeciągać po ekranie.
+
+## 1.11.6.dev - 25.08.2026
+- `Warunki pasma / model zasięgu`: przebudowano ocenę W0–W5 tak, aby dla każdego odbiornika uczyła się normalnego zasięgu z jednej reprezentatywnej odległości każdej stałej stacji. Odstające dalekie odbiory są odfiltrowywane metodą mediany i MAD, a progi stacji dalekich i bardzo dalekich są wyznaczane automatycznie z lokalnej charakterystyki RF zamiast z pojedynczych obserwacji.
+- `Warunki pasma / wiarygodność`: ramki third-party nie są już uznawane za fizyczne obserwacje RF, potwierdzenie dalekiej stacji wymaga odbioru w co najmniej trzech przedziałach czasu, a poziomy W3–W5 wymagają wyraźniejszych i powtarzalnych przesłanek. Uporządkowano również bazę odniesienia, dojrzewanie pewności oceny oraz parametry strojenia modelu.
+
+## 1.11.5.dev - 24.08.2026
+- `Wiadomości / grupy`: rozdzielono dotychczasowe grupy docelowe na `Grupy RF` i `Grupy APRS-IS`; przy pierwszym użyciu lista APRS-IS dziedziczy grupy RF, a następnie może być konfigurowana niezależnie. Grupy APRS-IS są automatycznie łączone z aktywnymi grupami alarmowymi w filtrze `g/...` połączenia APRS-IS.
+- `Mapa / źródła i ślady`: pozycja ikony stacji jest teraz wybierana z ostatniej chronologicznie ramki pozycyjnej należącej do aktualnie widocznych źródeł, dzięki czemu marker pozostaje na końcu odpowiadającego mu śladu zarówno przy włączonych wszystkich źródłach, jak i po wybraniu pojedynczego interfejsu. Pojedynczy widoczny punkt nadal ustawia pozycję ikony bez rysowania sztucznej polilinii, a powtórzenia tej samej pozycji zachowują najnowsze źródło i czas.
+
+## 1.11.3.dev - 21.08.2026
+- `Interfejsy / szybkie akcje`: na liście interfejsów dodano kontekstowy przycisk włączania lub wyłączania, analogiczny do akcji w regułach routingu; zmiana statusu nie wymaga otwierania edytora, aktualizuje wyłącznie aktywność interfejsu i korzysta ze wspólnego modala postępu z lokalizowanym komunikatem wyniku oraz obsługą błędów.
+
+## 1.11.2.dev - 20.08.2026
+- `Mapa / rozsuwanie markerów`: dodano vendoring `OverlappingMarkerSpiderfier` i opcjonalne rozsuwanie nakładających się pojedynczych markerów przy dużym zoomie, z zachowaniem ikon APRS i tooltipów. Na komputerze najechanie rozsuwa grupę, klik zawsze otwiera szczegóły wybranej stacji, a wyjście kursora poza rozszerzony obszar grupy składa ją z opóźnieniem; na ekranach dotykowych zachowano bezpieczny schemat pierwszy tap — rozsunięcie, drugi tap — szczegóły. Próg jest wyliczany względem `map.getMaxZoom()`, `Leaflet.markercluster` przekazuje markery od tego samego poziomu zoomu, a geometria rozsunięcia uwzględnia rozmiar zestawu ikon.
+- `Ustawienia / mapa`: w Globalnych ustawieniach dodano przełącznik rozsuwania markerów, liczbę poziomów przed maksymalnym zoomem (domyślnie `2`) oraz odległość nakładania w pikselach (domyślnie `20`); wartości są walidowane, zapisywane w ustawieniach aplikacji i uwzględniane w kopiach konfiguracji v2.
+
 ## 1.11 - 20.08.2026
 - `Wydanie stabilne`: scalono zmiany z wersji `1.10.7.dev–1.10.16.dev`, obejmujące znacznie szybszą mapę i listę stacji dzięki trwałej projekcji stanu, przebudowany Dashboard z czytelną oceną gotowości stacji, pełną obsługę HTTPS dla systemd i OpenRC, bezpieczniejsze aktualizacje oraz ujednolicone modale, pomoc i ikony GUI. Rozszerzono zgodność wiadomości APRS, uporządkowano rozmowy w zwartej liście z zaznaczaniem i usuwaniem zbiorczym, a opcjonalne grupowanie nakładających się stacji na mapie pozostawiono domyślnie wyłączone.
 

@@ -83,6 +83,68 @@ def station_payload(interface_id: int) -> dict[str, str]:
 
 
 class DashboardHomeTests(unittest.TestCase):
+    def test_dashboard_last_rf_rx_falls_back_to_retained_activity_bucket(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="Retained RX TNC", enabled=1, tx_blocked=0)
+            update_station_settings(station_payload(interface_id))
+            now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+            bucket_start = now_utc - timedelta(hours=2, minutes=5)
+            bucket_end = now_utc - timedelta(hours=2)
+            execute(
+                """
+                INSERT INTO radio_activity_5m(
+                    bucket_start_utc, bucket_end_utc, interface_id, source_name,
+                    rx_total, created_at_utc, updated_at_utc
+                )
+                VALUES (?, ?, ?, 'Retained RX TNC', 12, ?, ?)
+                """,
+                (
+                    bucket_start.isoformat(),
+                    bucket_end.isoformat(),
+                    interface_id,
+                    now_utc.isoformat(),
+                    now_utc.isoformat(),
+                ),
+            )
+
+            view = dashboard_home_data()
+            stats = {item["label"]: item for item in view["stats"]}
+            hero = {item["label"]: item for item in view["hero_summary"]}
+
+            self.assertNotEqual(stats["Last RF RX"]["value"], "No RF RX yet")
+            self.assertEqual(hero["RF RX"]["value"], "Stale")
+
+    def test_dashboard_last_rf_rx_normalizes_missing_direction_like_statistics(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem(name="Legacy RX TNC", enabled=1, tx_blocked=0)
+            update_station_settings(station_payload(interface_id))
+            now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+            tx_at = (now_utc - timedelta(minutes=2)).isoformat()
+            rx_at = (now_utc - timedelta(minutes=1)).isoformat()
+
+            def insert_legacy_frame(frame_format: str, created_at: str) -> None:
+                execute(
+                    """
+                    INSERT INTO traffic_frames(
+                        source, source_kind, interface_id, direction, band, format,
+                        line, port, command, length, hex, created_at
+                    )
+                    VALUES ('legacy', 'rf', ?, NULL, '2m', ?, 'SP5ABC>APRS:>Test', NULL, NULL, 18, NULL, ?)
+                    """,
+                    (interface_id, frame_format, created_at),
+                )
+
+            insert_legacy_frame("TNC2-TX", tx_at)
+            tx_only_view = dashboard_home_data()
+            tx_only_hero = {item["label"]: item for item in tx_only_view["hero_summary"]}
+            self.assertEqual(tx_only_hero["RF RX"]["value"], "No RF RX yet")
+
+            insert_legacy_frame("TNC2", rx_at)
+            view = dashboard_home_data()
+            hero = {item["label"]: item for item in view["hero_summary"]}
+
+            self.assertEqual(hero["RF RX"]["value"], "Fresh")
+
     def test_dashboard_kpis_use_last_24_hours_only(self) -> None:
         with temporary_database():
             now_utc = datetime.now(timezone.utc).replace(microsecond=0)
