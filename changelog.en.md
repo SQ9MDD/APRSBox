@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12 - 2026-08-27
+- `Stable release`: improved the station map and tracks with overlapping-marker spreading and immediate latest-frame updates. Reworked band-condition assessment and diagnostics, separated RF and APRS-IS groups, streamlined interface and help handling, and clarified APRS-IS best-effort transmission without frame buffering or retries.
+
 ## 1.11.10.dev - 2026-08-26
 - `Map / latest frame`: the widget now uses the same live traffic stream as the scroller, so it immediately shows the newest scroller entry instead of waiting for the periodic station-list refresh; QSY, distance, and comment data are enriched from the current station record.
 - `Band conditions / service data`: added a diagnostic panel below the model data showing the learned reference baseline, fixed-station median and P90 reach, automatic distance thresholds, and counters for stations, confirmed distant receptions, geographic areas, and RF frames from the sample used by the visible assessment.

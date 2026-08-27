@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12 - 27.08.2026
+- `Wydanie stabilne`: udoskonalono mapę i ślady stacji, dodając rozsuwanie nakładających się markerów oraz natychmiastową aktualizację ostatniej ramki. Przebudowano ocenę warunków pasma i jej diagnostykę, rozdzielono grupy RF i APRS-IS, uproszczono zarządzanie interfejsami i pomocą oraz doprecyzowano transmisję APRS-IS w trybie best effort bez buforowania i ponawiania ramek.
+
 ## 1.11.10.dev - 26.08.2026
 - `Mapa / ostatnia ramka`: widżet korzysta teraz z tego samego strumienia ruchu co scroller, więc natychmiast pokazuje jego najnowszy wpis zamiast czekać na cykliczne odświeżenie listy stacji; dane QSY, dystansu i komentarza są uzupełniane z aktualnego rekordu stacji.
 - `Warunki pasma / dane serwisowe`: pod danymi modelu dodano panel diagnostyczny pokazujący wypracowaną bazę odniesienia, medianę i zasięg P90 stacji stałych, automatyczne progi odległości oraz liczniki stacji, potwierdzonych dalekich odbiorów, obszarów geograficznych i ramek RF z próbki użytej do widocznej oceny.
