@@ -108,12 +108,13 @@ def get_wx_page_data(*, edit_source_id: int | None = None, source_discovery: dic
     }
 
 
-def get_wx_config() -> dict[str, Any]:
-    ensure_wx_defaults()
-    station_settings = get_station_settings()
+def get_wx_config(*, station_settings: dict[str, Any] | None = None) -> dict[str, Any]:
+    # The schema initializer creates wx_config. A read must not open a write
+    # transaction merely to repair defaults, especially on the dashboard path.
+    resolved_station_settings = station_settings or get_station_settings()
     row = fetch_one("SELECT * FROM wx_config WHERE id = 1")
     result = dict(row) if row else {}
-    callsign = str(station_settings.get("callsign") or "").strip().upper()
+    callsign = str(resolved_station_settings.get("callsign") or "").strip().upper()
     result["callsign"] = callsign
     result.setdefault("ssid", "")
     result.setdefault("beacon_interface_id", None)
@@ -126,12 +127,19 @@ def get_wx_config() -> dict[str, Any]:
     result.setdefault("allow_cache_fallback", 1)
     result.setdefault("default_cache_max_age_s", 900)
     result["full_callsign"] = _format_callsign(callsign, str(result.get("ssid") or "").strip())
-    result["ssid_options"] = build_wx_ssid_options(selected_ssid=str(result.get("ssid") or "").strip())
+    result["ssid_options"] = build_wx_ssid_options(
+        selected_ssid=str(result.get("ssid") or "").strip(),
+        station_settings=resolved_station_settings,
+    )
     return result
 
 
-def build_wx_ssid_options(*, selected_ssid: str = "") -> list[dict[str, Any]]:
-    occupied = get_wx_occupied_ssids()
+def build_wx_ssid_options(
+    *,
+    selected_ssid: str = "",
+    station_settings: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    occupied = get_wx_occupied_ssids(station_settings=station_settings)
     options: list[dict[str, Any]] = [{"value": "", "label": "Select SSID", "disabled": False, "reason": ""}]
     for value in range(16):
         text = str(value)
@@ -148,10 +156,10 @@ def build_wx_ssid_options(*, selected_ssid: str = "") -> list[dict[str, Any]]:
     return options
 
 
-def get_wx_occupied_ssids() -> dict[str, str]:
-    station_settings = get_station_settings()
+def get_wx_occupied_ssids(*, station_settings: dict[str, Any] | None = None) -> dict[str, str]:
+    resolved_station_settings = station_settings or get_station_settings()
     occupied: dict[str, str] = {}
-    station_ssid = str(station_settings.get("ssid") or "").strip()
+    station_ssid = str(resolved_station_settings.get("ssid") or "").strip()
     if station_ssid:
         occupied[station_ssid] = "Used by My Settings"
     return occupied

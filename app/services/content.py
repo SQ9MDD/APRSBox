@@ -815,7 +815,7 @@ def traffic_snapshot(limit: int = 400, *, alerts_only: bool = False) -> dict[str
 
     from app.services.wx import get_wx_config
 
-    wx_config = get_wx_config()
+    wx_config = get_wx_config(station_settings=station_settings)
     station_source_key = _station_source_key(station_settings)
     wx_source_key = _build_source_key(
         wx_config.get("callsign"),
@@ -1454,7 +1454,7 @@ def monitoring_public_snapshot() -> dict[str, Any]:
 
     from app.services.wx import get_wx_config, get_wx_mapping_rows, list_wx_sources
 
-    wx_config = get_wx_config()
+    wx_config = get_wx_config(station_settings=station_settings)
     wx_sources = list_wx_sources()
     wx_mappings = get_wx_mapping_rows()
     wx_status_counts = {
@@ -1724,7 +1724,7 @@ def dashboard_activity_series(
     station_source_key = _station_source_key(station_settings)
     from app.services.wx import get_wx_config
 
-    wx_config = get_wx_config()
+    wx_config = get_wx_config(station_settings=station_settings)
     wx_source_key = _build_source_key(wx_config.get("callsign"), wx_config.get("ssid"))
 
     frame_rows = fetch_all(
@@ -2044,7 +2044,7 @@ def dashboard_home_data(
     normalized_station_ssid = "" if station_ssid == "0" else station_ssid
     main_callsign = callsign if not (callsign and normalized_station_ssid) else f"{callsign}-{normalized_station_ssid}"
 
-    wx_config = get_wx_config()
+    wx_config = get_wx_config(station_settings=station_settings)
     wx_callsign = str(wx_config.get("full_callsign") or "").strip().upper()
     digi_routine_enabled = has_enabled_digi_rf_to_rf_flow()
     igate_enabled = has_enabled_aprsis_target_flow()
@@ -2598,11 +2598,7 @@ def dashboard_home_data(
             "suffix": "",
         },
         {"label": "Interfaces", "value": f"{len(enabled_interfaces)} / {len(interfaces)}", "suffix": ""},
-        {"label": "Last RF RX", "value": last_rf_rx_display, "suffix": ""},
-        {"label": "Last RF TX", "value": last_rf_tx_display, "suffix": ""},
     ]
-    if igate_enabled:
-        stats.append({"label": "Last APRS-IS uplink", "value": aprsis_last_sent_display, "suffix": ""})
 
     return {
         "hero": hero,

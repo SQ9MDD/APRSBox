@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -29,6 +30,10 @@ _EVENT_LOG_LEVEL_RANK = {level: index for index, level in enumerate(EVENT_LOG_LE
 
 _event_log_min_level_cache: str | None = None
 _event_log_debug_enabled_cache: bool | None = None
+_request_connection: ContextVar[sqlite3.Connection | None] = ContextVar(
+    "aprsbox_request_connection",
+    default=None,
+)
 
 RUNTIME_MAINTENANCE_RESET_TABLES: tuple[str, ...] = (
     "event_logs",
@@ -83,11 +88,34 @@ def connect() -> sqlite3.Connection:
 
 @contextmanager
 def get_connection() -> Iterator[sqlite3.Connection]:
+    scoped_connection = _request_connection.get()
+    if scoped_connection is not None:
+        yield scoped_connection
+        return
+
     connection = connect()
     try:
         yield connection
         connection.commit()
     finally:
+        connection.close()
+
+
+@contextmanager
+def connection_scope() -> Iterator[sqlite3.Connection]:
+    """Reuse one SQLite connection for a composed read-model request."""
+    existing_connection = _request_connection.get()
+    if existing_connection is not None:
+        yield existing_connection
+        return
+
+    connection = connect()
+    token = _request_connection.set(connection)
+    try:
+        yield connection
+        connection.commit()
+    finally:
+        _request_connection.reset(token)
         connection.close()
 
 

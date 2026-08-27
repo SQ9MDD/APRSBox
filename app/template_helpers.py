@@ -75,6 +75,7 @@ def build_template_context(
     page_title: str,
     current_user: Any = None,
     active_nav: str | None = None,
+    perform_alert_maintenance: bool = True,
     **extra: Any,
 ) -> dict[str, Any]:
     app_language = get_app_language()
@@ -86,7 +87,11 @@ def build_template_context(
     aprs_symbol_icon_fallback = get_aprs_symbol_icon_fallback_path()
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
     aprs_alarm_enabled = get_aprs_alarm_enabled() if current_user else False
-    current_alert_count = attention_alert_count() if current_user and aprs_alarm_enabled else 0
+    current_alert_count = (
+        attention_alert_count(expire=perform_alert_maintenance)
+        if current_user and aprs_alarm_enabled
+        else 0
+    )
     band_condition_enabled = is_band_condition_enabled() if current_user else False
     alert_modal_map_config = (
         get_map_page_config(root_path=request.scope.get("root_path", ""))

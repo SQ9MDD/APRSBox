@@ -23,6 +23,7 @@ from app.db import (
     VACUUM_RECOMMEND_FREE_BYTES_MIN,
     VACUUM_RECOMMEND_FREE_RATIO_MIN,
     create_system_job,
+    connection_scope,
     database_maintenance_snapshot,
     event_log_levels_at_or_above,
     fetch_one,
@@ -163,6 +164,7 @@ from app.services.own_alerts import (
     send_own_alert_now,
 )
 from app.services.band_condition import (
+    get_dashboard_band_condition_snapshot,
     get_band_condition_history,
     get_band_condition_page_data,
     get_band_condition_snapshot,
@@ -677,7 +679,7 @@ def _digi_flow_editor_context(
 
 
 def _dashboard_band_condition_cards() -> list[dict]:
-    snapshot = get_band_condition_snapshot()
+    snapshot = get_dashboard_band_condition_snapshot()
     return list(snapshot.get("bands") or [])
 
 
@@ -1130,34 +1132,36 @@ def dashboard(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
-    dashboard_bands = _dashboard_band_condition_cards()
-    dashboard_band = _dashboard_band_condition_card(dashboard_bands)
-    dashboard_activity = get_dashboard_radio_activity(range_value="24h")
-    diagnostics_cache = getattr(request.app.state, "network_diagnostics_cache", None)
-    network_diagnostics = diagnostics_cache.get() if diagnostics_cache is not None else {
-        "hostname": None,
-        "interface": None,
-        "ipv4": None,
-        "ipv6": None,
-        "mdns_name": None,
-        "avahi_status": "Checking",
-        "avahi_tone": "neutral",
-        "mdns_resolve": None,
-        "mdns_resolve_tone": "neutral",
-        "web_ui_url": None,
-    }
-    context = build_template_context(
-        request,
-        page_title="Dashboard",
-        current_user=current_user,
-        active_nav="dashboard",
-        dashboard_band=dashboard_band,
-        dashboard_bands=dashboard_bands,
-        dashboard_activity=dashboard_activity,
-        dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
-        network_diagnostics=network_diagnostics,
-    )
-    return templates.TemplateResponse("dashboard.html", context)
+    with connection_scope():
+        dashboard_bands = _dashboard_band_condition_cards()
+        dashboard_band = _dashboard_band_condition_card(dashboard_bands)
+        dashboard_activity = get_dashboard_radio_activity(range_value="24h")
+        diagnostics_cache = getattr(request.app.state, "network_diagnostics_cache", None)
+        network_diagnostics = diagnostics_cache.get() if diagnostics_cache is not None else {
+            "hostname": None,
+            "interface": None,
+            "ipv4": None,
+            "ipv6": None,
+            "mdns_name": None,
+            "avahi_status": "Checking",
+            "avahi_tone": "neutral",
+            "mdns_resolve": None,
+            "mdns_resolve_tone": "neutral",
+            "web_ui_url": None,
+        }
+        context = build_template_context(
+            request,
+            page_title="Dashboard",
+            current_user=current_user,
+            active_nav="dashboard",
+            perform_alert_maintenance=False,
+            dashboard_band=dashboard_band,
+            dashboard_bands=dashboard_bands,
+            dashboard_activity=dashboard_activity,
+            dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
+            network_diagnostics=network_diagnostics,
+        )
+        return templates.TemplateResponse("dashboard.html", context)
 
 
 @router.get("/band-condition")
@@ -4760,7 +4764,8 @@ def dashboard_radio_activity(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     try:
-        payload = get_dashboard_radio_activity(range_value=range)
+        with connection_scope():
+            payload = get_dashboard_radio_activity(range_value=range)
     except ValueError:
         return JSONResponse({"error": "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)

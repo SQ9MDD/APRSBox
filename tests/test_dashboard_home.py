@@ -108,10 +108,8 @@ class DashboardHomeTests(unittest.TestCase):
             )
 
             view = dashboard_home_data()
-            stats = {item["label"]: item for item in view["stats"]}
             hero = {item["label"]: item for item in view["hero_summary"]}
 
-            self.assertNotEqual(stats["Last RF RX"]["value"], "No RF RX yet")
             self.assertEqual(hero["RF RX"]["value"], "Stale")
 
     def test_dashboard_last_rf_rx_normalizes_missing_direction_like_statistics(self) -> None:
@@ -403,6 +401,45 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn(".dashboard-v2-top-grid.has-band-indicators {\n        grid-template-columns: 1fr;", stylesheet)
         self.assertIn(".dashboard-v2-band-step.is-active", stylesheet)
         self.assertIn(".dashboard-v2-event-item:not(:last-child)", stylesheet)
+        self.assertNotIn('{{ t("Last RF RX") }}', template)
+        self.assertNotIn('{{ t("Last RF TX") }}', template)
+        self.assertNotIn('{{ t("Last APRS-IS uplink") }}', template)
+
+    def test_dashboard_reuses_one_database_connection(self) -> None:
+        with temporary_database():
+            import app.db as db
+            from app.main import app
+            from app.models import UserIdentity
+            from app.routers.pages import dashboard
+            from starlette.requests import Request
+
+            request = Request(
+                {
+                    "type": "http",
+                    "method": "GET",
+                    "path": "/dashboard",
+                    "root_path": "",
+                    "headers": [],
+                    "query_string": b"",
+                    "client": ("127.0.0.1", 1234),
+                    "server": ("test", 8000),
+                    "scheme": "http",
+                    "app": app,
+                }
+            )
+            original_connect = db.connect
+            connection_count = 0
+
+            def counted_connect():
+                nonlocal connection_count
+                connection_count += 1
+                return original_connect()
+
+            with patch("app.db.connect", side_effect=counted_connect):
+                response = dashboard(request, UserIdentity(1, "admin", "admin", True))
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(connection_count, 1)
 
     def test_dashboard_does_not_expose_traffic_monitor_check(self) -> None:
         with temporary_database():
@@ -413,7 +450,7 @@ class DashboardHomeTests(unittest.TestCase):
             checks = {item["label"]: item for item in view["checks"]}
             self.assertNotIn("Traffic Monitor", checks)
 
-    def test_dashboard_exposes_last_rf_tx_time_in_stats(self) -> None:
+    def test_dashboard_omits_last_activity_kpi_tiles(self) -> None:
         with temporary_database():
             interface_id = insert_modem(name="TX TNC", enabled=1, tx_blocked=0)
             update_station_settings(station_payload(interface_id))
@@ -445,7 +482,9 @@ class DashboardHomeTests(unittest.TestCase):
             view = dashboard_home_data()
             stats = {item["label"]: item for item in view["stats"]}
 
-            self.assertNotEqual(stats["Last RF TX"]["value"], "No RF TX yet")
+            self.assertNotIn("Last RF RX", stats)
+            self.assertNotIn("Last RF TX", stats)
+            self.assertNotIn("Last APRS-IS uplink", stats)
 
     def test_dashboard_digi_routine_ignores_black_hole_and_checks_tnc_to_tnc(self) -> None:
         with temporary_database():

@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import execute, fetch_one, init_db
 from app.services.band_condition import (
@@ -16,6 +17,7 @@ from app.services.band_condition import (
     format_band_label,
     get_band_condition_history,
     get_band_condition_snapshot,
+    get_dashboard_band_condition_snapshot,
     monitored_band_options,
 )
 
@@ -146,6 +148,29 @@ def insert_radio_activity(
 
 
 class BandConditionHelpersTests(unittest.TestCase):
+    def test_dashboard_snapshot_never_evaluates_band_history(self) -> None:
+        with temporary_database():
+            interface_id = insert_interface(band="2m")
+            hour = datetime(2026, 5, 4, 10, 0, tzinfo=timezone.utc)
+            execute(
+                """
+                INSERT INTO band_condition_hourly(
+                    hour_start_utc, interface_id, interface_name, band,
+                    condition_index, confidence_score, fixed_station_count,
+                    positioned_station_count, direct_station_count,
+                    normal_station_count, far_station_count, very_far_station_count,
+                    new_area_count, history_hours, created_at
+                ) VALUES (?, ?, 'RF-2m', '2m', NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, ?)
+                """,
+                (hour.isoformat(), interface_id, hour.isoformat()),
+            )
+
+            with patch("app.services.band_condition._evaluate_hour", side_effect=AssertionError("evaluation")):
+                item = get_dashboard_band_condition_snapshot()["bands"][0]
+
+            self.assertIsNone(item["condition_index"])
+            self.assertEqual(item["label"], "Collecting data")
+
     def test_interface_assessment_defaults_to_disabled_and_supports_only_requested_bands(self) -> None:
         self.assertEqual(
             [item["value"] for item in monitored_band_options()],

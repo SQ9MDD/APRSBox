@@ -1423,7 +1423,11 @@ def finalize_band_condition_hours(*, now_utc: datetime | None = None) -> dict[st
     }
 
 
-def _latest_saved_snapshot(interface: dict[str, Any]) -> dict[str, Any] | None:
+def _latest_saved_snapshot(
+    interface: dict[str, Any],
+    *,
+    evaluate_missing: bool = True,
+) -> dict[str, Any] | None:
     row = fetch_one(
         """
         SELECT *
@@ -1439,7 +1443,7 @@ def _latest_saved_snapshot(interface: dict[str, Any]) -> dict[str, Any] | None:
     item = dict(row)
     condition_index = item.get("condition_index")
     condition_index = int(condition_index) if condition_index is not None else None
-    if condition_index is None:
+    if condition_index is None and evaluate_missing:
         # Older rows can contain NULL because an earlier readiness check used the
         # smaller time-of-day subset. Re-evaluate instead of treating every NULL
         # as proof that no RF traffic was present.
@@ -1449,7 +1453,7 @@ def _latest_saved_snapshot(interface: dict[str, Any]) -> dict[str, Any] | None:
             band=normalize_band(interface.get("band")),
             hour_start=_parse_iso_datetime(item.get("hour_start_utc")) or datetime.now(timezone.utc),
         )
-    model_ready = True
+    model_ready = condition_index is not None
     label = CONDITION_LABELS.get(condition_index, "Collecting data")
     summary = CONDITION_SUMMARIES.get(
         condition_index,
@@ -1469,6 +1473,33 @@ def _latest_saved_snapshot(interface: dict[str, Any]) -> dict[str, Any] | None:
         }
     )
     return item
+
+
+def get_dashboard_band_condition_snapshot() -> dict[str, Any]:
+    """Return only persisted band results; never evaluate history in a web request."""
+    items: list[dict[str, Any]] = []
+    for interface in _monitored_interfaces():
+        saved = _latest_saved_snapshot(interface, evaluate_missing=False)
+        if saved is None:
+            saved = {
+                "interface_id": int(interface["id"]),
+                "interface_name": str(interface.get("name") or ""),
+                "band": normalize_band(interface.get("band")),
+                "condition_index": None,
+                "confidence_score": 0.0,
+                "confidence_percent": 0,
+                "band_label": format_band_label(interface.get("band")),
+                "label": "Collecting data",
+                "diagnosis_summary": "The first assessment will appear after 24 hours of monitored RF data.",
+                "diagnosis_tone": "learning",
+                "model_ready": False,
+            }
+        items.append(saved)
+    return {
+        "generated_at": utc_now(),
+        "interfaces": items,
+        "bands": items,
+    }
 
 
 def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict[str, Any]:

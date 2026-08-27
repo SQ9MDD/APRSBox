@@ -807,11 +807,12 @@ def process_alert_frame(
     )
 
 
-def attention_alert_count(*, now: str | None = None) -> int:
+def attention_alert_count(*, now: str | None = None, expire: bool = True) -> int:
     timestamp = now or utc_now()
     alarm_enabled = 1 if get_aprs_alarm_enabled() else 0
     try:
-        expire_aprs_alerts(now=timestamp)
+        if expire:
+            expire_aprs_alerts(now=timestamp)
         row = fetch_one(
             """
             SELECT COUNT(*) AS total
