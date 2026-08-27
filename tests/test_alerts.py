@@ -1,5 +1,6 @@
 import concurrent.futures
 import contextlib
+import json
 import os
 import sqlite3
 import tempfile
@@ -24,7 +25,12 @@ from app.services.alarm_groups import (
     save_aprs_alarm_enabled,
     save_aprs_alarm_groups,
 )
-from app.services.content import _TRAFFIC_SNAPSHOT_CACHE, traffic_snapshot
+from app.services.content import (
+    _TRAFFIC_SNAPSHOT_CACHE,
+    alert_notification_change_token,
+    alert_notification_snapshot,
+    traffic_snapshot,
+)
 from app.services.maintenance_scheduler import MaintenanceSchedulerService
 from app.services.traffic import process_normalized_tnc2_rx
 
@@ -281,6 +287,27 @@ class AprsAlertTests(unittest.TestCase):
             self.assertFalse(frames[0]["alert_should_notify"])
             self.assertTrue(frames[1]["alert_should_notify"])
             self.assertEqual(frames[0]["alert_id"], frames[1]["alert_id"])
+
+    def test_compact_alert_snapshot_keeps_modal_contract_without_traffic_history(self) -> None:
+        with temporary_database():
+            before_token = alert_notification_change_token()
+            receive_emergency(timestamp="2026-07-28T10:00:00+00:00")
+            _TRAFFIC_SNAPSHOT_CACHE.clear()
+
+            compact = alert_notification_snapshot()
+            full = traffic_snapshot(limit=400)
+            after_token = alert_notification_change_token()
+
+        self.assertNotEqual(before_token, after_token)
+        self.assertEqual(set(compact), {"frames"})
+        self.assertEqual(len(compact["frames"]), 1)
+        frame = compact["frames"][0]
+        self.assertTrue(frame["emergency"])
+        self.assertTrue(frame["alert_popup"])
+        self.assertTrue(frame["alert_should_notify"])
+        self.assertIn("alert_popup_data", frame)
+        self.assertNotIn("interfaces", compact)
+        self.assertLess(len(json.dumps(compact)), len(json.dumps(full)))
 
     def test_muted_alert_still_updates_and_does_not_notify(self) -> None:
         with temporary_database():

@@ -321,6 +321,16 @@ class TrafficSchemaMigrationTests(unittest.TestCase):
                     for row in connection.execute("PRAGMA index_list(traffic_frames)").fetchall()
                 }
                 self.assertIn("idx_traffic_frames_created_id", traffic_indexes)
+                alert_frame_indexes = {
+                    row["name"]
+                    for row in connection.execute("PRAGMA index_list(aprs_alert_frames)").fetchall()
+                }
+                self.assertIn("idx_aprs_alert_frames_received_at", alert_frame_indexes)
+                alert_indexes = {
+                    row["name"]
+                    for row in connection.execute("PRAGMA index_list(aprs_alerts)").fetchall()
+                }
+                self.assertIn("idx_aprs_alerts_updated_at", alert_indexes)
                 modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
                 self.assertIn("tx_blocked", modem_columns)
                 self.assertIn("tx_min_gap_seconds", modem_columns)

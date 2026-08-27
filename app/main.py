@@ -15,7 +15,12 @@ from app import __version__, get_version
 from app.config import settings
 from app.db import init_db, log_event
 from app.routers import admin, auth, pages
-from app.services.content import monitoring_public_snapshot, traffic_snapshot as get_traffic_snapshot
+from app.services.content import (
+    alert_notification_change_token,
+    alert_notification_snapshot,
+    monitoring_public_snapshot,
+    traffic_snapshot as get_traffic_snapshot,
+)
 from app.services.alerts import expire_aprs_alerts
 from app.services.https_files import https_file_status
 from app.services.network_diagnostics import NetworkDiagnosticsCache
@@ -52,6 +57,13 @@ async def lifespan(app: FastAPI):
         heartbeat_seconds=settings.traffic_stream_heartbeat_seconds,
         max_clients=settings.traffic_stream_max_clients,
     )
+    app.state.alert_stream_broadcaster = TrafficSnapshotBroadcaster(
+        snapshot_provider=alert_notification_snapshot,
+        change_token_provider=alert_notification_change_token,
+        tick_seconds=settings.traffic_stream_tick_seconds,
+        heartbeat_seconds=settings.traffic_stream_heartbeat_seconds,
+        max_clients=settings.traffic_stream_max_clients,
+    )
     https_enabled = bool(https_file_status(app.state.settings.ssl_dir)["https_enabled"])
     diagnostics_scheme = "https" if https_enabled else "http"
     diagnostics_port = app.state.settings.web_https_port if https_enabled else app.state.settings.web_http_port
@@ -61,12 +73,14 @@ async def lifespan(app: FastAPI):
         root_path=app.state.settings.root_path,
     )
     await app.state.traffic_stream_broadcaster.start()
+    await app.state.alert_stream_broadcaster.start()
     await app.state.network_diagnostics_cache.start()
     log_event("INFO", "system", "APRSBox web application started")
     try:
         yield
     finally:
         await app.state.network_diagnostics_cache.stop()
+        await app.state.alert_stream_broadcaster.stop()
         await app.state.traffic_stream_broadcaster.stop()
 
 

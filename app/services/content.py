@@ -81,7 +81,7 @@ STATION_SNAPSHOT_ROW_LIMIT_MIN = 4000
 _STATION_SNAPSHOT_CACHE: dict[tuple[str, int, int | None, str, str], list[dict[str, Any]]] = {}
 _VISIBLE_STATION_SNAPSHOT_TTL_CACHE: dict[tuple[str, int, str, str], tuple[float, list[dict[str, Any]]]] = {}
 _VISIBLE_STATION_SNAPSHOT_TTL_SECONDS = 2.0
-_TRAFFIC_SNAPSHOT_CACHE: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
+_TRAFFIC_SNAPSHOT_CACHE: dict[tuple[str, int, bool], tuple[float, dict[str, Any]]] = {}
 _TRAFFIC_SNAPSHOT_CACHE_TTL_SECONDS = 1.0
 SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS = 150
 SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS = set(range(0, 601, 30))
@@ -804,8 +804,8 @@ def recent_bulletin_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
     return jobs
 
 
-def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
-    cache_key = (str(settings.database_path), int(limit))
+def traffic_snapshot(limit: int = 400, *, alerts_only: bool = False) -> dict[str, Any]:
+    cache_key = (str(settings.database_path), int(limit), bool(alerts_only))
     cached_snapshot = _TRAFFIC_SNAPSHOT_CACHE.get(cache_key)
     current_time = time.monotonic()
     if cached_snapshot is not None and current_time - cached_snapshot[0] < _TRAFFIC_SNAPSHOT_CACHE_TTL_SECONDS:
@@ -865,8 +865,46 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         WHERE id = 1
         """
     )
-    frame_rows = fetch_all(
+    if alerts_only:
+        frame_query = """
+        SELECT
+            frames.id,
+            frames.source,
+            frames.source_kind,
+            frames.interface_id,
+            frames.direction,
+            frames.band,
+            frames.format,
+            frames.line,
+            frames.port,
+            frames.command,
+            frames.length,
+            frames.hex,
+            frames.created_at,
+            relations.alert_id,
+            alerts.source_callsign AS alert_source_callsign,
+            alerts.alarm_group AS alert_alarm_group,
+            alerts.event_code AS alert_event_code,
+            alerts.logical_alert_id AS alert_logical_alert_id,
+            alerts.severity_level AS alert_severity_level,
+            alerts.is_active AS alert_is_active,
+            alerts.expires_at AS alert_expires_at,
+            alerts.valid_until_utc AS alert_valid_until_utc,
+            alerts.superseded_by_alert_id AS alert_superseded_by_alert_id,
+            alerts.initial_frame_id AS alert_initial_frame_id,
+            alerts.last_frame_id AS alert_last_frame_id,
+            alerts.muted_until AS alert_muted_until,
+            alerts.muted_indefinitely AS alert_muted_indefinitely
+        FROM aprs_alert_frames AS relations
+        JOIN traffic_frames AS frames ON frames.id = relations.frame_id
+        JOIN aprs_alerts AS alerts ON alerts.id = relations.alert_id
+        WHERE relations.frame_id = alerts.initial_frame_id
+           OR relations.frame_id = alerts.last_frame_id
+        ORDER BY relations.received_at DESC, relations.frame_id DESC
+        LIMIT ?
         """
+    else:
+        frame_query = """
         SELECT
             frames.id,
             frames.source,
@@ -900,9 +938,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         LEFT JOIN aprs_alerts AS alerts ON alerts.id = relations.alert_id
         ORDER BY frames.created_at DESC, frames.id DESC
         LIMIT ?
-        """,
-        (limit,),
-    )
+        """
+    frame_rows = fetch_all(frame_query, (limit,))
     interfaces = []
     for row in interface_rows:
         expose = {
@@ -1190,6 +1227,45 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     }
     _TRAFFIC_SNAPSHOT_CACHE[cache_key] = (time.monotonic(), copy.deepcopy(result))
     return result
+
+
+def alert_notification_change_token() -> tuple[int, str]:
+    row = fetch_one(
+        """
+        SELECT
+            COALESCE((SELECT MAX(frame_id) FROM aprs_alert_frames), 0) AS latest_frame_id,
+            COALESCE((SELECT MAX(updated_at) FROM aprs_alerts), '') AS latest_alert_update
+        """
+    )
+    if row is None:
+        return (0, "")
+    return (int(row["latest_frame_id"] or 0), str(row["latest_alert_update"] or ""))
+
+
+def alert_notification_snapshot(limit: int = 50) -> dict[str, Any]:
+    snapshot = traffic_snapshot(limit=max(1, int(limit)), alerts_only=True)
+    frame_keys = (
+        "id",
+        "timestamp",
+        "source",
+        "line",
+        "display_callsign",
+        "emergency",
+        "emergency_data",
+        "alert_popup",
+        "alert_popup_kind",
+        "alert_popup_data",
+        "alert_id",
+        "alert_href",
+        "alert_muted",
+        "alert_should_notify",
+    )
+    frames = [
+        {key: frame.get(key) for key in frame_keys}
+        for frame in snapshot.get("frames") or []
+        if frame.get("alert_popup") or frame.get("emergency")
+    ]
+    return {"frames": frames}
 
 
 _EMERGENCY_COMMENT_PREFIX_RE = re.compile(

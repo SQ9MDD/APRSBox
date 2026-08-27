@@ -4874,3 +4874,38 @@ async def traffic_stream(
         "X-Accel-Buffering": "no",
     }
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
+
+
+@router.get("/api/alerts/stream")
+async def alert_stream(
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> StreamingResponse:
+    broadcaster: TrafficSnapshotBroadcaster | None = getattr(request.app.state, "alert_stream_broadcaster", None)
+    if broadcaster is None:
+        log_event("ERROR", "alerts", "Alert SSE stream requested but broadcaster is not initialized.")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Alert stream is unavailable.")
+
+    try:
+        subscriber_id, queue = await broadcaster.subscribe()
+    except TrafficStreamCapacityError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                yield event
+        finally:
+            await broadcaster.unsubscribe(subscriber_id)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

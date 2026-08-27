@@ -341,6 +341,8 @@ class DashboardHomeTests(unittest.TestCase):
 
     def test_dashboard_template_uses_visual_first_pack(self) -> None:
         template = Path("app/templates/dashboard.html").read_text(encoding="utf-8")
+        emergency_modal = Path("app/templates/partials/emergency_modal.html").read_text(encoding="utf-8")
+        pages_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
         stylesheet = Path("app/static/css/style.css").read_text(encoding="utf-8")
 
         self.assertIn("dashboard-v2-radio-visual", template)
@@ -353,6 +355,10 @@ class DashboardHomeTests(unittest.TestCase):
         self.assertIn("{{ dashboard_activity|tojson }}", template)
         self.assertIn("const fallbackPayload = normalizeApiPayload(payload)", template)
         self.assertNotIn("normalizeLegacyPayload", template)
+        self.assertIn("active_nav == 'dashboard'", emergency_modal)
+        self.assertIn("/api/alerts/stream", emergency_modal)
+        self.assertIn("/api/traffic/stream", emergency_modal)
+        self.assertIn('@router.get("/api/alerts/stream")', pages_source)
         self.assertIn('`${rangePrefix}: ${rangeLabel}`', template)
         self.assertIn("dashboard-v2-network-grid", template)
         self.assertNotIn('t("Network diagnostics")', template)

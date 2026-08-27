@@ -1006,12 +1006,15 @@ CREATE INDEX IF NOT EXISTS idx_map_station_state_last_heard ON map_station_state
 CREATE INDEX IF NOT EXISTS idx_map_station_state_last_seen ON map_station_state(is_deleted, last_seen_any_at, station_key);
 INSERT OR IGNORE INTO map_station_state_meta(id, revision, is_ready) VALUES (1, 0, 0);
 CREATE INDEX IF NOT EXISTS idx_aprs_alerts_last_seen_at ON aprs_alerts(last_seen_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_aprs_alerts_updated_at ON aprs_alerts(updated_at DESC, id DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aprs_alert_parts_identity
     ON aprs_alert_parts(part_identity_key);
 CREATE INDEX IF NOT EXISTS idx_aprs_alert_parts_alert_part
     ON aprs_alert_parts(alert_id, part_number, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_alert_frames_alert_received_at
     ON aprs_alert_frames(alert_id, received_at DESC, frame_id DESC);
+CREATE INDEX IF NOT EXISTS idx_aprs_alert_frames_received_at
+    ON aprs_alert_frames(received_at DESC, frame_id DESC);
 CREATE INDEX IF NOT EXISTS idx_own_aprs_alerts_status_next
     ON own_aprs_alerts(status, next_transmission_at, id);
 CREATE INDEX IF NOT EXISTS idx_own_aprs_alert_tx_jobs_dispatch
@@ -1585,6 +1588,18 @@ def init_db() -> None:
                 ADD COLUMN type_other_unknown_total INTEGER NOT NULL DEFAULT 0
                 """
             )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_aprs_alert_frames_received_at
+    ON aprs_alert_frames(received_at DESC, frame_id DESC)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_aprs_alerts_updated_at
+    ON aprs_alerts(updated_at DESC, id DESC)
+"""
+        )
         connection.execute(
             """
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_id
