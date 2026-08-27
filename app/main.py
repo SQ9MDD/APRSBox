@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -40,6 +41,25 @@ class ForwardedPrefixMiddleware:
         if forwarded_prefix:
             scope["root_path"] = forwarded_prefix.rstrip("/")
         await self.app(scope, receive, send)
+
+
+class StaticAssetCacheControlMiddleware:
+    CACHE_CONTROL = "public, max-age=86400"
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not str(scope.get("path") or "").startswith("/static/"):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_cache_control(message: dict) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["Cache-Control"] = self.CACHE_CONTROL
+            await send(message)
+
+        await self.app(scope, receive, send_with_cache_control)
 
 
 def get_client_ip(request: Request) -> str:
@@ -85,6 +105,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="APRSBox", version=__version__, lifespan=lifespan, root_path=settings.root_path)
+app.add_middleware(StaticAssetCacheControlMiddleware)
 app.add_middleware(ForwardedPrefixMiddleware)
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=settings.proxy_trusted_ips)
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, same_site="lax", https_only=False)
