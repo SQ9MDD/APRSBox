@@ -949,12 +949,14 @@ def record_traffic_device_station_observation(
     frame_format: str,
     line: str,
     timestamp: str,
+    parsed_frame: dict[str, Any] | None = None,
+    connection: Any = None,
 ) -> None:
     normalized_format = str(frame_format or "").strip().upper()
     if not normalized_format.startswith("TNC2"):
         return
 
-    parsed = parse_tnc2_frame(str(line or ""))
+    parsed = parsed_frame if parsed_frame is not None else parse_tnc2_frame(str(line or ""))
     if parsed is None:
         return
 
@@ -981,8 +983,8 @@ def record_traffic_device_station_observation(
     bucket_start_utc = _floor_to_bucket_start(normalized_timestamp_value, bucket_minutes=60).isoformat()
     path_tokens = _split_path_tokens(str(parsed.get("logical_path") or parsed.get("path") or ""))
     direct_frame_count = 0 if any(token.endswith("*") for token in path_tokens) else 1
-    with get_connection() as connection:
-        connection.execute(
+    def persist(target_connection: Any) -> None:
+        target_connection.execute(
             """
             INSERT INTO traffic_device_station_device_hourly(
                 bucket_start_utc, station_key, device_key, destination_key,
@@ -1013,6 +1015,12 @@ def record_traffic_device_station_observation(
                 normalized_timestamp,
             ),
         )
+
+    if connection is not None:
+        persist(connection)
+        return
+    with get_connection() as scoped_connection:
+        persist(scoped_connection)
 
 
 def _build_device_pair_observations_from_frame_rows(
@@ -1814,6 +1822,13 @@ def _prune_radio_activity_history(*, now_utc: datetime) -> None:
         connection.execute(
             """
             DELETE FROM radio_activity_5m
+            WHERE bucket_start_utc < ?
+            """,
+            (cutoff_utc.isoformat(),),
+        )
+        connection.execute(
+            """
+            DELETE FROM traffic_device_station_device_hourly
             WHERE bucket_start_utc < ?
             """,
             (cutoff_utc.isoformat(),),

@@ -41,7 +41,9 @@ CLASS_FALLBACKS = {
 }
 
 _DB_CACHE: dict[str, Any] = {}
+_DB_CACHE_LOCK = threading.Lock()
 _UPDATE_LOCK = threading.Lock()
+_CACHE_MISSING = object()
 
 
 @dataclass(slots=True)
@@ -58,27 +60,17 @@ class DeviceIdentificationDatabase:
 
 
 def get_aprs_device_identification_database() -> DeviceIdentificationDatabase | None:
-    active_path = _active_database_path()
-    if active_path is None:
-        return None
+    cached = _DB_CACHE.get("db", _CACHE_MISSING)
+    if cached is not _CACHE_MISSING:
+        return cached
 
-    cached_path = _DB_CACHE.get("path")
-    cached_mtime = _DB_CACHE.get("mtime")
-    try:
-        active_mtime = active_path.stat().st_mtime
-    except OSError:
-        active_mtime = None
-
-    if cached_path == active_path and cached_mtime == active_mtime:
-        return _DB_CACHE.get("db")
-
-    loaded = _load_active_database()
-    if loaded is None:
-        _DB_CACHE.clear()
-        return None
-
-    _DB_CACHE.update({"path": loaded.source_path, "mtime": active_mtime, "db": loaded})
-    return loaded
+    with _DB_CACHE_LOCK:
+        cached = _DB_CACHE.get("db", _CACHE_MISSING)
+        if cached is not _CACHE_MISSING:
+            return cached
+        loaded = _load_active_database()
+        _DB_CACHE["db"] = loaded
+        return loaded
 
 
 def lookup_aprs_device_identification(
@@ -189,7 +181,9 @@ def refresh_aprs_device_identification_cache() -> dict[str, Any]:
 
             loaded = _load_database_from_path(temp_path, source_key="cache", source_label="Local cache")
             os.replace(temp_path, cache_path)
-            _DB_CACHE.clear()
+            loaded.source_path = cache_path
+            with _DB_CACHE_LOCK:
+                _DB_CACHE["db"] = loaded
 
             set_app_setting(UPDATE_ATTEMPT_AT_KEY, attempt_at)
             set_app_setting(UPDATE_SUCCESS_AT_KEY, attempt_at)
@@ -248,21 +242,6 @@ def _load_active_database() -> DeviceIdentificationDatabase | None:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         log_event("ERROR", "aprs_device_identification", f"Failed to load bundled APRS device identification snapshot {bundle_path}: {exc}")
         return None
-
-
-def _active_database_path() -> Path | None:
-    cache_path = settings.aprs_device_identification_cache_path
-    if cache_path.exists():
-        try:
-            _load_database_from_path(cache_path, source_key="cache", source_label="Local cache")
-            return cache_path
-        except (OSError, ValueError, json.JSONDecodeError):
-            pass
-
-    bundle_path = settings.aprs_device_identification_bundle_path
-    if bundle_path.exists():
-        return bundle_path
-    return None
 
 
 def _load_database_from_path(path: Path, *, source_key: str, source_label: str) -> DeviceIdentificationDatabase:

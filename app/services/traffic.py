@@ -214,6 +214,7 @@ def process_normalized_tnc2_rx(
 
     alert_result: dict[str, Any] | None = None
     map_projection_error: str | None = None
+    statistics_projection_error: str | None = None
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -279,8 +280,26 @@ def process_normalized_tnc2_rx(
         finally:
             connection.execute("RELEASE map_station_projection")
 
+        if collect_statistics:
+            connection.execute("SAVEPOINT statistics_projection")
+            try:
+                record_traffic_device_station_observation(
+                    frame_format="TNC2",
+                    line=normalized_line,
+                    timestamp=occurred_at,
+                    parsed_frame=parsed_frame,
+                    connection=connection,
+                )
+            except Exception as exc:
+                connection.execute("ROLLBACK TO statistics_projection")
+                statistics_projection_error = str(exc).strip() or exc.__class__.__name__
+            finally:
+                connection.execute("RELEASE statistics_projection")
+
     if map_projection_error:
         log_event("WARNING", "map", f"Failed to update map station projection: {map_projection_error}")
+    if statistics_projection_error:
+        log_event("WARNING", "statistics", f"Failed to update devices statistics buffer: {statistics_projection_error}")
 
     if alert_result and alert_result.get("created"):
         warning_kind = str(alert_result.get("warning_kind") or "warning").strip()
@@ -320,16 +339,6 @@ def process_normalized_tnc2_rx(
     if rx_to_db_commit_ms is not None:
         latency_parts.append(f"rx_to_db_commit_ms={rx_to_db_commit_ms:.3f}")
     log_event("DEBUG", "traffic_latency", " | ".join(latency_parts))
-
-    if collect_statistics:
-        try:
-            record_traffic_device_station_observation(
-                frame_format="TNC2",
-                line=normalized_line,
-                timestamp=occurred_at,
-            )
-        except Exception as exc:
-            log_event("WARNING", "statistics", f"Failed to update devices statistics buffer: {exc}")
 
     # APRS-IS traffic stays excluded from RF statistics, but a numbered
     # message addressed to this station still requires an Internet ACK.
