@@ -1,6 +1,7 @@
 # Changelog
 
-## 1.12.3.dev - 2026-08-28
+## 1.12.4 - 2026-08-28
+- `Versión estable`: esta versión se centra en un uplink APRS-IS estricto y resistente a ráfagas, y en una recuperación más fiable de las conexiones KISS TCP nativas tras silencio RX. Con mala conectividad, APRSBox descarta deliberadamente las tramas antiguas en lugar de liberarlas posteriormente en ráfagas.
 - `APRS-IS / actualidad estricta`: la transmisión APRS-IS ahora falla de forma cerrada ante congestión o mala conectividad. Las tramas con más de 5 segundos se descartan justo antes de escribir en el transporte y la cola compartida de routing queda limitada a 256 tramas.
 - `APRS-IS / anti-ráfagas TCP`: las conexiones TCP en Linux usan `TCP_USER_TIMEOUT` de 3 segundos y keepalive agresivo. Un búfer de transporte ocupado aborta inmediatamente la conexión en vez de liberar posteriormente una ráfaga de tramas antiguas.
 - `Interfaces / silencio RX`: el ajuste existente `RX Silence Reconnect Timeout (s)` ahora también cubre conexiones KISS TCP nativas. El timeout se mide desde cualquier byte recibido; al superarlo se cierra el socket y el bucle existente vuelve a conectarlo. `0` continúa desactivando el watchdog. La conexión TCP local del broker serie no inicia un segundo watchdog, por lo que el puerto serie conserva un único mecanismo compartido sobre el puerto físico.

@@ -1,6 +1,7 @@
 # Changelog
 
-## 1.12.3.dev - 2026-08-28
+## 1.12.4 - 2026-08-28
+- `Stable release`: this release focuses on a strict, burst-resistant APRS-IS uplink and more reliable recovery of native KISS TCP connections after RX silence. Under poor connectivity APRSBox deliberately drops stale frames instead of releasing them later in bursts.
 - `APRS-IS / strict freshness`: APRS-IS TX now fails closed under congestion or degraded connectivity. Frames older than 5 seconds are dropped immediately before the transport write, the shared routing queue is bounded to 256 frames, and a full queue drops new input instead of accumulating an unbounded backlog.
 - `APRS-IS / TCP anti-burst`: Linux TCP connections now use a 3-second `TCP_USER_TIMEOUT` with aggressive keepalive settings. A non-empty asyncio transport buffer blocks the next frame and aborts the connection, a buffer remaining after `drain()` fails the write, and disconnects use an immediate transport abort so socket closure cannot deliberately flush retained bytes after connectivity returns.
 - `Interfaces / RX silence`: the existing `RX Silence Reconnect Timeout (s)` now also covers native KISS TCP connections. The timeout is measured from any received bytes; when exceeded, the socket is closed and the existing loop reconnects it. `0` still disables the watchdog. The serial broker's local TCP connection does not start a second watchdog, so serial retains one shared mechanism on the physical port.

@@ -1,6 +1,7 @@
 # Changelog
 
-## 1.12.3.dev - 2026-08-28
+## 1.12.4 - 2026-08-28
+- `Stabile Version`: diese Version konzentriert sich auf einen strikten, Burst-resistenten APRS-IS-Uplink und eine zuverlässigere Wiederherstellung nativer KISS-TCP-Verbindungen nach RX-Stille. Bei schlechter Verbindung verwirft APRSBox veraltete Frames bewusst, statt sie später gesammelt auszugeben.
 - `APRS-IS / strikte Aktualität`: APRS-IS TX arbeitet bei Überlastung oder schlechter Verbindung jetzt fail-closed. Frames, die älter als 5 Sekunden sind, werden direkt vor dem Transport-Schreibvorgang verworfen; die gemeinsame Routing-Warteschlange ist auf 256 Frames begrenzt.
 - `APRS-IS / TCP Anti-Burst`: Linux-TCP-Verbindungen verwenden einen 3-sekündigen `TCP_USER_TIMEOUT` und aggressives Keepalive. Ein belegter Transportpuffer führt zum sofortigen Abbruch der Verbindung, statt alte Frames später gesammelt zu übertragen.
 - `Schnittstellen / RX-Stille`: der vorhandene `RX Silence Reconnect Timeout (s)` gilt jetzt auch für native KISS-TCP-Verbindungen. Der Timeout wird ab beliebigen empfangenen Bytes gemessen; nach Ablauf wird der Socket geschlossen und durch die vorhandene Schleife neu verbunden. `0` deaktiviert den Watchdog weiterhin. Die lokale TCP-Verbindung des seriellen Brokers startet keinen zweiten Watchdog, sodass Serial nur einen gemeinsamen Mechanismus am physischen Port verwendet.
