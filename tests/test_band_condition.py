@@ -10,7 +10,9 @@ from app.db import execute, fetch_one, init_db
 from app.services.band_condition import (
     _confidence_score,
     _evaluate_hour,
+    _limit_condition_by_confidence,
     _model_progress,
+    _same_hour_baseline_weight,
     _score_condition,
     aggregate_band_condition_bucket,
     finalize_band_condition_hours,
@@ -198,7 +200,7 @@ class BandConditionHelpersTests(unittest.TestCase):
                 confirmed_very_far_station_count=2,
                 new_area_count=3,
             ),
-            5,
+            (5, "very_strong_multi_area_opening"),
         )
         self.assertEqual(
             _score_condition(
@@ -211,7 +213,20 @@ class BandConditionHelpersTests(unittest.TestCase):
                 confirmed_very_far_station_count=1,
                 new_area_count=1,
             ),
-            4,
+            (3, "confirmed_far"),
+        )
+        self.assertEqual(
+            _score_condition(
+                **common,
+                fixed_station_count=11,
+                current_p90_distance_km=230.0,
+                far_station_count=2,
+                confirmed_far_station_count=2,
+                very_far_station_count=2,
+                confirmed_very_far_station_count=2,
+                new_area_count=1,
+            ),
+            (4, "confirmed_very_far"),
         )
         self.assertEqual(
             _score_condition(
@@ -224,7 +239,7 @@ class BandConditionHelpersTests(unittest.TestCase):
                 confirmed_very_far_station_count=0,
                 new_area_count=0,
             ),
-            3,
+            (3, "station_count_lift"),
         )
         self.assertEqual(
             _score_condition(
@@ -237,7 +252,7 @@ class BandConditionHelpersTests(unittest.TestCase):
                 confirmed_very_far_station_count=0,
                 new_area_count=0,
             ),
-            2,
+            (2, "within_learned_normal"),
         )
 
     def test_w_scale_keeps_degradation_coarse(self) -> None:
@@ -252,9 +267,107 @@ class BandConditionHelpersTests(unittest.TestCase):
             "new_area_count": 0,
             "rx_total": 10,
         }
-        self.assertEqual(_score_condition(**common, fixed_station_count=5), 1)
-        self.assertEqual(_score_condition(**common, fixed_station_count=2), 0)
-        self.assertIsNone(_score_condition(**{**common, "rx_total": 0}, fixed_station_count=0))
+        self.assertEqual(
+            _score_condition(**common, fixed_station_count=5),
+            (1, "station_count_degraded"),
+        )
+        self.assertEqual(
+            _score_condition(**common, fixed_station_count=2),
+            (0, "station_count_severely_degraded"),
+        )
+        self.assertEqual(
+            _score_condition(**{**common, "rx_total": 0}, fixed_station_count=0),
+            (None, "no_rf_activity"),
+        )
+
+    def test_same_hour_baseline_is_blended_only_after_a_week(self) -> None:
+        self.assertEqual(_same_hour_baseline_weight(6), 0.0)
+        self.assertEqual(_same_hour_baseline_weight(7), 0.125)
+        self.assertEqual(_same_hour_baseline_weight(10), 0.5)
+        self.assertEqual(_same_hour_baseline_weight(13), 0.875)
+        self.assertEqual(_same_hour_baseline_weight(14), 1.0)
+
+    def test_three_same_hour_rows_do_not_replace_the_broad_distance_baseline(self) -> None:
+        with temporary_database():
+            interface_id = insert_interface(band="2m")
+            assessed_hour = datetime(2026, 5, 4, 14, 0, tzinfo=timezone.utc)
+            insert_normal_band_history(
+                interface_id=interface_id,
+                band="2m",
+                assessed_hour=assessed_hour,
+                hours=72,
+            )
+
+            for offset in range(72, 0, -1):
+                history_hour = assessed_hour - timedelta(hours=offset)
+                distances = [float(value) for value in range(5, 15)]
+                if history_hour.hour != assessed_hour.hour:
+                    distances.extend(float(value) for value in range(100, 200, 10))
+                for index, distance in enumerate(distances):
+                    station_prefix = "LOCAL" if index < 10 else "FAR"
+                    station_index = index if index < 10 else index - 10
+                    execute(
+                        """
+                        INSERT INTO band_condition_station_hours(
+                            hour_start_utc, interface_id, interface_name, band,
+                            station_key, segment_mask, direct_segment_mask,
+                            fixed_hint, mobile_hint, latitude, longitude, distance_km, updated_at
+                        )
+                        VALUES (?, ?, 'RF-2m', '2m', ?, 7, 7, 1, 0, 52, 21, ?, ?)
+                        """,
+                        (
+                            history_hour.isoformat(),
+                            interface_id,
+                            f"SP5{station_prefix}{station_index:02d}",
+                            distance,
+                            history_hour.isoformat(),
+                        ),
+                    )
+
+            for index in range(10):
+                execute(
+                    """
+                    INSERT INTO band_condition_station_hours(
+                        hour_start_utc, interface_id, interface_name, band,
+                        station_key, segment_mask, direct_segment_mask,
+                        fixed_hint, mobile_hint, latitude, longitude, distance_km, updated_at
+                    )
+                    VALUES (?, ?, 'RF-2m', '2m', ?, 7, 7, 1, 0, 52, 21, 40, ?)
+                    """,
+                    (
+                        assessed_hour.isoformat(),
+                        interface_id,
+                        f"SP5CURRENT{index:02d}",
+                        assessed_hour.isoformat(),
+                    ),
+                )
+            insert_radio_activity(
+                interface_id=interface_id,
+                band="2m",
+                bucket_start=assessed_hour,
+                rx_total=50,
+            )
+
+            evaluation = _evaluate_hour(
+                interface_id=interface_id,
+                interface_name="RF-2m",
+                band="2m",
+                hour_start=assessed_hour,
+            )
+
+            self.assertGreater(evaluation["normal_p90_distance_km"], 150.0)
+            self.assertEqual(evaluation["far_station_count"], 0)
+            self.assertEqual(evaluation["condition_index"], 2)
+
+    def test_confidence_limits_high_assessments_until_the_model_matures(self) -> None:
+        self.assertEqual(_limit_condition_by_confidence(5, 0.39), 2)
+        self.assertEqual(_limit_condition_by_confidence(5, 0.40), 3)
+        self.assertEqual(_limit_condition_by_confidence(5, 0.59), 3)
+        self.assertEqual(_limit_condition_by_confidence(5, 0.60), 4)
+        self.assertEqual(_limit_condition_by_confidence(5, 0.74), 4)
+        self.assertEqual(_limit_condition_by_confidence(5, 0.75), 5)
+        self.assertEqual(_limit_condition_by_confidence(1, 0.20), 1)
+        self.assertIsNone(_limit_condition_by_confidence(None, 1.0))
 
     def test_confidence_increases_with_history_and_station_coverage(self) -> None:
         early = _confidence_score(
@@ -313,7 +426,7 @@ class BandConditionHelpersTests(unittest.TestCase):
         self.assertAlmostEqual(first_week, 0.55, places=3)
         self.assertAlmostEqual(first_month, 0.90, places=3)
 
-    def test_first_assessment_appears_after_24_hours_and_detects_opening(self) -> None:
+    def test_first_assessment_appears_after_24_hours_and_starts_conservatively(self) -> None:
         with temporary_database():
             interface_id = insert_interface(band="2m")
             assessed_hour = datetime(2026, 5, 4, 10, 0, tzinfo=timezone.utc)
@@ -433,7 +546,8 @@ class BandConditionHelpersTests(unittest.TestCase):
             self.assertTrue(ready["model_ready"])
             self.assertEqual(ready["history_hours"], 24)
             self.assertEqual(ready["data_hours"], 24)
-            self.assertEqual(ready["condition_index"], 5)
+            self.assertEqual(ready["condition_index"], 2)
+            self.assertEqual(ready["confidence_percent"], 30)
 
             execute(
                 """

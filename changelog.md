@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.6.dev - 28.08.2026
+- `Warunki pasma / stabilność oceny`: baza właściwa dla danej godziny jest teraz włączana płynnie dopiero po zebraniu 7–14 odpowiadających próbek, zamiast zastępować całą historię już po trzech godzinach. Zaostrzono przesłanki W4, a niska pewność modelu ogranicza maksymalny komunikowany poziom do W2, W3 lub W4, dzięki czemu niedojrzała baza nie sygnalizuje fałszywego silnego otwarcia.
+
 ## 1.12.4 - 28.08.2026
 - `Wydanie stabilne`: wydanie koncentruje się na rygorystycznym, odpornym na bursty uplinku APRS-IS oraz pewniejszym odzyskiwaniu natywnych połączeń KISS TCP po ciszy RX. Przy słabej łączności APRSBox celowo odrzuca nieaktualne ramki zamiast wypuszczać je później seriami.
 - `APRS-IS / rygorystyczna świeżość`: TX APRS-IS działa teraz fail-closed przy przeciążeniu lub słabym połączeniu. Ramki starsze niż 5 sekund są odrzucane bezpośrednio przed zapisem do transportu, wspólna kolejka routingu jest ograniczona do 256 ramek, a pełna kolejka odrzuca nowe wejście zamiast gromadzić nieograniczony backlog.

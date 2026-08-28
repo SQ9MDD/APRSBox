@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.6.dev - 2026-08-28
+- `Bandbedingungen / Bewertungsstabilität`: die stundenspezifische Referenzbasis wird jetzt erst nach 7–14 passenden Stichproben schrittweise einbezogen, statt die gesamte Historie bereits nach drei Stunden zu ersetzen. Die Voraussetzungen für W4 wurden verschärft; bei geringer Modellzuverlässigkeit wird der höchste ausgegebene Pegel auf W2, W3 oder W4 begrenzt, sodass eine unreife Basis kein falsches starkes Bandopening mehr meldet.
+
 ## 1.12.4 - 2026-08-28
 - `Stabile Version`: diese Version konzentriert sich auf einen strikten, Burst-resistenten APRS-IS-Uplink und eine zuverlässigere Wiederherstellung nativer KISS-TCP-Verbindungen nach RX-Stille. Bei schlechter Verbindung verwirft APRSBox veraltete Frames bewusst, statt sie später gesammelt auszugeben.
 - `APRS-IS / strikte Aktualität`: APRS-IS TX arbeitet bei Überlastung oder schlechter Verbindung jetzt fail-closed. Frames, die älter als 5 Sekunden sind, werden direkt vor dem Transport-Schreibvorgang verworfen; die gemeinsame Routing-Warteschlange ist auf 256 Frames begrenzt.

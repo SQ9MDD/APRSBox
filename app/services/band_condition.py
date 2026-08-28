@@ -26,7 +26,8 @@ BAND_CONDITION_STATION_HISTORY_DAYS = 35
 # Baseline / model readiness
 BAND_CONDITION_BASELINE_DAYS = 28
 BAND_CONDITION_BASELINE_MAX_INDEX = 2
-BAND_CONDITION_BASELINE_SAME_HOUR_MIN_ROWS = 3
+BAND_CONDITION_BASELINE_SAME_HOUR_BLEND_START_ROWS = 7
+BAND_CONDITION_BASELINE_SAME_HOUR_FULL_ROWS = 14
 BAND_CONDITION_MIN_MODEL_HOURS = 24
 BAND_CONDITION_MIN_BASELINE_ROWS = 12
 BAND_CONDITION_CURRENT_MIN_SEGMENTS = 3
@@ -69,11 +70,11 @@ BAND_CONDITION_LEVEL3_REACH_RATIO = 1.30
 BAND_CONDITION_LEVEL3_MIN_CONFIRMED_FAR = 1
 
 # Level 4 - Strong opening
-BAND_CONDITION_LEVEL4_MIN_CONFIRMED_VERY_FAR = 1
-BAND_CONDITION_LEVEL4_MIN_VERY_FAR = 2
+BAND_CONDITION_LEVEL4_MIN_CONFIRMED_VERY_FAR = 2
+BAND_CONDITION_LEVEL4_MIN_VERY_FAR = 3
 BAND_CONDITION_LEVEL4_MIN_CONFIRMED_FAR = 2
 BAND_CONDITION_LEVEL4_FAR_REACH_RATIO = 1.60
-BAND_CONDITION_LEVEL4_MIN_FAR_FOR_REACH = 1
+BAND_CONDITION_LEVEL4_MIN_FAR_FOR_REACH = 2
 
 # Level 5 - Very strong opening
 BAND_CONDITION_LEVEL5_MIN_VERY_FAR = 3
@@ -110,6 +111,11 @@ BAND_CONDITION_CONFIDENCE_WEIGHT_STATIONS = 0.14
 BAND_CONDITION_CONFIDENCE_WEIGHT_POSITION = 0.10
 BAND_CONDITION_CONFIDENCE_WEIGHT_CURRENT = 0.10
 BAND_CONDITION_CONFIDENCE_MAX = 0.97
+
+# Assessment confidence gates
+BAND_CONDITION_CONFIDENCE_W3_MIN = 0.40
+BAND_CONDITION_CONFIDENCE_W4_MIN = 0.60
+BAND_CONDITION_CONFIDENCE_W5_MIN = 0.75
 
 # Confidence maturity curve
 BAND_CONDITION_MATURITY_INITIAL_DAYS = 1.0
@@ -613,16 +619,39 @@ def _baseline_candidate_rows(interface_id: int, band: str, hour_start: datetime)
     return [dict(row) for row in rows]
 
 
-def _select_baseline_rows(
+def _same_hour_baseline_rows(
     candidate_rows: list[dict[str, Any]],
     hour_start: datetime,
 ) -> list[dict[str, Any]]:
-    same_hour = [
+    return [
         row
         for row in candidate_rows
         if (_parse_iso_datetime(row.get("hour_start_utc")) or hour_start).hour == _floor_to_hour(hour_start).hour
     ]
-    return same_hour if len(same_hour) >= BAND_CONDITION_BASELINE_SAME_HOUR_MIN_ROWS else candidate_rows
+
+
+def _same_hour_baseline_weight(same_hour_rows: int) -> float:
+    count = max(0, int(same_hour_rows))
+    start = int(BAND_CONDITION_BASELINE_SAME_HOUR_BLEND_START_ROWS)
+    full = max(start + 1, int(BAND_CONDITION_BASELINE_SAME_HOUR_FULL_ROWS))
+    if count < start:
+        return 0.0
+    if count >= full:
+        return 1.0
+    return (count - (start - 1)) / float(full - (start - 1))
+
+
+def _blend_optional_number(
+    broad_value: float | None,
+    same_hour_value: float | None,
+    same_hour_weight: float,
+) -> float | None:
+    if broad_value is None:
+        return same_hour_value
+    if same_hour_value is None:
+        return broad_value
+    weight = max(0.0, min(1.0, float(same_hour_weight)))
+    return (float(broad_value) * (1.0 - weight)) + (float(same_hour_value) * weight)
 
 
 
@@ -898,6 +927,20 @@ def _score_condition(
     return 2, "within_learned_normal"
 
 
+def _limit_condition_by_confidence(condition_index: int | None, confidence: float) -> int | None:
+    if condition_index is None:
+        return None
+    score = int(condition_index)
+    confidence_value = max(0.0, min(1.0, float(confidence)))
+    if confidence_value < BAND_CONDITION_CONFIDENCE_W3_MIN:
+        return min(score, 2)
+    if confidence_value < BAND_CONDITION_CONFIDENCE_W4_MIN:
+        return min(score, 3)
+    if confidence_value < BAND_CONDITION_CONFIDENCE_W5_MIN:
+        return min(score, 4)
+    return score
+
+
 def _confidence_score(
     *,
     history_hours: int,
@@ -1003,27 +1046,100 @@ def _evaluate_hour(
     ]
     max_confirmed_distance = max(confirmed_distances) if confirmed_distances else None
     baseline_candidates = _baseline_candidate_rows(interface_id, normalized_band, hour)
-    baseline = _select_baseline_rows(baseline_candidates, hour)
-    baseline_counts = [float(row.get("fixed_station_count") or 0) for row in baseline]
-    normal_station_count = float(median(baseline_counts)) if baseline_counts else 0.0
+    same_hour_baseline = _same_hour_baseline_rows(baseline_candidates, hour)
+    same_hour_weight = _same_hour_baseline_weight(len(same_hour_baseline))
+    broad_baseline_counts = [float(row.get("fixed_station_count") or 0) for row in baseline_candidates]
+    same_hour_baseline_counts = [float(row.get("fixed_station_count") or 0) for row in same_hour_baseline]
+    broad_normal_station_count = float(median(broad_baseline_counts)) if broad_baseline_counts else 0.0
+    same_hour_normal_station_count = (
+        float(median(same_hour_baseline_counts))
+        if same_hour_baseline_counts
+        else broad_normal_station_count
+    )
+    normal_station_count = float(
+        _blend_optional_number(
+            broad_normal_station_count,
+            same_hour_normal_station_count,
+            same_hour_weight,
+        )
+        or 0.0
+    )
 
     # Learn the RF reach from the stations that actually form this receiver's
     # baseline.  Each callsign contributes only once.  Strong upper-tail
     # outliers are removed with median/MAD before thresholds are calculated.
-    baseline_station_distances = _baseline_station_distances(
+    broad_baseline_station_distances = _baseline_station_distances(
         interface_id,
         normalized_band,
-        baseline,
+        baseline_candidates,
     )
-    baseline_distance_model = _clean_baseline_distances(baseline_station_distances)
-    cleaned_baseline_distances = list(baseline_distance_model["cleaned"])
-
-    normal_p90_distance = _percentile(
-        cleaned_baseline_distances,
+    same_hour_baseline_station_distances = _baseline_station_distances(
+        interface_id,
+        normalized_band,
+        same_hour_baseline,
+    )
+    broad_baseline_distance_model = _clean_baseline_distances(broad_baseline_station_distances)
+    same_hour_baseline_distance_model = _clean_baseline_distances(same_hour_baseline_station_distances)
+    broad_normal_p90_distance = _percentile(
+        list(broad_baseline_distance_model["cleaned"]),
         BAND_CONDITION_DISTANCE_PERCENTILE,
     )
-    moderate_far_threshold = baseline_distance_model["far_threshold_km"]
-    very_far_threshold = baseline_distance_model["very_far_threshold_km"]
+    same_hour_normal_p90_distance = _percentile(
+        list(same_hour_baseline_distance_model["cleaned"]),
+        BAND_CONDITION_DISTANCE_PERCENTILE,
+    )
+    normal_p90_distance = _blend_optional_number(
+        broad_normal_p90_distance,
+        same_hour_normal_p90_distance,
+        same_hour_weight,
+    )
+    moderate_far_threshold = _blend_optional_number(
+        broad_baseline_distance_model["far_threshold_km"],
+        same_hour_baseline_distance_model["far_threshold_km"],
+        same_hour_weight,
+    )
+    very_far_threshold = _blend_optional_number(
+        broad_baseline_distance_model["very_far_threshold_km"],
+        same_hour_baseline_distance_model["very_far_threshold_km"],
+        same_hour_weight,
+    )
+    baseline_distance_model = {
+        "raw_count": int(
+            round(
+                _blend_optional_number(
+                    float(broad_baseline_distance_model["raw_count"]),
+                    float(same_hour_baseline_distance_model["raw_count"]),
+                    same_hour_weight,
+                )
+                or 0.0
+            )
+        ),
+        "cleaned_count": int(
+            round(
+                _blend_optional_number(
+                    float(broad_baseline_distance_model["cleaned_count"]),
+                    float(same_hour_baseline_distance_model["cleaned_count"]),
+                    same_hour_weight,
+                )
+                or 0.0
+            )
+        ),
+        "median_km": _blend_optional_number(
+            broad_baseline_distance_model["median_km"],
+            same_hour_baseline_distance_model["median_km"],
+            same_hour_weight,
+        ),
+        "mad_km": _blend_optional_number(
+            broad_baseline_distance_model["mad_km"],
+            same_hour_baseline_distance_model["mad_km"],
+            same_hour_weight,
+        ),
+        "spread_km": _blend_optional_number(
+            broad_baseline_distance_model["spread_km"],
+            same_hour_baseline_distance_model["spread_km"],
+            same_hour_weight,
+        ),
+    }
     far_rows = [
         row
         for row in station_rows
@@ -1050,7 +1166,7 @@ def _evaluate_hour(
     )
     rarity_limit = max(
         BAND_CONDITION_NEW_AREA_MIN_HISTORY_HOURS,
-        len(baseline) // max(1, BAND_CONDITION_NEW_AREA_HISTORY_DIVISOR),
+        len(baseline_candidates) // max(1, BAND_CONDITION_NEW_AREA_HISTORY_DIVISOR),
     )
     new_cells = {
         _geographic_cell(_parse_coordinate(row.get("latitude")), _parse_coordinate(row.get("longitude")))
@@ -1088,7 +1204,7 @@ def _evaluate_hour(
     confidence = _confidence_score(
         history_hours=data_hours,
         history_span_hours=history_span_hours,
-        baseline_rows=len(baseline),
+        baseline_rows=len(baseline_candidates),
         stable_station_count=stable_station_count,
         positioned_ratio=positioned_ratio,
         current_segment_count=current_segment_count,
@@ -1117,6 +1233,10 @@ def _evaluate_hour(
             new_area_count=len(new_cells),
             rx_total=rx_total,
         )
+        limited_condition_index = _limit_condition_by_confidence(condition_index, confidence)
+        if limited_condition_index != condition_index:
+            score_reason = f"{score_reason}_confidence_limited"
+        condition_index = limited_condition_index
     label = CONDITION_LABELS.get(condition_index, "Collecting data")
     summary = CONDITION_SUMMARIES.get(
         condition_index,
@@ -1150,7 +1270,7 @@ def _evaluate_hour(
         "max_confirmed_distance_km": _rounded(max_confirmed_distance),
         "normal_station_count": round(normal_station_count, 1),
         "normal_p90_distance_km": _rounded(normal_p90_distance),
-        "baseline_hour_count": len(baseline),
+        "baseline_hour_count": len(baseline_candidates),
         "baseline_distance_station_count": int(baseline_distance_model["raw_count"]),
         "baseline_distance_clean_station_count": int(baseline_distance_model["cleaned_count"]),
         "baseline_distance_median_km": _rounded(baseline_distance_model["median_km"]),

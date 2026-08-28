@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.6.dev - 2026-08-28
+- `Condiciones de banda / estabilidad de la evaluación`: la referencia específica de cada hora se incorpora ahora de forma gradual solo después de reunir entre 7 y 14 muestras equivalentes, en lugar de sustituir todo el historial tras apenas tres horas. Se endurecieron los requisitos de W4 y, cuando la confianza del modelo es baja, el nivel máximo comunicado queda limitado a W2, W3 o W4, evitando falsas indicaciones de apertura fuerte con una referencia aún inmadura.
+
 ## 1.12.4 - 2026-08-28
 - `Versión estable`: esta versión se centra en un uplink APRS-IS estricto y resistente a ráfagas, y en una recuperación más fiable de las conexiones KISS TCP nativas tras silencio RX. Con mala conectividad, APRSBox descarta deliberadamente las tramas antiguas en lugar de liberarlas posteriormente en ráfagas.
 - `APRS-IS / actualidad estricta`: la transmisión APRS-IS ahora falla de forma cerrada ante congestión o mala conectividad. Las tramas con más de 5 segundos se descartan justo antes de escribir en el transporte y la cola compartida de routing queda limitada a 256 tramas.
