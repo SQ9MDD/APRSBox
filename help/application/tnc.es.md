@@ -54,6 +54,8 @@ Ambos modos requieren un login APRS-IS verificado. `pass -1` identifica un clien
 
 El destino `TX APRS-IS` incluye un filtro de seguridad del sistema que rechaza, entre otros casos, tramas con `TCPIP` / `TCPXX`, `NOGATE` / `RFONLY` y encapsulación third-party incorrecta. Consulta [Packet Routing](packet_routing.es.md) para construir los flows en detalle.
 
+La transmisión APRS-IS funciona estrictamente con datos actuales y en modo fail-closed. Una trama que espere más de 5 segundos entre la recepción/encolado y la escritura final en APRS-IS se descarta. La cola de routing está limitada y un transporte que ya contiene datos pendientes se aborta. Con una conexión deficiente, APRSBox pierde tramas deliberadamente en lugar de reproducir tráfico antiguo hacia APRS-IS.
+
 ## Expose Port
 
 `Expose Port` expone la conexión TNC a través de APRSBox como puerto TCP para clientes LAN. APRSBox reenvía tramas entre el TNC físico y los clientes.

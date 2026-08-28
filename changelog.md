@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.2.dev - 28.08.2026
+- `APRS-IS / rygorystyczna świeżość`: TX APRS-IS działa teraz fail-closed przy przeciążeniu lub słabym połączeniu. Ramki starsze niż 5 sekund są odrzucane bezpośrednio przed zapisem do transportu, wspólna kolejka routingu jest ograniczona do 256 ramek, a pełna kolejka odrzuca nowe wejście zamiast gromadzić nieograniczony backlog.
+- `APRS-IS / TCP anti-burst`: połączenia TCP w systemie Linux używają 3-sekundowego `TCP_USER_TIMEOUT` i agresywnego keepalive. Zajęty bufor transportu blokuje następną ramkę i przerywa połączenie, dane pozostałe po `drain()` oznaczają błąd zapisu, a rozłączenie używa natychmiastowego abortu zamiast łagodnego opróżniania socketu.
+- `Testy`: dodano regresje dla odrzucania starych ramek, ograniczonej kolejki fail-closed oraz przerwania transportu bez dopisywania kolejnej ramki APRS-IS.
+
 ## 1.12 - 27.08.2026
 - `Wydanie stabilne`: udoskonalono mapę i ślady stacji, dodając rozsuwanie nakładających się markerów oraz natychmiastową aktualizację ostatniej ramki. Przebudowano ocenę warunków pasma i jej diagnostykę, rozdzielono grupy RF i APRS-IS, uproszczono zarządzanie interfejsami i pomocą oraz doprecyzowano transmisję APRS-IS w trybie best effort bez buforowania i ponawiania ramek.
 - `Backend / wydajność`: usunięto zapytania N+1 i operacje I/O wykonywane per rekord, zbatchowano odczyty ustawień i danych listowych, ograniczono liczbę połączeń SQLite oraz dodano indeksy potwierdzone planami zapytań.

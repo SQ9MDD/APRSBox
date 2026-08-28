@@ -54,6 +54,8 @@ Beide Modi benötigen ein verifiziertes APRS-IS-Login. `pass -1` kennzeichnet ei
 
 Das Ziel `TX APRS-IS` besitzt einen System-Sicherheitsfilter, der unter anderem Frames mit `TCPIP` / `TCPXX`, `NOGATE` / `RFONLY` sowie fehlerhafter Third-Party-Kapselung verwirft. Details zum Aufbau der Flows enthält [Packet Routing](packet_routing.de.md).
 
+Die APRS-IS-Übertragung arbeitet strikt nur mit aktuellen Daten und nach dem Fail-Closed-Prinzip. Ein Frame, der zwischen Empfang/Einreihung und dem endgültigen APRS-IS-Schreibvorgang länger als 5 Sekunden wartet, wird verworfen. Die Routing-Warteschlange ist begrenzt; ein bereits belegter Transportpuffer wird abgebrochen. Bei schlechter Verbindung verliert APRSBox bewusst Frames, statt veralteten Verkehr später in APRS-IS einzuspielen.
+
 ## Expose Port
 
 `Expose Port` stellt die TNC-Verbindung über APRSBox als TCP-Port für LAN-Clients bereit. APRSBox leitet Frames zwischen physischem TNC und Clients weiter.

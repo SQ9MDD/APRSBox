@@ -54,6 +54,8 @@ Oba tryby wymagają zweryfikowanego logowania APRS-IS. `pass -1` oznacza niezwer
 
 Cel `TX APRS-IS` ma systemowy filtr bezpieczeństwa, który odrzuca między innymi ramki z `TCPIP` / `TCPXX`, `NOGATE` / `RFONLY` oraz niepoprawną enkapsulację third-party. Szczegółowe budowanie ścieżek opisuje pomoc [Packet Routing](packet_routing.pl.md).
 
+Transmisja APRS-IS działa rygorystycznie tylko dla danych bieżących i zgodnie z zasadą fail-closed. Ramka czekająca ponad 5 sekund od odbioru/zakolejkowania do końcowego zapisu w transporcie APRS-IS jest odrzucana. Kolejka routingu ma ograniczony rozmiar, transport posiadający już zbuforowane dane jest przerywany zamiast przyjmowania następnej ramki, a zdegradowane połączenie TCP w systemie Linux używa krótkiego timeoutu, aby mocno ograniczyć okno awarii sieci. Przy słabym połączeniu APRSBox celowo traci ramki zamiast odtwarzać nieaktualny ruch do APRS-IS.
+
 ## Expose Port
 
 `Expose Port` wystawia połączenie TNC przez APRSBox jako port TCP dla klientów w sieci LAN. APRSBox przekazuje ramki między fizycznym TNC a klientami.

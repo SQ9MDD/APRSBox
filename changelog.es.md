@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.2.dev - 2026-08-28
+- `APRS-IS / actualidad estricta`: la transmisión APRS-IS ahora falla de forma cerrada ante congestión o mala conectividad. Las tramas con más de 5 segundos se descartan justo antes de escribir en el transporte y la cola compartida de routing queda limitada a 256 tramas.
+- `APRS-IS / anti-ráfagas TCP`: las conexiones TCP en Linux usan `TCP_USER_TIMEOUT` de 3 segundos y keepalive agresivo. Un búfer de transporte ocupado aborta inmediatamente la conexión en vez de liberar posteriormente una ráfaga de tramas antiguas.
+- `Pruebas`: se añadieron regresiones para el descarte de tramas antiguas, la cola limitada y el aborto inmediato del transporte.
+
 ## 1.12 - 2026-08-27
 - `Versión estable`: se mejoraron el mapa y los recorridos de estaciones con la separación de marcadores superpuestos y la actualización inmediata de la última trama. Se rediseñaron la evaluación y el diagnóstico de las condiciones de banda, se separaron los grupos RF y APRS-IS, se simplificó la gestión de interfaces y ayuda, y se aclaró la transmisión APRS-IS de mejor esfuerzo sin búfer ni reintentos de tramas.
 - `Backend / rendimiento`: se eliminaron las consultas N+1 y las operaciones de E/S por registro, se agruparon las lecturas de ajustes y listas, se redujo la apertura de conexiones SQLite y se añadieron índices verificados mediante planes de consulta.

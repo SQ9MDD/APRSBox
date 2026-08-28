@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.2.dev - 2026-08-28
+- `APRS-IS / strikte Aktualität`: APRS-IS TX arbeitet bei Überlastung oder schlechter Verbindung jetzt fail-closed. Frames, die älter als 5 Sekunden sind, werden direkt vor dem Transport-Schreibvorgang verworfen; die gemeinsame Routing-Warteschlange ist auf 256 Frames begrenzt.
+- `APRS-IS / TCP Anti-Burst`: Linux-TCP-Verbindungen verwenden einen 3-sekündigen `TCP_USER_TIMEOUT` und aggressives Keepalive. Ein belegter Transportpuffer führt zum sofortigen Abbruch der Verbindung, statt alte Frames später gesammelt zu übertragen.
+- `Tests`: Regressionstests für veraltete Frames, die begrenzte Warteschlange und den sofortigen Transportabbruch wurden ergänzt.
+
 ## 1.12 - 2026-08-27
 - `Stabile Version`: Karte und Stationstracks wurden durch das Auffächern überlappender Marker und die sofortige Aktualisierung des neuesten Frames verbessert. Die Bewertung und Diagnose der Bandbedingungen wurde überarbeitet, RF- und APRS-IS-Gruppen wurden getrennt, die Verwaltung von Schnittstellen und Hilfe vereinfacht und die APRS-IS-Best-Effort-Übertragung ohne Frame-Pufferung oder Wiederholungsversuche präzisiert.
 - `Backend / Leistung`: N+1-Abfragen und I/O pro Datensatz wurden entfernt, Einstellungs- und Listendaten gebündelt geladen, SQLite-Verbindungswechsel reduziert und anhand von Abfrageplänen geprüfte Indizes ergänzt.

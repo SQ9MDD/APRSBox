@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.2.dev - 2026-08-28
+- `APRS-IS / strict freshness`: APRS-IS TX now fails closed under congestion or degraded connectivity. Frames older than 5 seconds are dropped immediately before the transport write, the shared routing queue is bounded to 256 frames, and a full queue drops new input instead of accumulating an unbounded backlog.
+- `APRS-IS / TCP anti-burst`: Linux TCP connections now use a 3-second `TCP_USER_TIMEOUT` with aggressive keepalive settings. A non-empty asyncio transport buffer blocks the next frame and aborts the connection, a buffer remaining after `drain()` fails the write, and disconnects use an immediate transport abort so socket closure cannot deliberately flush retained bytes after connectivity returns.
+- `Tests`: added regressions for stale-frame rejection, bounded queue fail-closed behavior, and transport-buffer abort without appending another APRS-IS frame.
+
 ## 1.12 - 2026-08-27
 - `Stable release`: improved the station map and tracks with overlapping-marker spreading and immediate latest-frame updates. Reworked band-condition assessment and diagnostics, separated RF and APRS-IS groups, streamlined interface and help handling, and clarified APRS-IS best-effort transmission without frame buffering or retries.
 - `Backend / performance`: removed N+1 queries and per-record I/O, batched settings and list-data reads, reduced SQLite connection churn, and added indexes verified with query plans.

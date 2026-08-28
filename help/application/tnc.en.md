@@ -54,6 +54,8 @@ Both modes require a verified APRS-IS login. `pass -1` identifies an unverified 
 
 The `TX APRS-IS` target has a system safety filter that rejects, among other cases, frames containing `TCPIP` / `TCPXX`, `NOGATE` / `RFONLY`, and malformed third-party encapsulation. See [Packet Routing](packet_routing.en.md) for detailed flow construction.
 
+APRS-IS transmission is strictly current-data and fail-closed. A frame waiting more than 5 seconds between reception/enqueue and the final APRS-IS transport write is dropped. The routing queue is bounded, an already-buffered transport is aborted instead of accepting another frame, and degraded Linux TCP connections use a short timeout to tightly limit the network failure window. During poor connectivity APRSBox deliberately loses frames rather than replaying stale traffic into APRS-IS.
+
 ## Expose Port
 
 `Expose Port` exposes the TNC connection through APRSBox as a TCP port for LAN clients. APRSBox relays frames between the physical TNC and clients.

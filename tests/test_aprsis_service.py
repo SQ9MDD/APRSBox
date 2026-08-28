@@ -175,6 +175,110 @@ class AprsisDiagnosticsTests(unittest.TestCase):
 
 
 class AprsisClientRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stale_line_is_dropped_before_transport_write(self) -> None:
+        class RecordingWriter:
+            def __init__(self) -> None:
+                self.writes: list[bytes] = []
+
+            def is_closing(self) -> bool:
+                return False
+
+            def write(self, data: bytes) -> None:
+                self.writes.append(data)
+
+            async def drain(self) -> None:
+                return None
+
+        with temporary_database():
+            service = AprsisClientService()
+            writer = RecordingWriter()
+            service._writer = writer  # type: ignore[assignment]
+
+            success, detail = await service.send_tnc2_line(
+                "SQ9MDD-9>APRS:>Stale packet",
+                telemetry={"rx_received_monotonic": time.monotonic() - 6.0},
+            )
+
+            self.assertFalse(success)
+            self.assertIn("frame is stale", detail)
+            self.assertEqual(writer.writes, [])
+
+    async def test_existing_transport_backlog_is_aborted_without_appending_line(self) -> None:
+        class BufferedTransport:
+            def __init__(self) -> None:
+                self.aborted = False
+
+            def get_write_buffer_size(self) -> int:
+                return 128
+
+            def abort(self) -> None:
+                self.aborted = True
+
+        class BufferedWriter:
+            def __init__(self) -> None:
+                self.transport = BufferedTransport()
+                self.write_called = False
+
+            def is_closing(self) -> bool:
+                return False
+
+            def write(self, _data: bytes) -> None:
+                self.write_called = True
+
+        with temporary_database():
+            service = AprsisClientService(reconnect_delay=0.1)
+            writer = BufferedWriter()
+            service._writer = writer  # type: ignore[assignment]
+            service._connected_config = ("rotate.aprs2.net", 14580, "SQ9MDD-4", "12345")
+            service._connected_since = utc_now()
+
+            success, detail = await service.send_tnc2_line("SQ9MDD-9>APRS:>Do not append")
+
+            self.assertFalse(success)
+            self.assertIn("buffered bytes", detail)
+            self.assertFalse(writer.write_called)
+            self.assertTrue(writer.transport.aborted)
+            self.assertIsNone(service._writer)
+
+    async def test_transport_bytes_remaining_after_drain_abort_connection(self) -> None:
+        class RetainingTransport:
+            def __init__(self) -> None:
+                self.pending_bytes = 0
+                self.aborted = False
+
+            def get_write_buffer_size(self) -> int:
+                return self.pending_bytes
+
+            def abort(self) -> None:
+                self.aborted = True
+
+        class RetainingWriter:
+            def __init__(self) -> None:
+                self.transport = RetainingTransport()
+
+            def is_closing(self) -> bool:
+                return False
+
+            def write(self, data: bytes) -> None:
+                self.transport.pending_bytes = len(data)
+
+            async def drain(self) -> None:
+                return None
+
+        with temporary_database():
+            service = AprsisClientService(reconnect_delay=0.1)
+            writer = RetainingWriter()
+            service._writer = writer  # type: ignore[assignment]
+            service._connected_config = ("rotate.aprs2.net", 14580, "SQ9MDD-4", "12345")
+            service._connected_since = utc_now()
+
+            success, detail = await service.send_tnc2_line("SQ9MDD-9>APRS:>Retained after drain")
+
+            self.assertFalse(success)
+            self.assertIn("transport retained", detail)
+            self.assertTrue(writer.transport.aborted)
+            self.assertIsNone(service._writer)
+
     async def test_disconnected_line_is_dropped_and_not_replayed_after_reconnect(self) -> None:
         class RecordingWriter:
             def __init__(self) -> None:
