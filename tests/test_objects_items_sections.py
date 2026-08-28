@@ -27,6 +27,15 @@ def temporary_database() -> Path:
 
 
 class ObjectAndItemFormTests(unittest.TestCase):
+    def test_prepared_entity_icon_cells_do_not_render_overflow_ellipsis(self) -> None:
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn(
+            ".prepared-entity-table tbody .prepared-entity-col-icon,\n"
+            ".prepared-entity-table tbody .prepared-entity-col-active {",
+            stylesheet_source,
+        )
+        self.assertIn("text-overflow: clip;", stylesheet_source)
+
     def test_object_item_translation_keys_are_present_in_en_pl_es(self) -> None:
         required_keys = [
             "Item List",

@@ -7467,6 +7467,13 @@ code {
     width: 2.75rem;
 }
 
+.prepared-entity-table tbody .prepared-entity-col-icon,
+.prepared-entity-table tbody .prepared-entity-col-active {
+    padding-inline: 0.35rem;
+    text-align: center;
+    text-overflow: clip;
+}
+
 .prepared-entity-col-schedule {
     width: 12rem;
 }
