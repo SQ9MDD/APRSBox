@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.7.dev - 2026-08-28
+- `Objects and items / list`: removed dot artifacts displayed next to symbols and status icons. Narrow icon cells now use fitted padding and no longer apply the ellipsis intended for truncated text; header and other long-value truncation remains unchanged.
+
 ## 1.12.6.dev - 2026-08-28
 - `Band conditions / assessment stability`: the hour-specific baseline is now phased in only after 7–14 matching samples instead of replacing the full history after just three hours. W4 evidence requirements were tightened, while low model confidence caps the highest reported level at W2, W3, or W4 so an immature baseline no longer reports a false strong opening.
 

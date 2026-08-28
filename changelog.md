@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.7.dev - 28.08.2026
+- `Obiekty i itemy / lista`: usunięto kropki-artefakty wyświetlane obok symboli i ikon statusu. Wąskie komórki ikon mają teraz dopasowany padding i nie stosują wielokropka przeznaczonego do skracania tekstu; skracanie nagłówków i pozostałych długich wartości pozostaje bez zmian.
+
 ## 1.12.6.dev - 28.08.2026
 - `Warunki pasma / stabilność oceny`: baza właściwa dla danej godziny jest teraz włączana płynnie dopiero po zebraniu 7–14 odpowiadających próbek, zamiast zastępować całą historię już po trzech godzinach. Zaostrzono przesłanki W4, a niska pewność modelu ogranicza maksymalny komunikowany poziom do W2, W3 lub W4, dzięki czemu niedojrzała baza nie sygnalizuje fałszywego silnego otwarcia.
 

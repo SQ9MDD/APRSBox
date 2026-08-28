@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.7.dev - 2026-08-28
+- `Objetos e ítems / lista`: se eliminaron los artefactos en forma de punto mostrados junto a los símbolos y los iconos de estado. Las celdas estrechas de iconos ahora usan un relleno ajustado y ya no aplican los puntos suspensivos destinados a recortar texto; el recorte de encabezados y otros valores largos permanece sin cambios.
+
 ## 1.12.6.dev - 2026-08-28
 - `Condiciones de banda / estabilidad de la evaluación`: la referencia específica de cada hora se incorpora ahora de forma gradual solo después de reunir entre 7 y 14 muestras equivalentes, en lugar de sustituir todo el historial tras apenas tres horas. Se endurecieron los requisitos de W4 y, cuando la confianza del modelo es baja, el nivel máximo comunicado queda limitado a W2, W3 o W4, evitando falsas indicaciones de apertura fuerte con una referencia aún inmadura.
 

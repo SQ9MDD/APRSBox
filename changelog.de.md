@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.7.dev - 2026-08-28
+- `Objekte und Items / Liste`: Punktartefakte neben Symbolen und Statussymbolen wurden entfernt. Schmale Symbolzellen verwenden jetzt einen passenden Innenabstand und nicht mehr die für gekürzten Text vorgesehene Auslassungsmarkierung; die Kürzung von Überschriften und anderen langen Werten bleibt unverändert.
+
 ## 1.12.6.dev - 2026-08-28
 - `Bandbedingungen / Bewertungsstabilität`: die stundenspezifische Referenzbasis wird jetzt erst nach 7–14 passenden Stichproben schrittweise einbezogen, statt die gesamte Historie bereits nach drei Stunden zu ersetzen. Die Voraussetzungen für W4 wurden verschärft; bei geringer Modellzuverlässigkeit wird der höchste ausgegebene Pegel auf W2, W3 oder W4 begrenzt, sodass eine unreife Basis kein falsches starkes Bandopening mehr meldet.
 
