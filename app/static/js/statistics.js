@@ -37,6 +37,7 @@
     }
 
     const apiUrl = String(root.dataset.apiUrl || "").trim();
+    const allApiUrl = String(root.dataset.allApiUrl || "").trim();
     const devicesApiUrl = String(root.dataset.devicesApiUrl || "").trim();
     const usersApiUrl = String(root.dataset.usersApiUrl || "").trim();
     const directHeardApiUrl = String(root.dataset.directHeardApiUrl || "").trim();
@@ -110,11 +111,13 @@
     };
 
     const persistRange = (value) => {
+        const normalizedValue = normalizeRange(value);
         try {
-            window.localStorage.setItem(storageKey, normalizeRange(value));
+            window.localStorage.setItem(storageKey, normalizedValue);
         } catch (_) {
-            return;
+            // The cookie still aligns the server-rendered read model.
         }
+        document.cookie = `aprsbox_statistics_range=${encodeURIComponent(normalizedValue)}; path=/; max-age=31536000; samesite=lax`;
     };
 
     const normalizeShift = (value) => {
@@ -294,7 +297,7 @@
                 continue;
             }
             const entries = normalizeDeviceEntries(item && item.entries);
-            const effectiveCount = entries.length > 0 ? entries.length : count;
+            const effectiveCount = count;
             let percent = Number(item && item.percent);
             if (!Number.isFinite(percent)) {
                 percent = normalizedTotal > 0 ? (effectiveCount * 100.0) / normalizedTotal : 0;
@@ -767,11 +770,43 @@
     const loadRangePayload = async (rangeValue, shiftValue) => {
         const normalizedRange = normalizeRange(rangeValue);
         const normalizedShift = normalizeShift(shiftValue);
-        if (!apiUrl) {
+        if (!apiUrl && !allApiUrl) {
             return;
         }
         setControlsDisabled(true);
         try {
+            if (allApiUrl) {
+                const response = await fetch(
+                    `${allApiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}`,
+                    {
+                        method: "GET",
+                        headers: { "Accept": "application/json" },
+                    },
+                );
+                if (!response.ok) {
+                    return;
+                }
+                const combinedPayload = await response.json();
+                const nextPayload = combinedPayload && combinedPayload.traffic;
+                if (!nextPayload) {
+                    return;
+                }
+                payload = nextPayload;
+                devicesPayload = combinedPayload.devices || {};
+                usersPayload = combinedPayload.users || {};
+                directHeardPayload = combinedPayload.direct_heard || {};
+                activeRange = normalizeRange(nextPayload.range);
+                activeShift = normalizeShift(nextPayload.shift_windows);
+                persistRange(activeRange);
+                if (rangeSelect instanceof HTMLSelectElement) {
+                    rangeSelect.value = activeRange;
+                }
+                renderCharts(nextPayload);
+                renderDevices(devicesPayload);
+                renderUsers(usersPayload);
+                renderDirectHeard(directHeardPayload);
+                return;
+            }
             const response = await fetch(
                 `${apiUrl}?range=${encodeURIComponent(normalizedRange)}&shift=${encodeURIComponent(String(normalizedShift))}`,
                 {

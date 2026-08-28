@@ -758,6 +758,8 @@ CREATE TABLE IF NOT EXISTS traffic_device_station_device_hourly (
     device_label TEXT NOT NULL,
     recognized_flag INTEGER NOT NULL DEFAULT 0 CHECK (recognized_flag IN (0, 1)),
     frame_count INTEGER NOT NULL DEFAULT 0,
+    direct_frame_count INTEGER NOT NULL DEFAULT 0,
+    direct_count_ready INTEGER NOT NULL DEFAULT 1 CHECK (direct_count_ready IN (0, 1)),
     last_seen_at TEXT NOT NULL,
     PRIMARY KEY (bucket_start_utc, station_key, device_key, destination_key)
 );
@@ -1148,6 +1150,25 @@ def init_db() -> None:
         }
         digi_flow_columns = {row["name"] for row in connection.execute("PRAGMA table_info(digi_flows)").fetchall()}
         radio_activity_columns = {row["name"] for row in connection.execute("PRAGMA table_info(radio_activity_5m)").fetchall()}
+        traffic_device_hourly_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(traffic_device_station_device_hourly)").fetchall()
+        }
+        if "direct_frame_count" not in traffic_device_hourly_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_device_station_device_hourly
+                ADD COLUMN direct_frame_count INTEGER NOT NULL DEFAULT 0
+                """
+            )
+        if "direct_count_ready" not in traffic_device_hourly_columns:
+            connection.execute(
+                """
+                ALTER TABLE traffic_device_station_device_hourly
+                ADD COLUMN direct_count_ready INTEGER NOT NULL DEFAULT 0
+                CHECK (direct_count_ready IN (0, 1))
+                """
+            )
         if "conversation_kind" not in message_conversation_columns:
             connection.execute(
                 """

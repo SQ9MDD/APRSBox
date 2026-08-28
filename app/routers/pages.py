@@ -4664,10 +4664,13 @@ def statistics_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
-    statistics_payload = get_traffic_statistics(range_value="24h")
-    statistics_devices_payload = get_traffic_devices_statistics(range_value="24h")
-    statistics_users_payload = get_traffic_users_statistics(range_value="24h")
-    statistics_direct_heard_payload = get_traffic_direct_heard_statistics(range_value="24h")
+    initial_range = str(request.cookies.get("aprsbox_statistics_range") or "24h").strip().lower()
+    if initial_range not in {"1h", "24h", "7d", "30d"}:
+        initial_range = "24h"
+    statistics_payload = get_traffic_statistics(range_value=initial_range)
+    statistics_devices_payload = get_traffic_devices_statistics(range_value=initial_range)
+    statistics_users_payload = get_traffic_users_statistics(range_value=initial_range)
+    statistics_direct_heard_payload = get_traffic_direct_heard_statistics(range_value=initial_range)
     context = build_template_context(
         request,
         page_title="Statistics",
@@ -4885,6 +4888,7 @@ def dashboard_radio_activity(
 
 
 @router.get("/api/statistics/traffic")
+@_scoped_read_model
 def statistics_traffic(
     range: str = "24h",
     shift: int = 0,
@@ -4898,6 +4902,7 @@ def statistics_traffic(
 
 
 @router.get("/api/statistics/devices")
+@_scoped_read_model
 def statistics_devices(
     range: str = "24h",
     shift: int = 0,
@@ -4912,6 +4917,7 @@ def statistics_devices(
 
 
 @router.get("/api/statistics/users")
+@_scoped_read_model
 def statistics_users(
     range: str = "24h",
     shift: int = 0,
@@ -4925,6 +4931,7 @@ def statistics_users(
 
 
 @router.get("/api/statistics/direct-heard")
+@_scoped_read_model
 def statistics_direct_heard(
     range: str = "24h",
     shift: int = 0,
@@ -4932,6 +4939,25 @@ def statistics_direct_heard(
 ) -> JSONResponse:
     try:
         payload = get_traffic_direct_heard_statistics(range_value=range, shift_windows=shift)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse(payload)
+
+
+@router.get("/api/statistics/all")
+@_scoped_read_model
+def statistics_all(
+    range: str = "24h",
+    shift: int = 0,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = {
+            "traffic": get_traffic_statistics(range_value=range, shift_windows=shift),
+            "devices": get_traffic_devices_statistics(range_value=range, shift_windows=shift),
+            "users": get_traffic_users_statistics(range_value=range, shift_windows=shift),
+            "direct_heard": get_traffic_direct_heard_statistics(range_value=range, shift_windows=shift),
+        }
     except ValueError as exc:
         return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)
