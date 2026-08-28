@@ -1,7 +1,16 @@
 # Changelog
 
+## 1.12.4 - 2026-08-28
+- `Stabile Version`: diese Version konzentriert sich auf einen strikten, Burst-resistenten APRS-IS-Uplink und eine zuverlässigere Wiederherstellung nativer KISS-TCP-Verbindungen nach RX-Stille. Bei schlechter Verbindung verwirft APRSBox veraltete Frames bewusst, statt sie später gesammelt auszugeben.
+- `APRS-IS / strikte Aktualität`: APRS-IS TX arbeitet bei Überlastung oder schlechter Verbindung jetzt fail-closed. Frames, die älter als 5 Sekunden sind, werden direkt vor dem Transport-Schreibvorgang verworfen; die gemeinsame Routing-Warteschlange ist auf 256 Frames begrenzt.
+- `APRS-IS / TCP Anti-Burst`: Linux-TCP-Verbindungen verwenden einen 3-sekündigen `TCP_USER_TIMEOUT` und aggressives Keepalive. Ein belegter Transportpuffer führt zum sofortigen Abbruch der Verbindung, statt alte Frames später gesammelt zu übertragen.
+- `Schnittstellen / RX-Stille`: der vorhandene `RX Silence Reconnect Timeout (s)` gilt jetzt auch für native KISS-TCP-Verbindungen. Der Timeout wird ab beliebigen empfangenen Bytes gemessen; nach Ablauf wird der Socket geschlossen und durch die vorhandene Schleife neu verbunden. `0` deaktiviert den Watchdog weiterhin. Die lokale TCP-Verbindung des seriellen Brokers startet keinen zweiten Watchdog, sodass Serial nur einen gemeinsamen Mechanismus am physischen Port verwendet.
+- `Schnittstellen / GUI`: dasselbe RX-Timeout-Feld steht für SERIALL und TCP ohne Änderungen an Konfiguration oder Datenbank zur Verfügung.
+- `Tests`: Regressionstests für veraltete APRS-IS-Frames, die begrenzte Warteschlange, den Transportabbruch und den durch beliebige Bytes zurückgesetzten KISS-TCP-Stille-Timeout wurden ergänzt.
+
 ## 1.12 - 2026-08-27
 - `Stabile Version`: Karte und Stationstracks wurden durch das Auffächern überlappender Marker und die sofortige Aktualisierung des neuesten Frames verbessert. Die Bewertung und Diagnose der Bandbedingungen wurde überarbeitet, RF- und APRS-IS-Gruppen wurden getrennt, die Verwaltung von Schnittstellen und Hilfe vereinfacht und die APRS-IS-Best-Effort-Übertragung ohne Frame-Pufferung oder Wiederholungsversuche präzisiert.
+- `Backend / Leistung`: N+1-Abfragen und I/O pro Datensatz wurden entfernt, Einstellungs- und Listendaten gebündelt geladen, SQLite-Verbindungswechsel reduziert und anhand von Abfrageplänen geprüfte Indizes ergänzt.
 
 ## 1.11.10.dev - 2026-08-26
 - `Bandbedingungen / Servicedaten`: Unter den Modelldaten wurde ein Diagnosepanel ergänzt, das die gelernte Referenzbasis, Median und P90-Reichweite ortsfester Stationen, automatische Entfernungsschwellen sowie Zähler für Stationen, bestätigte Fernempfänge, geografische Gebiete und RF-Frames aus der für die sichtbare Bewertung verwendeten Stichprobe anzeigt.

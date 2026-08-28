@@ -45,7 +45,7 @@ class OwnAlertSchedulerService:
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
-            self._tick()
+            await asyncio.to_thread(self._tick)
             await self._sleep(self._poll_interval)
 
     def _tick(self, now: datetime | None = None) -> int:

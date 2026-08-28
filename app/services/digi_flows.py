@@ -1360,7 +1360,12 @@ def _serialize_step_row(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
     return step
 
 
-def _serialize_flow_row(row: sqlite3.Row | dict[str, Any], steps: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def _serialize_flow_row(
+    row: sqlite3.Row | dict[str, Any],
+    steps: list[dict[str, Any]] | None = None,
+    *,
+    translator: Any = None,
+) -> dict[str, Any]:
     flow = dict(row)
     flow["enabled"] = int(flow.get("enabled") or 0)
     flow["sort_order"] = int(flow.get("sort_order") or 0)
@@ -1368,22 +1373,24 @@ def _serialize_flow_row(row: sqlite3.Row | dict[str, Any], steps: list[dict[str,
         steps = get_digi_flow_steps(int(flow["id"]))
     flow["steps"] = steps
     flow["step_count"] = len(steps)
-    flow["source_display"] = _flow_endpoint_display(flow.get("source_kind"), flow.get("source_ref"))
-    flow["target_display"] = _flow_endpoint_display(flow.get("target_kind"), flow.get("target_ref"))
+    translate = translator or get_translator(get_app_language())
+    flow["source_display"] = _flow_endpoint_display(flow.get("source_kind"), flow.get("source_ref"), translate=translate)
+    flow["target_display"] = _flow_endpoint_display(flow.get("target_kind"), flow.get("target_ref"), translate=translate)
     return flow
 
 
-def _flow_endpoint_display(kind: Any, ref: Any) -> str:
+def _flow_endpoint_display(kind: Any, ref: Any, *, translate: Any = None) -> str:
     normalized_kind = _normalize_text(kind)
     normalized_ref = _normalize_text(ref)
+    translate = translate or _t
     if normalized_kind == LOCAL_TX_SOURCE_KIND and normalized_ref == LOCAL_TX_SOURCE_REF:
-        return _t("Local TX")
+        return translate("Local TX")
     if normalized_kind == "tx_aprsis":
-        return _t("APRS-IS uplink")
+        return translate("APRS-IS uplink")
     if normalized_kind == "action_log" and normalized_ref == "log-only":
-        return _t("Black Hole")
+        return translate("Black Hole")
     if normalized_kind == "action_drop" and normalized_ref == "drop":
-        return _t("Drop")
+        return translate("Drop")
     if normalized_ref:
         return normalized_ref
     return normalized_kind or normalized_ref or "-"
@@ -1397,7 +1404,16 @@ def list_digi_flows() -> list[dict[str, Any]]:
         ORDER BY sort_order ASC, updated_at DESC, id DESC
         """
     )
-    return [_serialize_flow_row(row, steps=get_digi_flow_steps(int(row["id"]))) for row in rows]
+    steps_by_flow = _get_digi_flow_steps_by_flow(row["id"] for row in rows)
+    translator = get_translator(get_app_language())
+    return [
+        _serialize_flow_row(
+            row,
+            steps=steps_by_flow.get(int(row["id"]), []),
+            translator=translator,
+        )
+        for row in rows
+    ]
 
 
 def list_enabled_digi_flows(*, source_kind: str | None = None, source_ref: str | None = None) -> list[dict[str, Any]]:
@@ -1415,7 +1431,16 @@ def list_enabled_digi_flows(*, source_kind: str | None = None, source_ref: str |
         params.append(source_ref)
     query += " ORDER BY updated_at DESC, id DESC"
     rows = fetch_all(query, tuple(params))
-    return [_serialize_flow_row(row, steps=get_digi_flow_steps(int(row["id"]))) for row in rows]
+    steps_by_flow = _get_digi_flow_steps_by_flow(row["id"] for row in rows)
+    translator = get_translator(get_app_language())
+    return [
+        _serialize_flow_row(
+            row,
+            steps=steps_by_flow.get(int(row["id"]), []),
+            translator=translator,
+        )
+        for row in rows
+    ]
 
 
 def has_enabled_local_tx_aprsis_flow() -> bool:
@@ -1445,6 +1470,26 @@ def get_digi_flow_steps(flow_id: int) -> list[dict[str, Any]]:
         (flow_id,),
     )
     return [_serialize_step_row(row) for row in rows]
+
+
+def _get_digi_flow_steps_by_flow(flow_ids: Any) -> dict[int, list[dict[str, Any]]]:
+    normalized_ids = tuple(dict.fromkeys(int(flow_id) for flow_id in flow_ids))
+    if not normalized_ids:
+        return {}
+    placeholders = ", ".join("?" for _ in normalized_ids)
+    rows = fetch_all(
+        f"""
+        SELECT id, flow_id, step_order, step_type, title, enabled, config_json, created_at, updated_at
+        FROM digi_flow_steps
+        WHERE flow_id IN ({placeholders})
+        ORDER BY flow_id ASC, step_order ASC, id ASC
+        """,
+        normalized_ids,
+    )
+    result: dict[int, list[dict[str, Any]]] = {}
+    for row in rows:
+        result.setdefault(int(row["flow_id"]), []).append(_serialize_step_row(row))
+    return result
 
 
 def get_digi_flow(flow_id: int) -> dict[str, Any] | None:

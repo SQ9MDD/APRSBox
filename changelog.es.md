@@ -1,7 +1,16 @@
 # Changelog
 
+## 1.12.4 - 2026-08-28
+- `Versión estable`: esta versión se centra en un uplink APRS-IS estricto y resistente a ráfagas, y en una recuperación más fiable de las conexiones KISS TCP nativas tras silencio RX. Con mala conectividad, APRSBox descarta deliberadamente las tramas antiguas en lugar de liberarlas posteriormente en ráfagas.
+- `APRS-IS / actualidad estricta`: la transmisión APRS-IS ahora falla de forma cerrada ante congestión o mala conectividad. Las tramas con más de 5 segundos se descartan justo antes de escribir en el transporte y la cola compartida de routing queda limitada a 256 tramas.
+- `APRS-IS / anti-ráfagas TCP`: las conexiones TCP en Linux usan `TCP_USER_TIMEOUT` de 3 segundos y keepalive agresivo. Un búfer de transporte ocupado aborta inmediatamente la conexión en vez de liberar posteriormente una ráfaga de tramas antiguas.
+- `Interfaces / silencio RX`: el ajuste existente `RX Silence Reconnect Timeout (s)` ahora también cubre conexiones KISS TCP nativas. El timeout se mide desde cualquier byte recibido; al superarlo se cierra el socket y el bucle existente vuelve a conectarlo. `0` continúa desactivando el watchdog. La conexión TCP local del broker serie no inicia un segundo watchdog, por lo que el puerto serie conserva un único mecanismo compartido sobre el puerto físico.
+- `Interfaces / GUI`: el mismo campo de timeout RX está disponible para SERIALL y TCP sin cambios de configuración ni de base de datos.
+- `Pruebas`: se añadieron regresiones para tramas APRS-IS antiguas, la cola limitada, el aborto del transporte y el timeout de silencio KISS TCP reiniciado por cualquier byte recibido.
+
 ## 1.12 - 2026-08-27
 - `Versión estable`: se mejoraron el mapa y los recorridos de estaciones con la separación de marcadores superpuestos y la actualización inmediata de la última trama. Se rediseñaron la evaluación y el diagnóstico de las condiciones de banda, se separaron los grupos RF y APRS-IS, se simplificó la gestión de interfaces y ayuda, y se aclaró la transmisión APRS-IS de mejor esfuerzo sin búfer ni reintentos de tramas.
+- `Backend / rendimiento`: se eliminaron las consultas N+1 y las operaciones de E/S por registro, se agruparon las lecturas de ajustes y listas, se redujo la apertura de conexiones SQLite y se añadieron índices verificados mediante planes de consulta.
 
 ## 1.11.10.dev - 2026-08-26
 - `Mapa / última trama`: el widget usa ahora el mismo flujo de tráfico en vivo que el scroller, por lo que muestra inmediatamente su entrada más reciente en vez de esperar a la actualización periódica de la lista de estaciones; los datos de QSY, distancia y comentario se completan desde el registro actual de la estación.

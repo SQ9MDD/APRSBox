@@ -1,7 +1,16 @@
 # Changelog
 
+## 1.12.4 - 28.08.2026
+- `Wydanie stabilne`: wydanie koncentruje się na rygorystycznym, odpornym na bursty uplinku APRS-IS oraz pewniejszym odzyskiwaniu natywnych połączeń KISS TCP po ciszy RX. Przy słabej łączności APRSBox celowo odrzuca nieaktualne ramki zamiast wypuszczać je później seriami.
+- `APRS-IS / rygorystyczna świeżość`: TX APRS-IS działa teraz fail-closed przy przeciążeniu lub słabym połączeniu. Ramki starsze niż 5 sekund są odrzucane bezpośrednio przed zapisem do transportu, wspólna kolejka routingu jest ograniczona do 256 ramek, a pełna kolejka odrzuca nowe wejście zamiast gromadzić nieograniczony backlog.
+- `APRS-IS / TCP anti-burst`: połączenia TCP w systemie Linux używają 3-sekundowego `TCP_USER_TIMEOUT` i agresywnego keepalive. Zajęty bufor transportu blokuje następną ramkę i przerywa połączenie, dane pozostałe po `drain()` oznaczają błąd zapisu, a rozłączenie używa natychmiastowego abortu zamiast łagodnego opróżniania socketu.
+- `Interfejsy / RX silence`: istniejący `RX Silence Reconnect Timeout (s)` obejmuje teraz także natywne połączenia KISS TCP. Timeout jest liczony od dowolnych odebranych bajtów; po jego przekroczeniu socket jest zamykany, a istniejąca pętla zestawia połączenie ponownie. Wartość `0` nadal wyłącza watchdog. Połączenie TCP lokalnego brokera serialowego nie uruchamia drugiego watchdoga — serial nadal kontroluje wyłącznie jeden wspólny mechanizm na fizycznym porcie.
+- `Interfejsy / GUI`: to samo pole timeoutu RX jest dostępne w formularzach SERIALL i TCP bez zmian konfiguracji ani bazy danych.
+- `Testy`: dodano regresje dla odrzucania starych ramek APRS-IS, ograniczonej kolejki fail-closed, przerwania transportu oraz timeoutu ciszy natywnego KISS TCP resetowanego przez dowolne odebrane bajty.
+
 ## 1.12 - 27.08.2026
 - `Wydanie stabilne`: udoskonalono mapę i ślady stacji, dodając rozsuwanie nakładających się markerów oraz natychmiastową aktualizację ostatniej ramki. Przebudowano ocenę warunków pasma i jej diagnostykę, rozdzielono grupy RF i APRS-IS, uproszczono zarządzanie interfejsami i pomocą oraz doprecyzowano transmisję APRS-IS w trybie best effort bez buforowania i ponawiania ramek.
+- `Backend / wydajność`: usunięto zapytania N+1 i operacje I/O wykonywane per rekord, zbatchowano odczyty ustawień i danych listowych, ograniczono liczbę połączeń SQLite oraz dodano indeksy potwierdzone planami zapytań.
 
 ## 1.11.10.dev - 26.08.2026
 - `Mapa / ostatnia ramka`: widżet korzysta teraz z tego samego strumienia ruchu co scroller, więc natychmiast pokazuje jego najnowszy wpis zamiast czekać na cykliczne odświeżenie listy stacji; dane QSY, dystansu i komentarza są uzupełniane z aktualnego rekordu stacji.

@@ -30,7 +30,7 @@ For APRSIS, `APRS-IS receive filter` is the APRS-IS server filter. New interface
 - `Enabled` activates a physical interface in the APRSBox runtime. For APRS-IS, the `Enable APRS-IS connection` label enables the shared connection used for reception and transmission; flows ending in `TX APRS-IS` still decide which frames may be sent.
 - `Block TX on this interface` allows receiving traffic but blocks outbound transmission.
 - `TX Min Gap (s)` sets the minimum pause between transmissions on this TNC. The allowed range is `0.2` to `1.2` seconds.
-- `RX Silence Reconnect Timeout (s)` applies to serial interfaces. After RX silence longer than this value, the serial broker can force a reconnect. `0` disables this watchdog.
+- `RX Silence Reconnect Timeout (s)` applies to SERIALL and native KISS TCP interfaces. After received-byte silence longer than this value, the connection is re-established. Serial uses one physical-port watchdog; its local broker TCP connection does not start a second one. `0` disables the watchdog.
 
 `Baud Rate` is used only for `SERIALL`. For APRSIS, fields specific to a physical TNC are hidden: serial settings, RF TX block/pacing, and LAN proxy. Transmission to APRS-IS requires both an enabled connection and a matching `Packet Routing` flow.
 
@@ -53,6 +53,8 @@ Below the APRSIS form, the current connection state and expandable diagnostics s
 Both modes require a verified APRS-IS login. `pass -1` identifies an unverified receive-only client and does not allow RF-received frames to be sent. For RF uplinks, APRSBox uses `qAO` when the receiving TNC has no usable TX return path, or `qAR` when the TNC permits TX and an active `APRS-IS -> RF` flow provides message return. Locally generated frames use `TCPIP*`.
 
 The `TX APRS-IS` target has a system safety filter that rejects, among other cases, frames containing `TCPIP` / `TCPXX`, `NOGATE` / `RFONLY`, and malformed third-party encapsulation. See [Packet Routing](packet_routing.en.md) for detailed flow construction.
+
+APRS-IS transmission is strictly current-data and fail-closed. A frame waiting more than 5 seconds between reception/enqueue and the final APRS-IS transport write is dropped. The routing queue is bounded, an already-buffered transport is aborted instead of accepting another frame, and degraded Linux TCP connections use a short timeout to tightly limit the network failure window. During poor connectivity APRSBox deliberately loses frames rather than replaying stale traffic into APRS-IS.
 
 ## Expose Port
 

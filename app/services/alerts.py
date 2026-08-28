@@ -807,11 +807,17 @@ def process_alert_frame(
     )
 
 
-def attention_alert_count(*, now: str | None = None) -> int:
+def attention_alert_count(
+    *,
+    now: str | None = None,
+    expire: bool = True,
+    alarm_enabled: bool | None = None,
+) -> int:
     timestamp = now or utc_now()
-    alarm_enabled = 1 if get_aprs_alarm_enabled() else 0
+    alarm_enabled_value = get_aprs_alarm_enabled() if alarm_enabled is None else alarm_enabled
     try:
-        expire_aprs_alerts(now=timestamp)
+        if expire:
+            expire_aprs_alerts(now=timestamp)
         row = fetch_one(
             """
             SELECT COUNT(*) AS total
@@ -827,7 +833,7 @@ def attention_alert_count(*, now: str | None = None) -> int:
               AND muted_indefinitely = 0
               AND (muted_until IS NULL OR julianday(muted_until) <= julianday(?))
             """,
-            (alarm_enabled, timestamp, timestamp, timestamp),
+            (1 if alarm_enabled_value else 0, timestamp, timestamp, timestamp),
         )
     except sqlite3.OperationalError:
         # Template rendering can happen before the application lifespan has

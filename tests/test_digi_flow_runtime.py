@@ -1095,6 +1095,104 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIsNone(traffic_row)
 
+    async def test_tx_aprsis_drops_frame_that_waited_too_long_in_routing_queue(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            insert_aprsis_interface()
+            create_flow(
+                {
+                    "name": "Fresh APRSIS only",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_aprsis",
+                    "target_ref": "aprsis",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
+                        {"step_type": "tx_aprsis", "title": "TX APRS-IS", "enabled": 1, "config": {"aprsis_target": "aprsis"}},
+                    ],
+                }
+            )
+
+            class FakeAprsisClient:
+                def __init__(self) -> None:
+                    self.lines: list[str] = []
+
+                async def send_tnc2_line(self, line: str) -> tuple[bool, str]:
+                    self.lines.append(line)
+                    return True, "APRS-IS TX sent."
+
+            fake_client = FakeAprsisClient()
+            runtime = DigiFlowRuntimeService(
+                aprsis_client=fake_client,
+                aprsis_tx_max_frame_age_seconds=0.1,
+            )
+            await runtime.start()
+            try:
+                frame = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC-9>APRS,WIDE1-1:>Old queue entry",
+                    rx_received_monotonic=time.monotonic() - 1.0,
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rows = event_rows_for_frame(str(frame["frame_uid"]))
+            self.assertEqual(fake_client.lines, [])
+            self.assertTrue(
+                any(
+                    row["event_type"] == "output_action"
+                    and row["decision"] == "drop"
+                    and "stale frame" in row["message"]
+                    for row in rows
+                )
+            )
+
+    async def test_routing_queue_is_bounded_and_fails_closed(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            insert_aprsis_interface()
+            create_flow(
+                {
+                    "name": "Bounded APRSIS queue",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_aprsis",
+                    "target_ref": "aprsis",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
+                        {"step_type": "tx_aprsis", "title": "TX APRS-IS", "enabled": 1, "config": {"aprsis_target": "aprsis"}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService(queue_max_frames=1)
+            first = runtime.enqueue_tnc2_frame(
+                source_kind="receiver_rf",
+                source_ref="TNC-1",
+                raw_payload="SP8ABC-9>APRS:>First",
+            )
+            second = runtime.enqueue_tnc2_frame(
+                source_kind="receiver_rf",
+                source_ref="TNC-1",
+                raw_payload="SP8ABC-9>APRS:>Second",
+            )
+
+            self.assertTrue(first["accepted"])
+            self.assertFalse(second["accepted"])
+            self.assertEqual(second["drop_reason"], "routing_queue_full")
+            self.assertEqual(second["queue_depth"], 1)
+            diagnostics_row = fetch_one("SELECT drop_total FROM aprsis_uplink_stats WHERE id = 1")
+            self.assertIsNotNone(diagnostics_row)
+            assert diagnostics_row is not None
+            self.assertEqual(int(diagnostics_row["drop_total"]), 1)
+
     async def test_local_tx_strict_filter_enforces_local_metadata_and_blocks_disallowed_paths(self) -> None:
         with temporary_database():
             set_local_station_identity()

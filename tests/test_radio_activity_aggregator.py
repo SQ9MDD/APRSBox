@@ -400,6 +400,22 @@ class RadioActivityAggregatorTests(unittest.TestCase):
 
             self.assertEqual(int(payload["kpis"]["heard_stations"]), 1)
 
+    def test_dashboard_heard_kpi_never_rebuilds_empty_projection_from_raw_frames(self) -> None:
+        with temporary_database():
+            now_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            execute(
+                """
+                INSERT INTO traffic_frames(
+                    source, source_kind, direction, format, line, length, created_at
+                ) VALUES ('Main TNC', 'rf', 'RX', 'TNC2', 'SP5RAW>APRS:>Test', 17, ?)
+                """,
+                (now_utc.isoformat(),),
+            )
+            with patch("app.services.radio_activity.parse_tnc2_frame", side_effect=AssertionError("raw parse")):
+                payload = get_dashboard_radio_activity(range_value="24h")
+
+            self.assertEqual(int(payload["kpis"]["heard_stations"]), 0)
+
     def test_dashboard_api_returns_aggregated_series(self) -> None:
         if not FASTAPI_AVAILABLE:
             self.skipTest("fastapi is not installed in this environment")

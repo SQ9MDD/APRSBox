@@ -30,7 +30,7 @@ Dla APRSIS pole `Filtr odbioru APRS-IS` jest filtrem serwera APRS-IS. Nowy inter
 - `Enabled` włącza fizyczny interfejs w runtime APRSBox. Dla APRS-IS etykieta `Włącz połączenie APRS-IS` włącza wspólne połączenie używane do odbioru i transmisji; o tym, które ramki wolno wysłać, nadal decydują flow kończące się w `TX APRS-IS`.
 - `Block TX on this interface` pozwala odbierać ruch, ale blokuje nadawanie outbound.
 - `TX Min Gap (s)` ustawia minimalną przerwę między transmisjami na tym TNC. Dozwolony zakres to `0.2` do `1.2` sekundy.
-- `RX Silence Reconnect Timeout (s)` dotyczy seriala. Po ciszy RX dłuższej od ustawionej wartości broker serial może wymusić reconnect. `0` wyłącza ten watchdog.
+- `RX Silence Reconnect Timeout (s)` dotyczy interfejsów SERIALL i natywnego KISS TCP. Po ciszy w odebranych bajtach dłuższej od ustawionej wartości połączenie jest odtwarzane. Dla seriala działa jeden watchdog fizycznego portu; lokalne połączenie TCP brokera nie uruchamia drugiego. `0` wyłącza watchdog.
 
 `Baud Rate` jest używany tylko dla `SERIALL`. Dla APRSIS ukryte są pola właściwe dla fizycznego TNC: serial, blokada/pacing TX RF i proxy LAN. Transmisja do APRS-IS wymaga włączonego połączenia oraz pasującego flow `Packet Routing`.
 
@@ -53,6 +53,8 @@ Pod formularzem APRSIS znajduje się stan bieżącego połączenia i rozwijana d
 Oba tryby wymagają zweryfikowanego logowania APRS-IS. `pass -1` oznacza niezweryfikowanego klienta tylko do odbioru i nie pozwala wysyłać odebranych ramek RF. Dla uplinku z RF APRSBox używa `qAO`, gdy odbierający interfejs TNC nie ma dostępnej ścieżki powrotu TX, albo `qAR`, gdy TNC ma dozwolony TX i aktywny flow `APRS-IS -> RF` zapewnia powrót wiadomości. Ramki wygenerowane lokalnie używają `TCPIP*`.
 
 Cel `TX APRS-IS` ma systemowy filtr bezpieczeństwa, który odrzuca między innymi ramki z `TCPIP` / `TCPXX`, `NOGATE` / `RFONLY` oraz niepoprawną enkapsulację third-party. Szczegółowe budowanie ścieżek opisuje pomoc [Packet Routing](packet_routing.pl.md).
+
+Transmisja APRS-IS działa rygorystycznie tylko dla danych bieżących i zgodnie z zasadą fail-closed. Ramka czekająca ponad 5 sekund od odbioru/zakolejkowania do końcowego zapisu w transporcie APRS-IS jest odrzucana. Kolejka routingu ma ograniczony rozmiar, transport posiadający już zbuforowane dane jest przerywany zamiast przyjmowania następnej ramki, a zdegradowane połączenie TCP w systemie Linux używa krótkiego timeoutu, aby mocno ograniczyć okno awarii sieci. Przy słabym połączeniu APRSBox celowo traci ramki zamiast odtwarzać nieaktualny ruch do APRS-IS.
 
 ## Expose Port
 

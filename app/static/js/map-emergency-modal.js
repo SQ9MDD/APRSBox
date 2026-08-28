@@ -15,6 +15,14 @@
     const source = document.getElementById("aprs-emergency-source");
     const path = document.getElementById("aprs-emergency-path");
     const summary = document.getElementById("aprs-emergency-summary");
+    const groupRow = document.getElementById("aprs-emergency-group-row");
+    const group = document.getElementById("aprs-emergency-group");
+    const eventRow = document.getElementById("aprs-emergency-event-row");
+    const event = document.getElementById("aprs-emergency-event");
+    const severityRow = document.getElementById("aprs-emergency-severity-row");
+    const severity = document.getElementById("aprs-emergency-severity");
+    const areasRow = document.getElementById("aprs-emergency-areas-row");
+    const areas = document.getElementById("aprs-emergency-areas");
     const raw = document.getElementById("aprs-emergency-raw");
     const noPosition = document.getElementById("aprs-emergency-no-position");
     const mapContainer = document.getElementById("aprs-emergency-map");
@@ -29,6 +37,8 @@
     const aprsAlertReceivedText = String(root.dataset.i18nAprsAlertReceived || "APRS alert received");
     const activeAprsAlertText = String(root.dataset.i18nActiveAprsAlert || "Active APRS alert");
     const alertMutedText = String(root.dataset.i18nAlertMuted || "Alert muted");
+    const noPositionText = String(root.dataset.i18nNoPosition || "No position available in this frame");
+    const noMapAreaText = String(root.dataset.i18nNoMapArea || "No map area available");
     const handledFramesStorageKey = "aprsbox-emergency-frames-shown";
 
     const mapTileUrl = String(root.dataset.tileUrl || "").trim();
@@ -174,69 +184,95 @@
         }
     }
 
-    function renderMiniMap(latitude, longitude) {
+    function validAreaFeatureCollection(value) {
+        return value
+            && value.type === "FeatureCollection"
+            && Array.isArray(value.features)
+            && value.features.length > 0;
+    }
+
+    function alertAreaStyle(feature) {
+        const requestedColor = String(
+            feature?.properties?.aprsbox_alert_color || "gray"
+        ).toLowerCase();
+        const color = ["yellow", "orange", "red", "gray"].includes(requestedColor)
+            ? requestedColor
+            : "gray";
+        return {
+            stroke: true,
+            color,
+            opacity: 1,
+            weight: 3,
+            fill: true,
+            fillColor: color,
+            fillOpacity: 0.22,
+        };
+    }
+
+    function renderMiniMap(latitude, longitude, areaFeatureCollection = null) {
         const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+        const hasAreas = validAreaFeatureCollection(areaFeatureCollection);
         if (!mapContainer || !noPosition) {
             return;
         }
-        if (!hasCoordinates || typeof window.L === "undefined") {
+        if ((!hasCoordinates && !hasAreas) || typeof window.L === "undefined") {
             destroyMiniMap();
             mapContainer.hidden = true;
             noPosition.hidden = false;
             return;
         }
 
+        destroyMiniMap();
         noPosition.hidden = true;
         mapContainer.hidden = false;
+        mapContainer.textContent = "";
+        miniMap = window.L.map(mapContainer, {
+            center: hasCoordinates ? [latitude, longitude] : [0, 0],
+            zoom: hasCoordinates ? 13 : 2,
+            zoomControl: false,
+            attributionControl: false,
+            scrollWheelZoom: false,
+            dragging: false,
+            doubleClickZoom: false,
+            boxZoom: false,
+            keyboard: false,
+            tap: false,
+            touchZoom: false,
+        });
 
-        if (!miniMap) {
-            mapContainer.textContent = "";
-            miniMap = window.L.map(mapContainer, {
-                center: [latitude, longitude],
-                zoom: 13,
-                zoomControl: false,
-                attributionControl: false,
-                scrollWheelZoom: false,
-                dragging: false,
-                doubleClickZoom: false,
-                boxZoom: false,
-                keyboard: false,
-                tap: false,
-                touchZoom: false,
-            });
-
-            if (mapTileUrl) {
-                const tileOptions = {
-                    attribution: mapTileAttribution,
-                };
-                if (Number.isInteger(mapTileMinZoom)) {
-                    tileOptions.minZoom = mapTileMinZoom;
-                }
-                if (Number.isInteger(mapTileMaxZoom)) {
-                    tileOptions.maxZoom = mapTileMaxZoom;
-                }
-                if (mapTileSubdomains.length > 0) {
-                    tileOptions.subdomains = mapTileSubdomains;
-                }
-                window.L.tileLayer(mapTileUrl, tileOptions).addTo(miniMap);
+        if (mapTileUrl) {
+            const tileOptions = {
+                attribution: mapTileAttribution,
+            };
+            if (Number.isInteger(mapTileMinZoom)) {
+                tileOptions.minZoom = mapTileMinZoom;
             }
-
-            miniMapMarker = window.L.marker([latitude, longitude]).addTo(miniMap);
-            window.setTimeout(() => {
-                if (miniMap) {
-                    miniMap.invalidateSize();
-                }
-            }, 0);
-            return;
+            if (Number.isInteger(mapTileMaxZoom)) {
+                tileOptions.maxZoom = mapTileMaxZoom;
+            }
+            if (mapTileSubdomains.length > 0) {
+                tileOptions.subdomains = mapTileSubdomains;
+            }
+            window.L.tileLayer(mapTileUrl, tileOptions).addTo(miniMap);
         }
 
-        miniMap.setView([latitude, longitude], 13);
-        if (miniMapMarker) {
-            miniMapMarker.setLatLng([latitude, longitude]);
-        } else {
+        if (hasAreas && typeof window.L.geoJSON === "function") {
+            const areaLayer = window.L.geoJSON(areaFeatureCollection, {
+                interactive: false,
+                style: alertAreaStyle,
+            }).addTo(miniMap);
+            const bounds = areaLayer.getBounds();
+            if (bounds.isValid()) {
+                miniMap.fitBounds(bounds, { padding: [18, 18], maxZoom: 10, animate: false });
+            }
+        } else if (hasCoordinates) {
             miniMapMarker = window.L.marker([latitude, longitude]).addTo(miniMap);
         }
-        miniMap.invalidateSize();
+        window.setTimeout(() => {
+            if (miniMap) {
+                miniMap.invalidateSize();
+            }
+        }, 0);
     }
 
     function warmEmergencyAlarmAudio() {
@@ -425,6 +461,15 @@
         }
     }
 
+    function setOptionalDetail(row, output, value) {
+        if (!row || !output) {
+            return;
+        }
+        const text = String(value ?? "").trim();
+        output.textContent = text || "-";
+        row.hidden = !text;
+    }
+
     function renderEmergencyFrame(frame, { playSound = false, remember = false } = {}) {
         const emergencyData = popupFrameData(frame);
         const isAlarmGroupPopup = frame && frame.alert_popup_kind === "alarm_group";
@@ -438,6 +483,9 @@
         const rawFrame = String(emergencyData.raw_frame || frame.line || "").trim();
         const latitude = parseCoordinate(emergencyData.latitude);
         const longitude = parseCoordinate(emergencyData.longitude);
+        const areaCodes = Array.isArray(emergencyData.area_codes)
+            ? emergencyData.area_codes.map((value) => String(value || "").trim()).filter(Boolean)
+            : [];
 
         currentEmergencyFrame = frame;
         currentSignature = emergencySignature(frame);
@@ -466,6 +514,26 @@
         if (summary) {
             summary.textContent = summaryLabel;
         }
+        setOptionalDetail(
+            groupRow,
+            group,
+            isAlarmGroupPopup ? emergencyData.destination_group : ""
+        );
+        setOptionalDetail(
+            eventRow,
+            event,
+            isAlarmGroupPopup ? emergencyData.event_code : ""
+        );
+        setOptionalDetail(
+            severityRow,
+            severity,
+            isAlarmGroupPopup ? emergencyData.severity_level : ""
+        );
+        setOptionalDetail(
+            areasRow,
+            areas,
+            isAlarmGroupPopup ? areaCodes.join(", ") : ""
+        );
         if (raw) {
             raw.textContent = rawFrame;
         }
@@ -478,7 +546,14 @@
             }
         }
 
-        renderMiniMap(latitude, longitude);
+        if (noPosition) {
+            noPosition.textContent = isAlarmGroupPopup ? noMapAreaText : noPositionText;
+        }
+        renderMiniMap(
+            latitude,
+            longitude,
+            isAlarmGroupPopup ? emergencyData.area_feature_collection : null
+        );
         updateOpenMapButton(latitude, longitude);
         if (remember) {
             markFrameHandled(frame);

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from html import escape
 import ipaddress
 import json
@@ -81,7 +82,7 @@ STATION_SNAPSHOT_ROW_LIMIT_MIN = 4000
 _STATION_SNAPSHOT_CACHE: dict[tuple[str, int, int | None, str, str], list[dict[str, Any]]] = {}
 _VISIBLE_STATION_SNAPSHOT_TTL_CACHE: dict[tuple[str, int, str, str], tuple[float, list[dict[str, Any]]]] = {}
 _VISIBLE_STATION_SNAPSHOT_TTL_SECONDS = 2.0
-_TRAFFIC_SNAPSHOT_CACHE: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
+_TRAFFIC_SNAPSHOT_CACHE: dict[tuple[str, int, bool], tuple[float, dict[str, Any]]] = {}
 _TRAFFIC_SNAPSHOT_CACHE_TTL_SECONDS = 1.0
 SERIAL_RX_SILENCE_TIMEOUT_DEFAULT_SECONDS = 150
 SERIAL_RX_SILENCE_TIMEOUT_ALLOWED_SECONDS = set(range(0, 601, 30))
@@ -117,21 +118,40 @@ def get_aprs_symbol_set() -> str:
 
 def _aprs_symbol_icon_path_for_set(symbol: str, symbol_set: str) -> str | None:
     icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
-
-    if len(symbol) != 2:
-        filename = f"x.{extension}"
-    else:
-        table, code = symbol[0], symbol[1]
-        index = ord(code) - 33
-        if index < 0 or index > 93:
-            filename = f"x.{extension}"
-        else:
-            filename = f"{index:02d}.{extension}" if table == "/" else f"a{index:02d}.{extension}"
-
-    candidate = settings.static_dir / "icons" / icon_dir / filename
-    if candidate.exists():
-        return f"icons/{icon_dir}/{filename}"
+    filename = _aprs_symbol_icon_filename(symbol, extension=extension)
+    relative_path = f"icons/{icon_dir}/{filename}"
+    if relative_path in _aprs_symbol_icon_inventory():
+        return relative_path
     return None
+
+
+@lru_cache(maxsize=1)
+def _aprs_symbol_icon_inventory() -> frozenset[str]:
+    """Read the packaged icon catalog once, never once per rendered row."""
+    icon_root = settings.static_dir / "icons"
+    paths: set[str] = set()
+    for symbol_set in (APRS_SYMBOL_SET_LEGACY, APRS_SYMBOL_SET_MODERN):
+        icon_dir, _extension = _aprs_symbol_icon_set_parts(symbol_set)
+        directory = icon_root / icon_dir
+        try:
+            paths.update(
+                f"icons/{icon_dir}/{entry.name}"
+                for entry in directory.iterdir()
+                if entry.is_file()
+            )
+        except OSError:
+            continue
+    return frozenset(paths)
+
+
+def _aprs_symbol_icon_filename(symbol: str, *, extension: str) -> str:
+    if len(symbol) != 2:
+        return f"x.{extension}"
+    table, code = symbol[0], symbol[1]
+    index = ord(code) - 33
+    if index < 0 or index > 93:
+        return f"x.{extension}"
+    return f"{index:02d}.{extension}" if table == "/" else f"a{index:02d}.{extension}"
 
 
 def _aprs_symbol_icon_path_for_resolved_set(symbol: str, symbol_set: str) -> str:
@@ -142,19 +162,19 @@ def _aprs_symbol_icon_path_for_resolved_set(symbol: str, symbol_set: str) -> str
             return candidate
     for candidate_set in (symbol_set, alternate_set):
         icon_dir, extension = _aprs_symbol_icon_set_parts(candidate_set)
-        candidate = settings.static_dir / "icons" / icon_dir / f"x.{extension}"
-        if candidate.exists():
-            return f"icons/{icon_dir}/x.{extension}"
+        relative_path = f"icons/{icon_dir}/x.{extension}"
+        if relative_path in _aprs_symbol_icon_inventory():
+            return relative_path
     return "icons/verG/x.gif"
 
 
-def get_aprs_symbol_icon_fallback_path() -> str:
-    current_set = get_aprs_symbol_set()
+def get_aprs_symbol_icon_fallback_path(*, symbol_set: str | None = None) -> str:
+    current_set = symbol_set or get_aprs_symbol_set()
     for symbol_set in (current_set, APRS_SYMBOL_SET_LEGACY if current_set == APRS_SYMBOL_SET_MODERN else APRS_SYMBOL_SET_MODERN):
         icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
-        candidate = settings.static_dir / "icons" / icon_dir / f"x.{extension}"
-        if candidate.exists():
-            return f"icons/{icon_dir}/x.{extension}"
+        relative_path = f"icons/{icon_dir}/x.{extension}"
+        if relative_path in _aprs_symbol_icon_inventory():
+            return relative_path
     return "icons/verG/x.gif"
 
 
@@ -173,20 +193,64 @@ def _is_internal_tx_payload(payload: Any) -> bool:
     return bool(payload.get("internal_tx_only"))
 
 
-def get_section_rows(slug: str) -> list[dict[str, Any]]:
+def get_section_rows(
+    slug: str,
+    *,
+    station_settings: dict[str, Any] | None = None,
+    symbol_set: str | None = None,
+    now: datetime | None = None,
+    translator: Any = None,
+) -> list[dict[str, Any]]:
     definition = SECTION_DEFINITIONS[slug]
-    rows = fetch_all(f"SELECT * FROM {definition.table_name} ORDER BY id DESC")
+    if slug in {"objects", "items"}:
+        rows = fetch_all(
+            f"""
+            SELECT id, name, state, is_enabled, interval_minutes, valid_until_utc,
+                   activation_mode, active_from_utc, active_until_utc, first_activation_utc,
+                   recurrence_duration_minutes, recurrence_interval_value,
+                   recurrence_interval_unit, recurrence_until_utc,
+                   latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment
+                   {', lifetime' if slug == 'objects' else ''}
+            FROM {definition.table_name}
+            ORDER BY id DESC
+            """
+        )
+    else:
+        rows = fetch_all(f"SELECT * FROM {definition.table_name} ORDER BY id DESC")
     result = [dict(row) for row in rows]
     if slug == "modems":
         return _decorate_modem_rows(result)
     if slug in {"objects", "items"}:
-        return [_decorate_aprs_entity_row(slug, row) for row in result]
+        station_settings = station_settings if station_settings is not None else get_station_settings()
+        symbol_set = symbol_set or get_aprs_symbol_set()
+        now = now or datetime.now(timezone.utc)
+        translator = translator or get_translator(get_app_language())
+        return [
+            _decorate_aprs_entity_row(
+                slug,
+                row,
+                station_settings=station_settings,
+                symbol_set=symbol_set,
+                now=now,
+                translator=translator,
+                include_detail=False,
+            )
+            for row in result
+        ]
     if slug == "bulletins":
         return [_decorate_aprs_message_row(row) for row in result]
     return result
 
 
-def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
+def get_section_row(
+    slug: str,
+    row_id: int,
+    *,
+    station_settings: dict[str, Any] | None = None,
+    symbol_set: str | None = None,
+    now: datetime | None = None,
+    translator: Any = None,
+) -> dict[str, Any] | None:
     definition = SECTION_DEFINITIONS[slug]
     row = fetch_one(f"SELECT * FROM {definition.table_name} WHERE id = ?", (row_id,))
     if not row:
@@ -196,7 +260,14 @@ def get_section_row(slug: str, row_id: int) -> dict[str, Any] | None:
         decorated = _decorate_modem_rows([result])
         return decorated[0] if decorated else result
     if slug in {"objects", "items"}:
-        return _decorate_aprs_entity_row(slug, result)
+        return _decorate_aprs_entity_row(
+            slug,
+            result,
+            station_settings=station_settings if station_settings is not None else get_station_settings(),
+            symbol_set=symbol_set or get_aprs_symbol_set(),
+            now=now or datetime.now(timezone.utc),
+            translator=translator or get_translator(get_app_language()),
+        )
     if slug == "bulletins":
         return _decorate_aprs_message_row(result)
     return result
@@ -462,14 +533,18 @@ def set_modem_enabled(row_id: int, enabled: bool) -> None:
     log_event("INFO", "config", f"Interface {row_id} {state}")
 
 
-def get_station_settings() -> dict[str, Any]:
+def get_station_settings(*, include_tx_runtime: bool = True) -> dict[str, Any]:
     row = fetch_one("SELECT * FROM station_settings WHERE id = 1")
     if not row:
         return {}
     result = dict(row)
     result.setdefault("beacon_interface_id", None)
     result["beacon_tx_scope"] = normalize_tx_scope(result.get("beacon_tx_scope"), default=TX_SCOPE_SINGLE)
-    result["beacon_internal_tx"] = _setting_flag(get_app_setting(STATION_TX_INTERNAL_MODE_SETTING_KEY))
+    result["beacon_internal_tx"] = (
+        _setting_flag(get_app_setting(STATION_TX_INTERNAL_MODE_SETTING_KEY))
+        if include_tx_runtime
+        else False
+    )
     result.setdefault("default_units", "metric")
     result["beacon_interval_mode"] = normalize_beacon_interval_mode(
         result.get("beacon_interval_mode"),
@@ -804,8 +879,8 @@ def recent_bulletin_outbound_jobs(limit: int = 20) -> list[dict[str, Any]]:
     return jobs
 
 
-def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
-    cache_key = (str(settings.database_path), int(limit))
+def traffic_snapshot(limit: int = 400, *, alerts_only: bool = False) -> dict[str, Any]:
+    cache_key = (str(settings.database_path), int(limit), bool(alerts_only))
     cached_snapshot = _TRAFFIC_SNAPSHOT_CACHE.get(cache_key)
     current_time = time.monotonic()
     if cached_snapshot is not None and current_time - cached_snapshot[0] < _TRAFFIC_SNAPSHOT_CACHE_TTL_SECONDS:
@@ -815,7 +890,7 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
 
     from app.services.wx import get_wx_config
 
-    wx_config = get_wx_config()
+    wx_config = get_wx_config(station_settings=station_settings)
     station_source_key = _station_source_key(station_settings)
     wx_source_key = _build_source_key(
         wx_config.get("callsign"),
@@ -865,8 +940,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         WHERE id = 1
         """
     )
-    frame_rows = fetch_all(
-        """
+    if alerts_only:
+        frame_query = """
         SELECT
             frames.id,
             frames.source,
@@ -884,6 +959,46 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
             relations.alert_id,
             alerts.source_callsign AS alert_source_callsign,
             alerts.alarm_group AS alert_alarm_group,
+            alerts.area_codes_json AS alert_area_codes_json,
+            alerts.event_code AS alert_event_code,
+            alerts.logical_alert_id AS alert_logical_alert_id,
+            alerts.severity_level AS alert_severity_level,
+            alerts.is_active AS alert_is_active,
+            alerts.expires_at AS alert_expires_at,
+            alerts.valid_until_utc AS alert_valid_until_utc,
+            alerts.superseded_by_alert_id AS alert_superseded_by_alert_id,
+            alerts.initial_frame_id AS alert_initial_frame_id,
+            alerts.last_frame_id AS alert_last_frame_id,
+            alerts.muted_until AS alert_muted_until,
+            alerts.muted_indefinitely AS alert_muted_indefinitely
+        FROM aprs_alert_frames AS relations
+        JOIN traffic_frames AS frames ON frames.id = relations.frame_id
+        JOIN aprs_alerts AS alerts ON alerts.id = relations.alert_id
+        WHERE relations.frame_id = alerts.initial_frame_id
+           OR relations.frame_id = alerts.last_frame_id
+        ORDER BY relations.received_at DESC, relations.frame_id DESC
+        LIMIT ?
+        """
+    else:
+        frame_query = """
+        SELECT
+            frames.id,
+            frames.source,
+            frames.source_kind,
+            frames.interface_id,
+            frames.direction,
+            frames.band,
+            frames.format,
+            frames.line,
+            frames.port,
+            frames.command,
+            frames.length,
+            frames.hex,
+            frames.created_at,
+            relations.alert_id,
+            alerts.source_callsign AS alert_source_callsign,
+            alerts.alarm_group AS alert_alarm_group,
+            alerts.area_codes_json AS alert_area_codes_json,
             alerts.event_code AS alert_event_code,
             alerts.logical_alert_id AS alert_logical_alert_id,
             alerts.severity_level AS alert_severity_level,
@@ -900,9 +1015,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         LEFT JOIN aprs_alerts AS alerts ON alerts.id = relations.alert_id
         ORDER BY frames.created_at DESC, frames.id DESC
         LIMIT ?
-        """,
-        (limit,),
-    )
+        """
+    frame_rows = fetch_all(frame_query, (limit,))
     interfaces = []
     for row in interface_rows:
         expose = {
@@ -1091,6 +1205,29 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
         )
         alarm_group_popup_data = None
         if alarm_group_popup:
+            # Imported lazily because alert area assembly reuses alert helpers,
+            # which in turn import the APRS parser from this module.
+            from app.services.alert_areas import build_alert_area_feature_collection
+
+            try:
+                area_codes = json.loads(str(row["alert_area_codes_json"] or "[]"))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                area_codes = []
+            popup_alert = {
+                "id": alert_id,
+                "alarm_group": alarm_group,
+                "area_codes": area_codes,
+                "severity_level": row["alert_severity_level"],
+            }
+            is_popup_candidate_frame = (
+                row["alert_initial_frame_id"] is not None
+                and int(row["alert_initial_frame_id"]) == int(row["id"])
+            )
+            area_feature_collection = (
+                build_alert_area_feature_collection([popup_alert])
+                if is_popup_candidate_frame
+                else {"type": "FeatureCollection", "features": []}
+            )
             popup_summary = " · ".join(
                 value
                 for value in (
@@ -1120,6 +1257,8 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
                     row["alert_logical_alert_id"] or ""
                 ).strip().upper(),
                 "severity_level": row["alert_severity_level"],
+                "area_codes": area_codes,
+                "area_feature_collection": area_feature_collection,
             }
         alert_popup_data = emergency_data or alarm_group_popup_data
         alert_popup_kind = (
@@ -1190,6 +1329,45 @@ def traffic_snapshot(limit: int = 400) -> dict[str, Any]:
     }
     _TRAFFIC_SNAPSHOT_CACHE[cache_key] = (time.monotonic(), copy.deepcopy(result))
     return result
+
+
+def alert_notification_change_token() -> tuple[int, str]:
+    row = fetch_one(
+        """
+        SELECT
+            COALESCE((SELECT MAX(frame_id) FROM aprs_alert_frames), 0) AS latest_frame_id,
+            COALESCE((SELECT MAX(updated_at) FROM aprs_alerts), '') AS latest_alert_update
+        """
+    )
+    if row is None:
+        return (0, "")
+    return (int(row["latest_frame_id"] or 0), str(row["latest_alert_update"] or ""))
+
+
+def alert_notification_snapshot(limit: int = 50) -> dict[str, Any]:
+    snapshot = traffic_snapshot(limit=max(1, int(limit)), alerts_only=True)
+    frame_keys = (
+        "id",
+        "timestamp",
+        "source",
+        "line",
+        "display_callsign",
+        "emergency",
+        "emergency_data",
+        "alert_popup",
+        "alert_popup_kind",
+        "alert_popup_data",
+        "alert_id",
+        "alert_href",
+        "alert_muted",
+        "alert_should_notify",
+    )
+    frames = [
+        {key: frame.get(key) for key in frame_keys}
+        for frame in snapshot.get("frames") or []
+        if frame.get("alert_popup") or frame.get("emergency")
+    ]
+    return {"frames": frames}
 
 
 _EMERGENCY_COMMENT_PREFIX_RE = re.compile(
@@ -1378,7 +1556,7 @@ def monitoring_public_snapshot() -> dict[str, Any]:
 
     from app.services.wx import get_wx_config, get_wx_mapping_rows, list_wx_sources
 
-    wx_config = get_wx_config()
+    wx_config = get_wx_config(station_settings=station_settings)
     wx_sources = list_wx_sources()
     wx_mappings = get_wx_mapping_rows()
     wx_status_counts = {
@@ -1648,7 +1826,7 @@ def dashboard_activity_series(
     station_source_key = _station_source_key(station_settings)
     from app.services.wx import get_wx_config
 
-    wx_config = get_wx_config()
+    wx_config = get_wx_config(station_settings=station_settings)
     wx_source_key = _build_source_key(wx_config.get("callsign"), wx_config.get("ssid"))
 
     frame_rows = fetch_all(
@@ -1921,7 +2099,19 @@ def dashboard_home_data(
         read_map_station_rf_snapshots(),
         station_settings=station_settings,
     )
-    traffic = dashboard_traffic_summary(heard_snapshots=heard_snapshots)
+    activity_kpis = dict((dashboard_activity or {}).get("kpis") or {})
+    if dashboard_activity is not None:
+        # The five-minute projection is already loaded by the dashboard route.
+        # Avoid scanning raw traffic history again for the same two KPIs.
+        traffic = {
+            "received_frames": int(activity_kpis.get("aprs_frames") or 0),
+            "decoded_aprs": int(activity_kpis.get("aprs_frames") or 0),
+            "unique_sources": int(activity_kpis.get("heard_stations") or 0),
+            "heard_stations": int(activity_kpis.get("heard_stations") or 0),
+            "window_hours": DASHBOARD_KPI_WINDOW_HOURS,
+        }
+    else:
+        traffic = dashboard_traffic_summary(heard_snapshots=heard_snapshots)
     interfaces = get_configured_modem_interfaces()
     enabled_interfaces = [item for item in interfaces if item.get("enabled")]
     disabled_interfaces_count = max(0, len(interfaces) - len(enabled_interfaces))
@@ -1956,7 +2146,7 @@ def dashboard_home_data(
     normalized_station_ssid = "" if station_ssid == "0" else station_ssid
     main_callsign = callsign if not (callsign and normalized_station_ssid) else f"{callsign}-{normalized_station_ssid}"
 
-    wx_config = get_wx_config()
+    wx_config = get_wx_config(station_settings=station_settings)
     wx_callsign = str(wx_config.get("full_callsign") or "").strip().upper()
     digi_routine_enabled = has_enabled_digi_rf_to_rf_flow()
     igate_enabled = has_enabled_aprsis_target_flow()
@@ -2496,7 +2686,6 @@ def dashboard_home_data(
     if igate_enabled:
         hero_summary.append({"label": "APRS-IS", "value": aprsis_runtime_label, "tone": aprsis_runtime_tone})
 
-    activity_kpis = dict((dashboard_activity or {}).get("kpis") or {})
     dashboard_heard_stations = int(activity_kpis.get("heard_stations", traffic["heard_stations"]) or 0)
     dashboard_aprs_frames = int(activity_kpis.get("aprs_frames", traffic["decoded_aprs"]) or 0)
     stats = [
@@ -2511,11 +2700,7 @@ def dashboard_home_data(
             "suffix": "",
         },
         {"label": "Interfaces", "value": f"{len(enabled_interfaces)} / {len(interfaces)}", "suffix": ""},
-        {"label": "Last RF RX", "value": last_rf_rx_display, "suffix": ""},
-        {"label": "Last RF TX", "value": last_rf_tx_display, "suffix": ""},
     ]
-    if igate_enabled:
-        stats.append({"label": "Last APRS-IS uplink", "value": aprsis_last_sent_display, "suffix": ""})
 
     return {
         "hero": hero,
@@ -4851,7 +5036,11 @@ def _aprs_symbol_icon_path(symbol: str) -> str:
     return get_aprs_symbol_icon_fallback_path()
 
 
-def get_aprs_symbol_icon_path(symbol: str) -> str:
+def get_aprs_symbol_icon_path(symbol: str, *, symbol_set: str | None = None) -> str:
+    if symbol_set is not None:
+        icon_dir, extension = _aprs_symbol_icon_set_parts(symbol_set)
+        filename = _aprs_symbol_icon_filename(symbol, extension=extension)
+        return f"icons/{icon_dir}/{filename}"
     return _aprs_symbol_icon_path(symbol)
 
 
@@ -5313,7 +5502,16 @@ def _validate_coordinate(value: str, *, minimum: float, maximum: float, label: s
         raise ValueError(f"{label} is out of range.")
 
 
-def _decorate_aprs_entity_row(slug: str, row: dict[str, Any]) -> dict[str, Any]:
+def _decorate_aprs_entity_row(
+    slug: str,
+    row: dict[str, Any],
+    *,
+    station_settings: dict[str, Any] | None = None,
+    symbol_set: str | None = None,
+    now: datetime | None = None,
+    translator: Any = None,
+    include_detail: bool = True,
+) -> dict[str, Any]:
     result = dict(row)
     symbol_table = str(result.get("symbol_table") or "/").strip()
     if symbol_table not in {"/", "\\"}:
@@ -5321,9 +5519,21 @@ def _decorate_aprs_entity_row(slug: str, row: dict[str, Any]) -> dict[str, Any]:
     result["symbol_table"] = symbol_table
     result["symbol_overlay"] = _coerce_symbol_overlay_value(result.get("symbol_overlay"), symbol_table=symbol_table)
     symbol_code = str(result.get("symbol_code") or ">")
-    result["symbol_icon"] = get_aprs_symbol_icon_path(f"{symbol_table}{symbol_code}")
-    result["raw_frame_preview"] = _build_aprs_entity_preview(slug, result)
-    _decorate_activation_schedule(result)
+    result["symbol_icon"] = get_aprs_symbol_icon_path(
+        f"{symbol_table}{symbol_code}",
+        symbol_set=symbol_set,
+    )
+    result["raw_frame_preview"] = _build_aprs_entity_preview(
+        slug,
+        result,
+        station_settings=station_settings,
+    )
+    _decorate_activation_schedule(
+        result,
+        now=now,
+        translator=translator,
+        include_detail=include_detail,
+    )
     return result
 
 
@@ -5340,14 +5550,22 @@ def _decorate_aprs_message_row(row: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _decorate_activation_schedule(row: dict[str, Any]) -> None:
-    now = datetime.now(timezone.utc)
+def _decorate_activation_schedule(
+    row: dict[str, Any],
+    *,
+    now: datetime | None = None,
+    translator: Any = None,
+    include_detail: bool = True,
+) -> None:
+    now = now or datetime.now(timezone.utc)
     state = compute_activation_state(row, now)
     row["activation_active_now"] = state.active_now
+    row["activation_summary"] = schedule_summary(row, now, translator=translator)
+    row["activation_short_label"] = schedule_short_label(row, now, translator=translator)
+    if not include_detail:
+        return
     row["activation_reason"] = state.reason
-    row["activation_summary"] = schedule_summary(row, now)
-    row["activation_short_label"] = schedule_short_label(row, now)
-    row["activation_warnings"] = schedule_warnings(row)
+    row["activation_warnings"] = schedule_warnings(row, translator=translator)
     mode = str(row.get("activation_mode") or "manual").strip().lower()
     if mode == "manual":
         row["activation_form_active_from_utc"] = None
@@ -5360,8 +5578,13 @@ def _decorate_activation_schedule(row: dict[str, Any]) -> None:
         row["activation_form_active_until_utc"] = row.get("active_until_utc")
 
 
-def _build_aprs_entity_preview(slug: str, payload: dict[str, Any]) -> str:
-    station_settings = get_station_settings()
+def _build_aprs_entity_preview(
+    slug: str,
+    payload: dict[str, Any],
+    *,
+    station_settings: dict[str, Any] | None = None,
+) -> str:
+    station_settings = station_settings if station_settings is not None else get_station_settings()
     source = _build_preview_source(station_settings)
     latitude = _parse_coordinate(payload.get("latitude"))
     longitude = _parse_coordinate(payload.get("longitude"))

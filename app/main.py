@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -15,8 +16,15 @@ from app import __version__, get_version
 from app.config import settings
 from app.db import init_db, log_event
 from app.routers import admin, auth, pages
-from app.services.content import monitoring_public_snapshot, traffic_snapshot as get_traffic_snapshot
+from app.services.content import (
+    alert_notification_change_token,
+    alert_notification_snapshot,
+    monitoring_public_snapshot,
+    traffic_snapshot as get_traffic_snapshot,
+)
 from app.services.alerts import expire_aprs_alerts
+from app.services.https_files import https_file_status
+from app.services.network_diagnostics import NetworkDiagnosticsCache
 from app.services.traffic_stream import TrafficSnapshotBroadcaster
 
 
@@ -35,6 +43,25 @@ class ForwardedPrefixMiddleware:
         await self.app(scope, receive, send)
 
 
+class StaticAssetCacheControlMiddleware:
+    CACHE_CONTROL = "public, max-age=86400"
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not str(scope.get("path") or "").startswith("/static/"):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_cache_control(message: dict) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["Cache-Control"] = self.CACHE_CONTROL
+            await send(message)
+
+        await self.app(scope, receive, send_with_cache_control)
+
+
 def get_client_ip(request: Request) -> str:
     client = request.client
     return client.host if client and client.host else "unknown"
@@ -50,15 +77,35 @@ async def lifespan(app: FastAPI):
         heartbeat_seconds=settings.traffic_stream_heartbeat_seconds,
         max_clients=settings.traffic_stream_max_clients,
     )
+    app.state.alert_stream_broadcaster = TrafficSnapshotBroadcaster(
+        snapshot_provider=alert_notification_snapshot,
+        change_token_provider=alert_notification_change_token,
+        tick_seconds=settings.traffic_stream_tick_seconds,
+        heartbeat_seconds=settings.traffic_stream_heartbeat_seconds,
+        max_clients=settings.traffic_stream_max_clients,
+    )
+    https_enabled = bool(https_file_status(app.state.settings.ssl_dir)["https_enabled"])
+    diagnostics_scheme = "https" if https_enabled else "http"
+    diagnostics_port = app.state.settings.web_https_port if https_enabled else app.state.settings.web_http_port
+    app.state.network_diagnostics_cache = NetworkDiagnosticsCache(
+        scheme=diagnostics_scheme,
+        port=diagnostics_port,
+        root_path=app.state.settings.root_path,
+    )
     await app.state.traffic_stream_broadcaster.start()
+    await app.state.alert_stream_broadcaster.start()
+    await app.state.network_diagnostics_cache.start()
     log_event("INFO", "system", "APRSBox web application started")
     try:
         yield
     finally:
+        await app.state.network_diagnostics_cache.stop()
+        await app.state.alert_stream_broadcaster.stop()
         await app.state.traffic_stream_broadcaster.stop()
 
 
 app = FastAPI(title="APRSBox", version=__version__, lifespan=lifespan, root_path=settings.root_path)
+app.add_middleware(StaticAssetCacheControlMiddleware)
 app.add_middleware(ForwardedPrefixMiddleware)
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=settings.proxy_trusted_ips)
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, same_site="lax", https_only=False)

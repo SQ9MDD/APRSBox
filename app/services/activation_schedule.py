@@ -3,7 +3,7 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from app.i18n import get_app_language, get_translator
 
@@ -204,8 +204,13 @@ def parse_utc_datetime(value: Any, *, legacy_date_end_of_day: bool = False) -> d
     return parsed_date.replace(tzinfo=timezone.utc) + timedelta(days=1)
 
 
-def schedule_summary(record: Mapping[str, Any], now: datetime) -> str:
-    t = get_translator(get_app_language())
+def schedule_summary(
+    record: Mapping[str, Any],
+    now: datetime,
+    *,
+    translator: Callable[[object], str] | None = None,
+) -> str:
+    t = translator or get_translator(get_app_language())
     state = compute_activation_state(record, now)
     mode = str(record.get("activation_mode") or ACTIVATION_MODE_MANUAL).strip().lower()
     if mode == ACTIVATION_MODE_MANUAL:
@@ -232,8 +237,13 @@ def schedule_summary(record: Mapping[str, Any], now: datetime) -> str:
     return t("Invalid activation schedule.")
 
 
-def schedule_short_label(record: Mapping[str, Any], now: datetime) -> str:
-    t = get_translator(get_app_language())
+def schedule_short_label(
+    record: Mapping[str, Any],
+    now: datetime,
+    *,
+    translator: Callable[[object], str] | None = None,
+) -> str:
+    t = translator or get_translator(get_app_language())
     state = compute_activation_state(record, now)
     mode = str(record.get("activation_mode") or ACTIVATION_MODE_MANUAL).strip().lower()
     if mode == ACTIVATION_MODE_MANUAL:
@@ -256,8 +266,12 @@ def schedule_short_label(record: Mapping[str, Any], now: datetime) -> str:
     return t("Invalid schedule")
 
 
-def schedule_warnings(record: Mapping[str, Any]) -> list[str]:
-    t = get_translator(get_app_language())
+def schedule_warnings(
+    record: Mapping[str, Any],
+    *,
+    translator: Callable[[object], str] | None = None,
+) -> list[str]:
+    t = translator or get_translator(get_app_language())
     warnings: list[str] = []
     mode = str(record.get("activation_mode") or ACTIVATION_MODE_MANUAL).strip().lower()
     if mode == ACTIVATION_MODE_RECURRING:

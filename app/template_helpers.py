@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import Request
 
-from app.db import fetch_one, get_app_setting
+from app.db import connection_scope, fetch_one, get_app_setting
 from app import get_version
 from app.datetime_utils import format_display_datetime
 from app.i18n import get_app_language, get_format_translator, get_supported_languages, get_translator
@@ -59,9 +59,9 @@ def _normalize_station_ssid(value: object) -> str:
     return str(parsed)
 
 
-def _resolve_station_identity() -> str:
+def _resolve_station_identity(station_settings: dict[str, Any] | None = None) -> str:
     try:
-        row = fetch_one("SELECT callsign, ssid FROM station_settings WHERE id = 1")
+        row = station_settings or fetch_one("SELECT callsign, ssid FROM station_settings WHERE id = 1")
     except Exception:
         row = None
     callsign = _normalize_station_callsign(row["callsign"] if row else "")
@@ -75,21 +75,64 @@ def build_template_context(
     page_title: str,
     current_user: Any = None,
     active_nav: str | None = None,
+    perform_alert_maintenance: bool = True,
+    prefetched_station_settings: dict[str, Any] | None = None,
+    prefetched_app_language: str | None = None,
+    prefetched_aprs_symbol_set: str | None = None,
+    prefetched_map_config: dict[str, Any] | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
-    app_language = get_app_language()
+    with connection_scope():
+        return _build_template_context_scoped(
+            request,
+            page_title=page_title,
+            current_user=current_user,
+            active_nav=active_nav,
+            perform_alert_maintenance=perform_alert_maintenance,
+            prefetched_station_settings=prefetched_station_settings,
+            prefetched_app_language=prefetched_app_language,
+            prefetched_aprs_symbol_set=prefetched_aprs_symbol_set,
+            prefetched_map_config=prefetched_map_config,
+            **extra,
+        )
+
+
+def _build_template_context_scoped(
+    request: Request,
+    *,
+    page_title: str,
+    current_user: Any = None,
+    active_nav: str | None = None,
+    perform_alert_maintenance: bool = True,
+    prefetched_station_settings: dict[str, Any] | None = None,
+    prefetched_app_language: str | None = None,
+    prefetched_aprs_symbol_set: str | None = None,
+    prefetched_map_config: dict[str, Any] | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    app_language = prefetched_app_language or get_app_language()
     translate = get_translator(app_language)
     translate_format = get_format_translator(app_language)
-    station_identity = _resolve_station_identity()
+    station_identity = _resolve_station_identity(prefetched_station_settings)
     current_ui_palette = normalize_ui_palette(get_app_setting("ui_palette"))
-    current_aprs_symbol_set = get_aprs_symbol_set()
-    aprs_symbol_icon_fallback = get_aprs_symbol_icon_fallback_path()
+    current_aprs_symbol_set = prefetched_aprs_symbol_set or get_aprs_symbol_set()
+    aprs_symbol_icon_fallback = get_aprs_symbol_icon_fallback_path(symbol_set=current_aprs_symbol_set)
     unread_inbox_count = get_unread_inbox_count() if current_user else 0
     aprs_alarm_enabled = get_aprs_alarm_enabled() if current_user else False
-    current_alert_count = attention_alert_count() if current_user and aprs_alarm_enabled else 0
+    current_alert_count = (
+        attention_alert_count(
+            expire=perform_alert_maintenance,
+            alarm_enabled=aprs_alarm_enabled,
+        )
+        if current_user and aprs_alarm_enabled
+        else 0
+    )
     band_condition_enabled = is_band_condition_enabled() if current_user else False
-    alert_modal_map_config = (
-        get_map_page_config(root_path=request.scope.get("root_path", ""))
+    alert_modal_map_config = prefetched_map_config or (
+        get_map_page_config(
+            root_path=request.scope.get("root_path", ""),
+            station_settings=prefetched_station_settings,
+        )
         if current_user
         else {}
     )

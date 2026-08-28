@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import json
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Hashable
 
 from app.db import log_event
 
@@ -18,11 +18,13 @@ class TrafficSnapshotBroadcaster:
         self,
         *,
         snapshot_provider: Callable[[], dict[str, Any]],
+        change_token_provider: Callable[[], Hashable] | None = None,
         tick_seconds: float = 1.0,
         heartbeat_seconds: float = 25.0,
         max_clients: int = 20,
     ) -> None:
         self._snapshot_provider = snapshot_provider
+        self._change_token_provider = change_token_provider
         self._tick_seconds = max(0.1, float(tick_seconds))
         self._heartbeat_seconds = max(1.0, float(heartbeat_seconds))
         self._max_clients = max(1, int(max_clients))
@@ -32,6 +34,7 @@ class TrafficSnapshotBroadcaster:
         self._subscribers: dict[int, asyncio.Queue[str]] = {}
         self._next_subscriber_id = 1
         self._last_payload = ""
+        self._last_change_token: Hashable | object = object()
         self._last_heartbeat_monotonic = 0.0
 
     async def start(self) -> None:
@@ -48,6 +51,7 @@ class TrafficSnapshotBroadcaster:
         async with self._subscribers_lock:
             self._subscribers.clear()
         self._last_payload = ""
+        self._last_change_token = object()
         self._last_heartbeat_monotonic = 0.0
 
     async def subscribe(self) -> tuple[int, asyncio.Queue[str]]:
@@ -68,7 +72,7 @@ class TrafficSnapshotBroadcaster:
             self._next_subscriber_id += 1
             queue: asyncio.Queue[str] = asyncio.Queue(maxsize=2)
             self._subscribers[subscriber_id] = queue
-            if self._last_payload:
+            if self._last_payload and self._change_token_provider is None:
                 queue.put_nowait(f"data: {self._last_payload}\n\n")
             return subscriber_id, queue
 
@@ -101,11 +105,17 @@ class TrafficSnapshotBroadcaster:
                 now = time.monotonic()
 
                 if subscriber_count > 0:
-                    snapshot = await asyncio.to_thread(self._snapshot_provider)
-                    payload = json.dumps(snapshot, separators=(",", ":"))
-                    if payload != self._last_payload:
-                        self._last_payload = payload
-                        await self._fanout(f"data: {payload}\n\n")
+                    should_refresh = True
+                    if self._change_token_provider is not None:
+                        change_token = await asyncio.to_thread(self._change_token_provider)
+                        should_refresh = change_token != self._last_change_token
+                        self._last_change_token = change_token
+                    if should_refresh:
+                        snapshot = await asyncio.to_thread(self._snapshot_provider)
+                        payload = json.dumps(snapshot, separators=(",", ":"))
+                        if payload != self._last_payload:
+                            self._last_payload = payload
+                            await self._fanout(f"data: {payload}\n\n")
 
                     if now - self._last_heartbeat_monotonic >= self._heartbeat_seconds:
                         await self._fanout(": ping\n\n")

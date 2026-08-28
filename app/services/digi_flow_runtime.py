@@ -13,6 +13,7 @@ from typing import Any
 from app.db import fetch_one, log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
 from app.services.aprsis import (
+    APRSIS_TX_MAX_FRAME_AGE_SECONDS,
     APRSIS_STRICT_REASON_BLOCKED_NOGATE_RFONLY,
     APRSIS_STRICT_REASON_BLOCKED_TCPIP_TCPXX,
     APRSIS_STRICT_REASON_MALFORMED_THIRD_PARTY,
@@ -66,6 +67,7 @@ DIGI_GUARD_THIRD_PARTY = "DIGI_GUARD_THIRD_PARTY"
 DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL = "DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL"
 _LOCAL_IDENTITY_MY = "my_station"
 _LOCAL_IDENTITY_WX = "wx_station"
+DIGI_FLOW_QUEUE_MAX_FRAMES = 256
 
 
 def _monotonic_delta_ms(start: Any, end: Any) -> float | None:
@@ -135,10 +137,13 @@ class DigiFlowRuntimeService:
         poll_interval: float = 0.5,
         aprsis_client: AprsisClientService | None = None,
         aprsis_rf_delay_override: float | None = None,
+        queue_max_frames: int = DIGI_FLOW_QUEUE_MAX_FRAMES,
+        aprsis_tx_max_frame_age_seconds: float = APRSIS_TX_MAX_FRAME_AGE_SECONDS,
     ) -> None:
         self._poll_interval = poll_interval
         self._aprsis_client = aprsis_client
-        self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=max(1, int(queue_max_frames)))
+        self._aprsis_tx_max_frame_age_seconds = max(0.1, float(aprsis_tx_max_frame_age_seconds))
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
         self._viscous_delay_lock = asyncio.Lock()
@@ -230,7 +235,36 @@ class DigiFlowRuntimeService:
             rx_received_monotonic=rx_received_monotonic,
             metadata=metadata,
         )
-        self._queue.put_nowait(frame)
+        try:
+            self._queue.put_nowait(frame)
+        except asyncio.QueueFull:
+            matching_flows = self._matching_flows(
+                source_kind=str(frame["source_kind"]),
+                source_ref=str(frame["source_ref"]),
+            )
+            aprsis_targeted = any(
+                str(flow.get("target_kind") or "").strip() == "tx_aprsis"
+                for flow in matching_flows
+            )
+            if aprsis_targeted:
+                record_aprsis_tx_result(sent=False, frame_line=str(frame["raw_payload"]))
+            log_event(
+                "WARNING",
+                "digi_flow_runtime",
+                (
+                    "Dropped routing frame because the bounded queue is full "
+                    f"(limit={self._queue.maxsize}) | frame_uid={frame['frame_uid']} | "
+                    f"source={frame['source_kind']}:{frame['source_ref']} | line={frame['raw_payload']}"
+                ),
+            )
+            return {
+                "frame_uid": frame["frame_uid"],
+                "created_at": frame["created_at"],
+                "queue_depth": self._queue.qsize(),
+                "parsed": bool(frame["parsed"]),
+                "accepted": False,
+                "drop_reason": "routing_queue_full",
+            }
         source_is_aprsis = str(frame["source_kind"]) == APRSIS_FLOW_SOURCE_KIND
         log_event(
             "DEBUG" if source_is_aprsis else "INFO",
@@ -246,6 +280,7 @@ class DigiFlowRuntimeService:
             "created_at": frame["created_at"],
             "queue_depth": self._queue.qsize(),
             "parsed": bool(frame["parsed"]),
+            "accepted": True,
         }
 
     def enqueue_rx_tnc2_frame(
@@ -2222,6 +2257,30 @@ class DigiFlowRuntimeService:
     async def _execute_tx_aprsis(self, context: dict[str, Any], step: dict[str, Any]) -> dict[str, str]:
         flow_id = int(context["flow"]["id"])
         step_id = int(step["id"])
+        now_monotonic = time.monotonic()
+        frame_age_ms = _monotonic_delta_ms(
+            context.get("rx_received_monotonic")
+            if isinstance(context.get("rx_received_monotonic"), (int, float))
+            else context.get("enqueue_monotonic"),
+            now_monotonic,
+        )
+        max_frame_age_ms = self._aprsis_tx_max_frame_age_seconds * 1000.0
+        if frame_age_ms is None or frame_age_ms > max_frame_age_ms:
+            age_label = "unknown" if frame_age_ms is None else f"{frame_age_ms:.0f} ms"
+            message = _t(
+                "APRS-IS TX dropped stale frame before transport write "
+                f"(age={age_label}, limit={max_frame_age_ms:.0f} ms)."
+            )
+            log_digi_flow_event(
+                frame_uid=context["frame_uid"],
+                flow_id=flow_id,
+                step_id=step_id,
+                event_type="output_action",
+                decision="drop",
+                message=message,
+            )
+            record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
+            return {"decision": "drop"}
         parsed = context.get("parsed")
         if parsed is None:
             message = _t("APRS-IS TX rejected frame because TNC2 parsing failed.")
@@ -2303,7 +2362,6 @@ class DigiFlowRuntimeService:
             record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
             return {"decision": "drop"}
 
-        now_monotonic = time.monotonic()
         rx_to_igate_enqueue_ms = _monotonic_delta_ms(
             context.get("rx_received_monotonic"),
             context.get("enqueue_monotonic"),
@@ -2315,6 +2373,7 @@ class DigiFlowRuntimeService:
         tx_telemetry = {
             "frame_uid": str(context.get("frame_uid") or ""),
             "rx_received_monotonic": context.get("rx_received_monotonic"),
+            "enqueue_monotonic": context.get("enqueue_monotonic"),
             "rx_to_igate_enqueue_ms": rx_to_igate_enqueue_ms,
             "igate_queue_wait_ms": igate_queue_wait_ms,
         }

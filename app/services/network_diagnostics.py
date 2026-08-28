@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import copy
 import ipaddress
 import json
 import shutil
@@ -11,6 +13,75 @@ from urllib.parse import quote
 
 
 _IPV4_ROUTE_PROBE = "1.1.1.1"
+_EMPTY_DIAGNOSTICS = {
+    "hostname": None,
+    "interface": None,
+    "ipv4": None,
+    "ipv6": None,
+    "mdns_name": None,
+    "avahi_status": "Checking",
+    "avahi_tone": "neutral",
+    "mdns_resolve": None,
+    "mdns_resolve_tone": "neutral",
+    "web_ui_url": None,
+}
+
+
+class NetworkDiagnosticsCache:
+    """Refresh slow OS/network probes outside the HTTP request path."""
+
+    def __init__(
+        self,
+        *,
+        scheme: str,
+        port: int | None,
+        root_path: str = "",
+        refresh_seconds: float = 60.0,
+    ) -> None:
+        self._scheme = scheme
+        self._port = port
+        self._root_path = root_path
+        self._refresh_seconds = max(10.0, float(refresh_seconds))
+        self._snapshot: dict[str, Any] = dict(_EMPTY_DIAGNOSTICS)
+        self._task: asyncio.Task[None] | None = None
+
+    async def start(self) -> None:
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._run(), name="aprsbox-network-diagnostics")
+
+    async def stop(self) -> None:
+        task = self._task
+        self._task = None
+        if task is None:
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    def get(self) -> dict[str, Any]:
+        return copy.deepcopy(self._snapshot)
+
+    async def refresh(self) -> None:
+        snapshot = await asyncio.to_thread(
+            get_network_diagnostics,
+            scheme=self._scheme,
+            port=self._port,
+            root_path=self._root_path,
+        )
+        self._snapshot = snapshot
+
+    async def _run(self) -> None:
+        while True:
+            try:
+                await self.refresh()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Diagnostics are informational. Keep the last good snapshot.
+                pass
+            await asyncio.sleep(self._refresh_seconds)
 
 
 def _run(command: Sequence[str], *, timeout: float = 1.5) -> subprocess.CompletedProcess[str] | None:

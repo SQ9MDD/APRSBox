@@ -67,6 +67,37 @@ class TrafficSnapshotBroadcasterTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await broadcaster.stop()
 
+    async def test_change_token_avoids_rebuilding_unchanged_snapshot(self) -> None:
+        snapshot_calls = 0
+        token = [1]
+
+        def provider() -> dict[str, int]:
+            nonlocal snapshot_calls
+            snapshot_calls += 1
+            return {"seq": snapshot_calls}
+
+        broadcaster = TrafficSnapshotBroadcaster(
+            snapshot_provider=provider,
+            change_token_provider=lambda: token[0],
+            tick_seconds=0.05,
+            heartbeat_seconds=10.0,
+            max_clients=4,
+        )
+        await broadcaster.start()
+        try:
+            _, queue = await broadcaster.subscribe()
+            first_event = await asyncio.wait_for(queue.get(), timeout=0.6)
+            self.assertTrue(first_event.startswith("data: "))
+            await asyncio.sleep(0.2)
+            self.assertEqual(snapshot_calls, 1)
+
+            token[0] = 2
+            second_event = await asyncio.wait_for(queue.get(), timeout=0.6)
+            self.assertTrue(second_event.startswith("data: "))
+            self.assertEqual(snapshot_calls, 2)
+        finally:
+            await broadcaster.stop()
+
     async def test_broadcaster_sends_heartbeat(self) -> None:
         def provider() -> dict[str, str]:
             return {"status": "ok"}

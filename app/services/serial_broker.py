@@ -1,13 +1,38 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from threading import Lock
+from typing import Callable
 
 from app.db import log_event
 from app.services.serial_tnc import close_serial_device, open_serial_device, read_serial_chunk, write_serial_data
 
 SERIAL_BROKER_HOST = "127.0.0.1"
 SERIAL_BROKER_PREVIEW_BYTES = 32
+
+
+class RxSilenceReconnectWatchdog:
+    def __init__(self, timeout_seconds: float, *, clock: Callable[[], float] | None = None) -> None:
+        self.timeout_seconds = max(0.0, float(timeout_seconds))
+        self._clock = clock or time.monotonic
+        self._last_rx_at = self._clock()
+
+    @property
+    def enabled(self) -> bool:
+        return self.timeout_seconds > 0
+
+    def record_rx(self) -> None:
+        self._last_rx_at = self._clock()
+
+    def expired(self) -> bool:
+        return self.enabled and self._clock() - self._last_rx_at >= self.timeout_seconds
+
+    def read_timeout(self, default_seconds: float) -> float:
+        if not self.enabled:
+            return default_seconds
+        remaining = self.timeout_seconds - (self._clock() - self._last_rx_at)
+        return max(0.05, min(default_seconds, remaining))
 
 
 def _chunk_preview(chunk: bytes, *, max_bytes: int = SERIAL_BROKER_PREVIEW_BYTES) -> str:
@@ -224,8 +249,7 @@ class SerialKissTcpBroker:
         return serial_failed
 
     async def _pump_serial_to_tcp(self, *, serial_fd: int, writer: asyncio.StreamWriter) -> bool:
-        loop = asyncio.get_running_loop()
-        last_rx_at = loop.time()
+        silence_watchdog = RxSilenceReconnectWatchdog(self._rx_silence_reconnect_seconds)
         while not self._stop_event.is_set():
             try:
                 chunk = await asyncio.to_thread(read_serial_chunk, serial_fd, max_bytes=1024, timeout=1.0)
@@ -240,20 +264,18 @@ class SerialKissTcpBroker:
                 )
                 return True
             if not chunk:
-                if self._rx_silence_reconnect_seconds > 0:
-                    silence_seconds = loop.time() - last_rx_at
-                    if silence_seconds >= self._rx_silence_reconnect_seconds:
-                        log_event(
-                            "WARNING",
-                            "serial_broker",
-                            (
-                                f"Serial silence timeout for {self._tnc_name} (id={self._modem_id}) "
-                                f"device={self._device_path}: no RX for {self._rx_silence_reconnect_seconds}s"
-                            ),
-                        )
-                        return True
+                if silence_watchdog.expired():
+                    log_event(
+                        "WARNING",
+                        "serial_broker",
+                        (
+                            f"Serial silence timeout for {self._tnc_name} (id={self._modem_id}) "
+                            f"device={self._device_path}: no RX for {self._rx_silence_reconnect_seconds}s"
+                        ),
+                    )
+                    return True
                 continue
-            last_rx_at = loop.time()
+            silence_watchdog.record_rx()
             try:
                 writer.write(chunk)
                 await writer.drain()

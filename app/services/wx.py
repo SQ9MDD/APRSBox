@@ -8,7 +8,7 @@ import sqlite3
 from typing import Any
 from urllib.parse import urlsplit
 
-from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
+from app.db import connection_scope, fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
 from app.services.content import get_active_tnc_interfaces, get_station_settings
 from app.services.outbound import build_wx_tnc2, enqueue_wx_job
 from app.services.tx_scope import (
@@ -70,10 +70,18 @@ def ensure_wx_defaults() -> None:
 
 
 def get_wx_page_data(*, edit_source_id: int | None = None, source_discovery: dict[str, Any] | None = None) -> dict[str, Any]:
+    with connection_scope():
+        return _get_wx_page_data_scoped(
+            edit_source_id=edit_source_id,
+            source_discovery=source_discovery,
+        )
+
+
+def _get_wx_page_data_scoped(*, edit_source_id: int | None, source_discovery: dict[str, Any] | None) -> dict[str, Any]:
     ensure_wx_defaults()
     config = get_wx_config()
-    mappings = get_wx_mapping_rows()
-    sources = list_wx_sources()
+    mappings = get_wx_mapping_rows(ensure_defaults=False)
+    sources = list_wx_sources(ensure_defaults=False)
     source_form = _build_source_form(get_wx_source(edit_source_id) if edit_source_id is not None else None)
     return {
         "wx_config": config,
@@ -108,12 +116,13 @@ def get_wx_page_data(*, edit_source_id: int | None = None, source_discovery: dic
     }
 
 
-def get_wx_config() -> dict[str, Any]:
-    ensure_wx_defaults()
-    station_settings = get_station_settings()
+def get_wx_config(*, station_settings: dict[str, Any] | None = None) -> dict[str, Any]:
+    # The schema initializer creates wx_config. A read must not open a write
+    # transaction merely to repair defaults, especially on the dashboard path.
+    resolved_station_settings = station_settings or get_station_settings()
     row = fetch_one("SELECT * FROM wx_config WHERE id = 1")
     result = dict(row) if row else {}
-    callsign = str(station_settings.get("callsign") or "").strip().upper()
+    callsign = str(resolved_station_settings.get("callsign") or "").strip().upper()
     result["callsign"] = callsign
     result.setdefault("ssid", "")
     result.setdefault("beacon_interface_id", None)
@@ -126,12 +135,19 @@ def get_wx_config() -> dict[str, Any]:
     result.setdefault("allow_cache_fallback", 1)
     result.setdefault("default_cache_max_age_s", 900)
     result["full_callsign"] = _format_callsign(callsign, str(result.get("ssid") or "").strip())
-    result["ssid_options"] = build_wx_ssid_options(selected_ssid=str(result.get("ssid") or "").strip())
+    result["ssid_options"] = build_wx_ssid_options(
+        selected_ssid=str(result.get("ssid") or "").strip(),
+        station_settings=resolved_station_settings,
+    )
     return result
 
 
-def build_wx_ssid_options(*, selected_ssid: str = "") -> list[dict[str, Any]]:
-    occupied = get_wx_occupied_ssids()
+def build_wx_ssid_options(
+    *,
+    selected_ssid: str = "",
+    station_settings: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    occupied = get_wx_occupied_ssids(station_settings=station_settings)
     options: list[dict[str, Any]] = [{"value": "", "label": "Select SSID", "disabled": False, "reason": ""}]
     for value in range(16):
         text = str(value)
@@ -148,10 +164,10 @@ def build_wx_ssid_options(*, selected_ssid: str = "") -> list[dict[str, Any]]:
     return options
 
 
-def get_wx_occupied_ssids() -> dict[str, str]:
-    station_settings = get_station_settings()
+def get_wx_occupied_ssids(*, station_settings: dict[str, Any] | None = None) -> dict[str, str]:
+    resolved_station_settings = station_settings or get_station_settings()
     occupied: dict[str, str] = {}
-    station_ssid = str(station_settings.get("ssid") or "").strip()
+    station_ssid = str(resolved_station_settings.get("ssid") or "").strip()
     if station_ssid:
         occupied[station_ssid] = "Used by My Settings"
     return occupied
@@ -195,8 +211,9 @@ def safe_save_wx_config(payload: dict[str, Any]) -> tuple[bool, str | None]:
     return True, None
 
 
-def list_wx_sources() -> list[dict[str, Any]]:
-    ensure_wx_defaults()
+def list_wx_sources(*, ensure_defaults: bool = True) -> list[dict[str, Any]]:
+    if ensure_defaults:
+        ensure_wx_defaults()
     rows = fetch_all(
         """
         SELECT *
@@ -377,9 +394,10 @@ def safe_save_wx_mappings(payload_by_parameter: dict[str, dict[str, Any]]) -> tu
     return True, None
 
 
-def get_wx_mapping_rows() -> list[dict[str, Any]]:
-    ensure_wx_defaults()
-    source_rows = list_wx_sources()
+def get_wx_mapping_rows(*, ensure_defaults: bool = True) -> list[dict[str, Any]]:
+    if ensure_defaults:
+        ensure_wx_defaults()
+    source_rows = list_wx_sources(ensure_defaults=False)
     sources_by_id = {int(item["id"]): item for item in source_rows}
     cache_rows = {
         str(row["parameter_name"]): dict(row)

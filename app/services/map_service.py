@@ -4,7 +4,17 @@ import re
 from typing import Any
 from urllib.parse import quote, unquote
 
-from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
+from app.db import (
+    connection_scope,
+    fetch_all,
+    fetch_one,
+    get_app_setting,
+    get_app_settings,
+    get_connection,
+    log_event,
+    set_app_setting,
+    utc_now,
+)
 from app.services.alert_areas import (
     build_alert_area_feature_collection,
     get_active_alert_area_feature_collection,
@@ -739,26 +749,51 @@ def _validate_map_sources_state(connection: Any) -> None:
         raise ValueError("Default map source must be enabled.")
 
 
-def get_map_page_config(*, root_path: str = "") -> dict[str, Any]:
-    station_settings = get_station_settings()
-    default_view = _resolve_default_view(station_settings)
-    tile_layer = resolve_active_tile_layer(root_path=root_path)
-    return {
-        "station_latitude": default_view["latitude"],
-        "station_longitude": default_view["longitude"],
-        "default_zoom": default_view["zoom"],
-        "tile_url": tile_layer["tile_url"],
-        "tile_attribution": tile_layer["tile_attribution"],
-        "tile_source_name": tile_layer["tile_source_name"],
-        "tile_min_zoom": tile_layer["tile_min_zoom"],
-        "tile_max_zoom": tile_layer["tile_max_zoom"],
-        "tile_subdomains": tile_layer["tile_subdomains"],
-        "coverage_fill_opacity": get_coverage_fill_opacity_percent(),
-        "marker_clustering_enabled": get_map_marker_clustering_enabled(),
-        "marker_spiderfy_enabled": get_map_marker_spiderfy_enabled(),
-        "marker_spiderfy_zoom_levels_before_max": get_map_marker_spiderfy_zoom_levels(),
-        "marker_spiderfy_nearby_distance_px": get_map_marker_spiderfy_nearby_distance_px(),
-    }
+def get_map_page_config(
+    *,
+    root_path: str = "",
+    station_settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    with connection_scope():
+        station_settings = station_settings if station_settings is not None else get_station_settings()
+        default_view = _resolve_default_view(station_settings)
+        tile_layer = resolve_active_tile_layer(root_path=root_path)
+        map_settings = get_app_settings(
+            (
+                COVERAGE_FILL_OPACITY_SETTING_KEY,
+                MAP_MARKER_CLUSTERING_ENABLED_SETTING_KEY,
+                MAP_MARKER_SPIDERFY_ENABLED_SETTING_KEY,
+                MAP_MARKER_SPIDERFY_ZOOM_LEVELS_SETTING_KEY,
+                MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY,
+            )
+        )
+        enabled_values = {"1", "true", "yes", "on"}
+        return {
+            "station_latitude": default_view["latitude"],
+            "station_longitude": default_view["longitude"],
+            "default_zoom": default_view["zoom"],
+            "tile_url": tile_layer["tile_url"],
+            "tile_attribution": tile_layer["tile_attribution"],
+            "tile_source_name": tile_layer["tile_source_name"],
+            "tile_min_zoom": tile_layer["tile_min_zoom"],
+            "tile_max_zoom": tile_layer["tile_max_zoom"],
+            "tile_subdomains": tile_layer["tile_subdomains"],
+            "coverage_fill_opacity": normalize_coverage_fill_opacity_percent(
+                map_settings.get(COVERAGE_FILL_OPACITY_SETTING_KEY)
+            ),
+            "marker_clustering_enabled": str(
+                map_settings.get(MAP_MARKER_CLUSTERING_ENABLED_SETTING_KEY) or ""
+            ).strip().lower() in enabled_values,
+            "marker_spiderfy_enabled": str(
+                map_settings.get(MAP_MARKER_SPIDERFY_ENABLED_SETTING_KEY) or ""
+            ).strip().lower() in enabled_values,
+            "marker_spiderfy_zoom_levels_before_max": normalize_map_marker_spiderfy_zoom_levels(
+                map_settings.get(MAP_MARKER_SPIDERFY_ZOOM_LEVELS_SETTING_KEY)
+            ),
+            "marker_spiderfy_nearby_distance_px": normalize_map_marker_spiderfy_nearby_distance_px(
+                map_settings.get(MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY)
+            ),
+        }
 
 
 def _map_station_revision() -> int | None:

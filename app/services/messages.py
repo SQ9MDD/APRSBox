@@ -6,7 +6,17 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app import get_version
-from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
+from app.db import (
+    connection_scope,
+    fetch_all,
+    fetch_one,
+    get_app_setting,
+    get_app_settings,
+    get_connection,
+    log_event,
+    set_app_setting,
+    utc_now,
+)
 from app.i18n import get_app_language, get_translator
 from app.services.content import get_visible_station_snapshots
 from app.services.alarm_groups import (
@@ -158,7 +168,15 @@ def normalize_message_target_groups(value: Any) -> list[str]:
 
 
 def get_message_settings() -> dict[str, Any]:
-    raw_saved_path = get_app_setting(MESSAGE_DEFAULT_PATH_SETTING_KEY)
+    saved_settings = get_app_settings(
+        (
+            MESSAGE_DEFAULT_PATH_SETTING_KEY,
+            MESSAGE_TARGET_GROUPS_SETTING_KEY,
+            MESSAGE_APRSIS_TARGET_GROUPS_SETTING_KEY,
+            MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY,
+        )
+    )
+    raw_saved_path = saved_settings.get(MESSAGE_DEFAULT_PATH_SETTING_KEY)
     saved_path = str(raw_saved_path or "").strip().upper()
     allowed_paths = {value for value, _label in MESSAGE_PATH_OPTIONS}
     if raw_saved_path is None:
@@ -167,7 +185,7 @@ def get_message_settings() -> dict[str, Any]:
         except Exception:
             saved_path = ""
     default_path = saved_path if saved_path in allowed_paths else ""
-    saved_groups = get_app_setting(MESSAGE_TARGET_GROUPS_SETTING_KEY)
+    saved_groups = saved_settings.get(MESSAGE_TARGET_GROUPS_SETTING_KEY)
     if saved_groups is None:
         target_groups = list(DEFAULT_MESSAGE_TARGET_GROUPS)
     else:
@@ -175,7 +193,7 @@ def get_message_settings() -> dict[str, Any]:
             target_groups = normalize_message_target_groups(saved_groups)
         except ValueError:
             target_groups = []
-    saved_aprsis_groups = get_app_setting(MESSAGE_APRSIS_TARGET_GROUPS_SETTING_KEY)
+    saved_aprsis_groups = saved_settings.get(MESSAGE_APRSIS_TARGET_GROUPS_SETTING_KEY)
     if saved_aprsis_groups is None:
         # Backward-compatible first-use migration: APRS-IS starts with the
         # same groups that were already used for RF reception.
@@ -185,7 +203,7 @@ def get_message_settings() -> dict[str, Any]:
             aprsis_target_groups = normalize_message_target_groups(saved_aprsis_groups)
         except ValueError:
             aprsis_target_groups = []
-    receive_any_ssid = str(get_app_setting(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY) or "").strip().lower() in {"1", "true", "yes", "on"}
+    receive_any_ssid = str(saved_settings.get(MESSAGE_RECEIVE_ANY_SSID_SETTING_KEY) or "").strip().lower() in {"1", "true", "yes", "on"}
     return {
         "default_path": default_path,
         "path_options": [{"value": value, "label": label} for value, label in MESSAGE_PATH_OPTIONS],
@@ -201,8 +219,11 @@ def get_effective_message_target_groups(
     alarm_groups: Any | None = None,
     source_kind: str | None = None,
 ) -> list[str]:
-    settings = get_message_settings()
-    if str(source_kind or "").strip().lower() == "aprsis":
+    normalized_source_kind = str(source_kind).strip().lower() if source_kind is not None else None
+    needs_rf_settings = normalized_source_kind != "aprsis" and message_target_groups is None
+    needs_aprsis_settings = normalized_source_kind in {None, "aprsis"} and aprsis_target_groups is None
+    settings = get_message_settings() if needs_rf_settings or needs_aprsis_settings else {}
+    if normalized_source_kind == "aprsis":
         standard_groups = (
             settings["aprsis_target_groups"]
             if aprsis_target_groups is None
@@ -294,17 +315,35 @@ def _reconcile_message_group_conversations(target_groups: list[str]) -> None:
             if str(group or "").strip()
         )
     )
-    for group in groups:
-        message_rows = fetch_all(
-            """
-            SELECT id, conversation_id
-            FROM aprs_messages
-            WHERE direction = ? AND UPPER(TRIM(addressee)) = ?
+    if not groups:
+        return
+    placeholders = ", ".join("?" for _ in groups)
+    message_rows_by_group: dict[str, list[dict[str, Any]]] = {}
+    for row in fetch_all(
+        f"""
+        SELECT id, conversation_id, addressee AS normalized_addressee
+        FROM aprs_messages
+        WHERE direction = ?
+          AND addressee IN ({placeholders})
+        """,
+        (MESSAGE_DIRECTION_RX, *groups),
+    ):
+        message_rows_by_group.setdefault(str(row["normalized_addressee"]), []).append(dict(row))
+    existing_groups = {
+        str(row["remote_callsign"] or "").strip().upper()
+        for row in fetch_all(
+            f"""
+            SELECT remote_callsign
+            FROM aprs_message_conversations
+            WHERE remote_ssid = ''
+              AND remote_callsign IN ({placeholders})
             """,
-            (MESSAGE_DIRECTION_RX, group),
+            tuple(groups),
         )
-        existing_group_conversation = _get_conversation(group)
-        if not message_rows and existing_group_conversation is None:
+    }
+    for group in groups:
+        message_rows = message_rows_by_group.get(group, [])
+        if not message_rows and group not in existing_groups:
             continue
         group_conversation = create_or_update_conversation(
             group,
@@ -323,7 +362,7 @@ def _reconcile_message_group_conversations(target_groups: list[str]) -> None:
                 """
                 UPDATE aprs_messages
                 SET conversation_id = ?
-                WHERE direction = ? AND UPPER(TRIM(addressee)) = ? AND conversation_id <> ?
+                WHERE direction = ? AND addressee = ? AND conversation_id <> ?
                 """,
                 (group_conversation_id, MESSAGE_DIRECTION_RX, group, group_conversation_id),
             )
@@ -338,17 +377,17 @@ def _reconcile_message_group_conversations(target_groups: list[str]) -> None:
                 """,
                 (group_conversation_id, group_conversation_id),
             )
-            for source_conversation_id in source_conversation_ids:
-                connection.execute(
-                    """
-                    DELETE FROM aprs_message_conversations
-                    WHERE id = ?
-                      AND NOT EXISTS (
-                          SELECT 1 FROM aprs_messages WHERE conversation_id = aprs_message_conversations.id
-                      )
-                    """,
-                    (source_conversation_id,),
-                )
+            source_placeholders = ", ".join("?" for _ in source_conversation_ids)
+            connection.execute(
+                f"""
+                DELETE FROM aprs_message_conversations
+                WHERE id IN ({source_placeholders})
+                  AND NOT EXISTS (
+                      SELECT 1 FROM aprs_messages WHERE conversation_id = aprs_message_conversations.id
+                  )
+                """,
+                tuple(source_conversation_ids),
+            )
 
 
 def create_or_update_conversation(
@@ -361,7 +400,7 @@ def create_or_update_conversation(
     if requested_kind and requested_kind not in {CONVERSATION_KIND_DIRECT, CONVERSATION_KIND_GROUP}:
         raise ValueError(_t("Unsupported message conversation type."))
     normalized_candidate = str(callsign or "").strip().upper()
-    effective_groups = set(get_effective_message_target_groups())
+    effective_groups = set(get_effective_message_target_groups()) if not requested_kind else set()
     if requested_kind == CONVERSATION_KIND_GROUP or normalized_candidate in effective_groups:
         normalized_groups = normalize_aprs_alarm_groups([normalized_candidate])
         if not normalized_groups:
@@ -576,13 +615,23 @@ def queue_outgoing_message(*, callsign: str, message_text: str, path: str = "") 
 
 
 def get_messages_page_data() -> dict[str, Any]:
+    with connection_scope():
+        return _get_messages_page_data_scoped()
+
+
+def _get_messages_page_data_scoped() -> dict[str, Any]:
     try:
         expire_direct_message_timeouts()
     except sqlite3.Error as exc:
         _safe_messages_warning(f"Failed to expire direct message timeouts: {exc}")
     message_settings = get_message_settings()
+    configured_alarm_groups = get_aprs_alarm_groups()
     try:
-        reconcile_effective_message_group_conversations()
+        reconcile_effective_message_group_conversations(
+            message_target_groups=message_settings["target_groups"],
+            aprsis_target_groups=message_settings["aprsis_target_groups"],
+            alarm_groups=configured_alarm_groups,
+        )
     except sqlite3.Error as exc:
         _safe_messages_warning(f"Failed to reconcile APRS message group conversations: {exc}")
     try:
@@ -601,10 +650,26 @@ def get_messages_page_data() -> dict[str, Any]:
     except sqlite3.Error as exc:
         _safe_messages_warning(f"Failed to load APRS message conversations: {exc}")
         conversation_rows = []
+    try:
+        all_message_rows = fetch_all(
+            """
+            SELECT id, conversation_id, direction, sender, addressee, message_text, path,
+                   message_number, status, tx_attempt_count, is_unread, created_at,
+                   updated_at, sent_at, acked_at, last_attempt_at, failed_at, failure_reason
+            FROM aprs_messages
+            ORDER BY conversation_id ASC, created_at ASC, id ASC
+            """
+        )
+    except sqlite3.Error as exc:
+        _safe_messages_warning(f"Failed to load APRS messages: {exc}")
+        all_message_rows = []
+    messages_by_conversation: dict[int, list[dict[str, Any]]] = {}
+    for item in all_message_rows:
+        messages_by_conversation.setdefault(int(item["conversation_id"]), []).append(dict(item))
     conversations: list[dict[str, Any]] = []
     active_conversation_id: str | None = None
     local_sender = _local_station_identity()
-    alarm_groups = set(get_aprs_alarm_groups())
+    alarm_groups = set(configured_alarm_groups)
     for row in conversation_rows:
         display_callsign = format_display_callsign(str(row["remote_callsign"]), str(row["remote_ssid"]))
         conversation_kind = str(row["conversation_kind"] or CONVERSATION_KIND_DIRECT)
@@ -613,17 +678,7 @@ def get_messages_page_data() -> dict[str, Any]:
         if display_callsign.strip().upper() in alarm_groups:
             continue
         conversation_id = int(row["id"])
-        stored_messages = [dict(item) for item in fetch_all(
-            """
-            SELECT id, direction, sender, addressee, message_text, path, message_number, status,
-                   tx_attempt_count, is_unread, created_at, updated_at, sent_at, acked_at,
-                   last_attempt_at, failed_at, failure_reason
-            FROM aprs_messages
-            WHERE conversation_id = ?
-            ORDER BY created_at ASC, id ASC
-            """,
-            (conversation_id,),
-        )]
+        stored_messages = messages_by_conversation.get(conversation_id, [])
         messages = [
             item
             for item in stored_messages
@@ -1043,33 +1098,40 @@ def schedule_message_retry(message_id: int, delay_seconds: int) -> None:
 
 def expire_direct_message_timeouts() -> None:
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=FINAL_ACK_WAIT_SECONDS)).replace(microsecond=0).isoformat()
-    rows = fetch_all(
-        """
-        SELECT id
-        FROM aprs_messages
-        WHERE direction = ?
-          AND status = ?
-          AND message_number IS NOT NULL
-          AND TRIM(message_number) <> ''
-          AND tx_attempt_count >= ?
-          AND last_attempt_at IS NOT NULL
-          AND last_attempt_at <= ?
-        """,
-        (MESSAGE_DIRECTION_TX, MESSAGE_STATUS_SENT, MAX_TX_ATTEMPTS, cutoff),
-    )
-    for row in rows:
-        pending = fetch_one(
+    now = utc_now()
+    with get_connection() as connection:
+        connection.execute(
             """
-            SELECT id
-            FROM outbound_jobs
-            WHERE aprs_message_id = ?
-              AND status = 'queued'
-            LIMIT 1
+            UPDATE aprs_messages AS message
+            SET status = ?,
+                failed_at = ?,
+                failure_reason = ?,
+                updated_at = ?
+            WHERE direction = ?
+              AND status = ?
+              AND message_number IS NOT NULL
+              AND TRIM(message_number) <> ''
+              AND tx_attempt_count >= ?
+              AND last_attempt_at IS NOT NULL
+              AND last_attempt_at <= ?
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM outbound_jobs AS job
+                  WHERE job.aprs_message_id = message.id
+                    AND job.status = 'queued'
+              )
             """,
-            (int(row["id"]),),
+            (
+                MESSAGE_STATUS_FAILED,
+                now,
+                "No ACK received after APRS retry window.",
+                now,
+                MESSAGE_DIRECTION_TX,
+                MESSAGE_STATUS_SENT,
+                MAX_TX_ATTEMPTS,
+                cutoff,
+            ),
         )
-        if pending is None:
-            mark_message_failed(int(row["id"]), "No ACK received after APRS retry window.")
 
 
 def process_incoming_tnc2_message(

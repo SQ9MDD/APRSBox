@@ -5,6 +5,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, Form, Request, status
 
 from app.auth import create_user, delete_user, get_user_record_by_id, list_users, set_user_active, update_user
+from app.db import connection_scope
 from app.datetime_utils import format_display_datetime
 from app.dependencies import require_roles
 from app.models import ROLES, UserIdentity
@@ -27,22 +28,23 @@ def _users_template_context(
     edit_user: dict | None = None,
     status_code: int = status.HTTP_200_OK,
 ) -> object:
-    templates = request.app.state.templates
-    users = list_users()
-    for user in users:
-        user["last_login_display"] = _format_user_datetime(user.get("last_login_at"))
-        user["is_current_user"] = user["id"] == current_user.id
-    context = build_template_context(
-        request,
-        page_title="Users / Roles",
-        current_user=current_user,
-        active_nav="users",
-        users=users,
-        roles=ROLES,
-        flash=flash,
-        edit_user=edit_user,
-    )
-    return templates.TemplateResponse("users.html", context, status_code=status_code)
+    with connection_scope():
+        templates = request.app.state.templates
+        users = list_users()
+        for user in users:
+            user["last_login_display"] = _format_user_datetime(user.get("last_login_at"))
+            user["is_current_user"] = user["id"] == current_user.id
+        context = build_template_context(
+            request,
+            page_title="Users / Roles",
+            current_user=current_user,
+            active_nav="users",
+            users=users,
+            roles=ROLES,
+            flash=flash,
+            edit_user=edit_user,
+        )
+        return templates.TemplateResponse("users.html", context, status_code=status_code)
 
 
 @router.get("/users")

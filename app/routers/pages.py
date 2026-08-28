@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import wraps
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -23,6 +24,7 @@ from app.db import (
     VACUUM_RECOMMEND_FREE_BYTES_MIN,
     VACUUM_RECOMMEND_FREE_RATIO_MIN,
     create_system_job,
+    connection_scope,
     database_maintenance_snapshot,
     event_log_levels_at_or_above,
     fetch_one,
@@ -163,11 +165,11 @@ from app.services.own_alerts import (
     send_own_alert_now,
 )
 from app.services.band_condition import (
+    get_dashboard_band_condition_snapshot,
     get_band_condition_history,
     get_band_condition_page_data,
     get_band_condition_snapshot,
 )
-from app.services.network_diagnostics import get_network_diagnostics
 from app.services.aprsis import (
     aprsis_runtime_badge,
     get_aprsis_config,
@@ -272,6 +274,18 @@ from app.services.wx import (
 )
 
 router = APIRouter()
+
+
+def _scoped_read_model(handler: Any) -> Any:
+    """Keep a composed synchronous read-model on one SQLite connection."""
+    @wraps(handler)
+    def scoped(*args: Any, **kwargs: Any) -> Any:
+        with connection_scope():
+            return handler(*args, **kwargs)
+
+    return scoped
+
+
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[2]
 _HELP_ROOT_DIR = _REPO_ROOT_DIR / "help"
 _CHANGELOG_FILES_BY_LANGUAGE: dict[str, Path] = {
@@ -381,19 +395,79 @@ def _section_template_context(
     flash_success: bool = False,
     form_data: dict[str, object] | None = None,
     initial_modem_type: str | None = None,
+    edit_id: int | None = None,
+) -> dict:
+    with connection_scope():
+        return _section_template_context_scoped(
+            request,
+            current_user,
+            slug,
+            flash=flash,
+            edit_row=edit_row,
+            flash_success=flash_success,
+            form_data=form_data,
+            initial_modem_type=initial_modem_type,
+            edit_id=edit_id,
+        )
+
+
+def _section_template_context_scoped(
+    request: Request,
+    current_user: UserIdentity,
+    slug: str,
+    flash: str | None = None,
+    edit_row: dict | None = None,
+    *,
+    flash_success: bool = False,
+    form_data: dict[str, object] | None = None,
+    initial_modem_type: str | None = None,
+    edit_id: int | None = None,
 ) -> dict:
     definition = SECTION_DEFINITIONS[slug]
+    station_settings = None
+    app_language = None
+    symbol_set = None
+    map_config = None
+    translator = None
+    if slug in {"objects", "items"}:
+        station_settings = get_station_settings(include_tx_runtime=False)
+        app_language = get_app_language()
+        symbol_set = get_aprs_symbol_set()
+        map_config = get_map_page_config(
+            root_path=request.scope.get("root_path", ""),
+            station_settings=station_settings,
+        )
+        translator = get_translator(app_language)
+        if edit_row is None and edit_id is not None:
+            edit_row = get_section_row(
+                slug,
+                edit_id,
+                station_settings=station_settings,
+                symbol_set=symbol_set,
+                translator=translator,
+            )
+    rows = get_section_rows(
+        slug,
+        station_settings=station_settings,
+        symbol_set=symbol_set,
+        translator=translator,
+    )
     context = build_template_context(
         request,
         page_title=definition.title,
         current_user=current_user,
         active_nav=definition.nav_key,
+        perform_alert_maintenance=False,
         section=definition,
-        rows=get_section_rows(slug),
+        rows=rows,
         flash=flash,
         can_edit=current_user.role in definition.create_roles,
         edit_row=edit_row,
         flash_success=flash_success,
+        prefetched_station_settings=station_settings,
+        prefetched_app_language=app_language,
+        prefetched_aprs_symbol_set=symbol_set,
+        prefetched_map_config=map_config,
     )
     if slug == "modems":
         aprsis_config = get_aprsis_config()
@@ -426,12 +500,12 @@ def _section_template_context(
     if slug in {"objects", "items"}:
         context.update(
             {
-                "map_picker_config": get_map_page_config(root_path=request.scope.get("root_path", "")),
+                "map_picker_config": context["alert_modal_map_config"],
                 "symbol_table_options": [
                     {"value": "/", "label": "Primary (/)"},
                     {"value": "\\", "label": "Alternate (\\)"},
                 ],
-                "symbol_code_options": _symbol_code_options(),
+                "symbol_code_options": _symbol_code_options(symbol_set=symbol_set),
             }
         )
     if slug == "objects":
@@ -678,7 +752,7 @@ def _digi_flow_editor_context(
 
 
 def _dashboard_band_condition_cards() -> list[dict]:
-    snapshot = get_band_condition_snapshot()
+    snapshot = get_dashboard_band_condition_snapshot()
     return list(snapshot.get("bands") or [])
 
 
@@ -722,13 +796,14 @@ def _station_form_options(
     }
 
 
-def _symbol_code_options() -> list[dict[str, str]]:
+def _symbol_code_options(*, symbol_set: str | None = None) -> list[dict[str, str]]:
+    symbol_set = symbol_set or get_aprs_symbol_set()
     return [
         {
             "value": symbol_code,
             "label": symbol_code,
-            "primary_icon": get_aprs_symbol_icon_path(f"/{symbol_code}"),
-            "alternate_icon": get_aprs_symbol_icon_path(f"\\{symbol_code}"),
+            "primary_icon": get_aprs_symbol_icon_path(f"/{symbol_code}", symbol_set=symbol_set),
+            "alternate_icon": get_aprs_symbol_icon_path(f"\\{symbol_code}", symbol_set=symbol_set),
             "primary_description": get_aprs_symbol_description("/", symbol_code),
             "alternate_description": get_aprs_symbol_description("\\", symbol_code),
         }
@@ -1126,39 +1201,46 @@ def root(request: Request) -> RedirectResponse:
 
 
 @router.get("/dashboard")
+@_scoped_read_model
 def dashboard(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
-    dashboard_bands = _dashboard_band_condition_cards()
-    dashboard_band = _dashboard_band_condition_card(dashboard_bands)
-    dashboard_activity = get_dashboard_radio_activity(range_value="24h")
-    https_enabled = bool(https_file_status(request.app.state.settings.ssl_dir)["https_enabled"])
-    direct_scheme = "https" if https_enabled else "http"
-    direct_port = (
-        request.app.state.settings.web_https_port
-        if https_enabled
-        else request.app.state.settings.web_http_port
-    )
-    context = build_template_context(
-        request,
-        page_title="Dashboard",
-        current_user=current_user,
-        active_nav="dashboard",
-        dashboard_band=dashboard_band,
-        dashboard_bands=dashboard_bands,
-        dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
-        network_diagnostics=get_network_diagnostics(
-            scheme=direct_scheme,
-            port=direct_port,
-            root_path=request.scope.get("root_path", ""),
-        ),
-    )
-    return templates.TemplateResponse("dashboard.html", context)
+    with connection_scope():
+        dashboard_bands = _dashboard_band_condition_cards()
+        dashboard_band = _dashboard_band_condition_card(dashboard_bands)
+        dashboard_activity = get_dashboard_radio_activity(range_value="24h")
+        diagnostics_cache = getattr(request.app.state, "network_diagnostics_cache", None)
+        network_diagnostics = diagnostics_cache.get() if diagnostics_cache is not None else {
+            "hostname": None,
+            "interface": None,
+            "ipv4": None,
+            "ipv6": None,
+            "mdns_name": None,
+            "avahi_status": "Checking",
+            "avahi_tone": "neutral",
+            "mdns_resolve": None,
+            "mdns_resolve_tone": "neutral",
+            "web_ui_url": None,
+        }
+        context = build_template_context(
+            request,
+            page_title="Dashboard",
+            current_user=current_user,
+            active_nav="dashboard",
+            perform_alert_maintenance=False,
+            dashboard_band=dashboard_band,
+            dashboard_bands=dashboard_bands,
+            dashboard_activity=dashboard_activity,
+            dashboard_home=dashboard_home_data(dashboard_band, dashboard_activity),
+            network_diagnostics=network_diagnostics,
+        )
+        return templates.TemplateResponse("dashboard.html", context)
 
 
 @router.get("/band-condition")
+@_scoped_read_model
 def band_condition_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -1177,6 +1259,7 @@ def band_condition_page(
 
 
 @router.get("/api/band-condition")
+@_scoped_read_model
 def band_condition_snapshot(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
@@ -1184,6 +1267,7 @@ def band_condition_snapshot(
 
 
 @router.get("/api/band-condition/history")
+@_scoped_read_model
 def band_condition_history(
     days: int = 365,
     _: UserIdentity = Depends(get_current_user),
@@ -1192,6 +1276,7 @@ def band_condition_history(
 
 
 @router.get("/stations")
+@_scoped_read_model
 def stations_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -1217,6 +1302,7 @@ def stations_page(
 
 
 @router.get("/stations/{callsign:path}")
+@_scoped_read_model
 def station_detail_page(
     callsign: str,
     request: Request,
@@ -1287,6 +1373,7 @@ def station_detail_message(
 
 
 @router.get("/api/stations/{callsign:path}")
+@_scoped_read_model
 def station_detail_snapshot(
     callsign: str,
     request: Request,
@@ -1305,6 +1392,7 @@ def station_detail_snapshot(
 
 
 @router.get("/api/stations")
+@_scoped_read_model
 def stations_snapshot(
     since_revision: int | None = None,
     _: UserIdentity = Depends(get_current_user),
@@ -1634,7 +1722,7 @@ async def settings_update_channel_set_api(
 ) -> JSONResponse:
     payload = await request.json()
     try:
-        selected = save_update_channel(str(payload.get("channel") or ""))
+        selected = await asyncio.to_thread(save_update_channel, str(payload.get("channel") or ""))
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": _translate(str(exc))}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse({"ok": True, "channel": selected})
@@ -1827,7 +1915,7 @@ async def settings_import_configuration_backup(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
 
-    success, error = safe_import_configuration_backup(payload)
+    success, error = await asyncio.to_thread(safe_import_configuration_backup, payload)
     if not success:
         return JSONResponse(
             {"ok": False, "error": _translate(error or "Failed to import configuration backup.")},
@@ -2531,6 +2619,7 @@ def digi_create(
 
 
 @router.get("/digi-flows")
+@_scoped_read_model
 def digi_flows_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -2674,7 +2763,7 @@ async def digi_flow_create(
         context = _digi_flow_editor_context(request, current_user, form_data=build_digi_flow_editor_payload(), flash=str(exc))
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
-    flow_id, error = safe_create_digi_flow(payload)
+    flow_id, error = await asyncio.to_thread(safe_create_digi_flow, payload)
     if error:
         if wants_json:
             return JSONResponse(
@@ -2729,7 +2818,7 @@ async def digi_flow_update(
         context = _digi_flow_editor_context(request, current_user, flow_id=flow_id, form_data=build_digi_flow_editor_payload(), flash=str(exc))
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
-    error = safe_update_digi_flow(flow_id, payload)
+    error = await asyncio.to_thread(safe_update_digi_flow, flow_id, payload)
     if error:
         if wants_json:
             return JSONResponse(
@@ -2828,6 +2917,7 @@ def digi_flow_delete(
 
 
 @router.get("/objects")
+@_scoped_read_model
 def objects_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -2836,13 +2926,12 @@ def objects_page(
     success: str | None = None,
 ) -> object:
     templates = request.app.state.templates
-    edit_row = get_section_row("objects", edit) if edit is not None else None
     context = _section_template_context(
         request,
         current_user,
         "objects",
         flash=flash,
-        edit_row=edit_row,
+        edit_id=edit,
     )
     if success is not None:
         context["flash_success"] = str(success).strip() not in {"0", "false", "False"}
@@ -2976,6 +3065,7 @@ def objects_send_now(
 
 
 @router.get("/items")
+@_scoped_read_model
 def items_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -3075,6 +3165,7 @@ def items_delete(
 
 
 @router.get("/bulletins")
+@_scoped_read_model
 def bulletins_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -3242,6 +3333,7 @@ def station_page(
 
 
 @router.get("/map")
+@_scoped_read_model
 def map_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -3274,6 +3366,7 @@ def map_page(
 
 
 @router.get("/api/map/stations-lite")
+@_scoped_read_model
 def map_stations_lite(
     since_revision: int | None = None,
     _: UserIdentity = Depends(get_current_user),
@@ -3282,6 +3375,7 @@ def map_stations_lite(
 
 
 @router.get("/api/map/alert-areas")
+@_scoped_read_model
 def map_alert_areas(
     request: Request,
     _: UserIdentity = Depends(get_current_user),
@@ -3299,6 +3393,7 @@ def map_alert_areas(
 
 
 @router.get("/api/map/stations-details")
+@_scoped_read_model
 def map_station_details(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
@@ -3306,6 +3401,7 @@ def map_station_details(
 
 
 @router.get("/api/map/mobile-tracks")
+@_scoped_read_model
 def map_mobile_tracks(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
@@ -3313,6 +3409,7 @@ def map_mobile_tracks(
 
 
 @router.get("/api/map/stations")
+@_scoped_read_model
 def map_stations(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
@@ -3381,6 +3478,7 @@ async def map_tile_events(
 
 
 @router.get("/wx")
+@_scoped_read_model
 def wx_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -3456,7 +3554,7 @@ async def wx_mappings_update(
             "unit_override": str(form.get(f"unit_override__{normalized}") or "").strip(),
             "cache_max_age_s": str(form.get(f"cache_max_age_s__{normalized}") or "").strip(),
         }
-    success, error = safe_save_wx_mappings(payload_by_parameter)
+    success, error = await asyncio.to_thread(safe_save_wx_mappings, payload_by_parameter)
     if wants_json:
         message = "WX mappings saved." if success else (error or "Failed to save WX mappings.")
         return JSONResponse(
@@ -3718,6 +3816,7 @@ def wx_source_discover(
 
 
 @router.get("/notifications")
+@_scoped_read_model
 def notifications_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -4231,6 +4330,7 @@ def _own_alert_compose_page_context() -> dict[str, Any]:
 
 
 @router.get("/alerts")
+@_scoped_read_model
 def alerts_page(
     request: Request,
     page: int = 1,
@@ -4313,7 +4413,7 @@ async def own_alert_preview(
         payload = await request.json()
         if not isinstance(payload, dict):
             raise ValueError("Invalid alarm payload.")
-        return JSONResponse(preview_own_alert(payload))
+        return JSONResponse(await asyncio.to_thread(preview_own_alert, payload))
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -4330,7 +4430,8 @@ async def own_alert_send(
         payload = await request.json()
         if not isinstance(payload, dict):
             raise ValueError("Invalid alarm payload.")
-        return JSONResponse({"ok": True, **create_own_alert(payload)})
+        result = await asyncio.to_thread(create_own_alert, payload)
+        return JSONResponse({"ok": True, **result})
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -4503,7 +4604,7 @@ async def alerts_delete_selected(
             alert_ids.append(int(str(raw_id)))
         except (TypeError, ValueError):
             continue
-    deleted = delete_alerts(alert_ids)
+    deleted = await asyncio.to_thread(delete_alerts, alert_ids)
     if deleted <= 0:
         return _alerts_redirect(request, "/alerts", "No alerts selected.", success=False)
     return _alerts_redirect(
@@ -4534,6 +4635,7 @@ def traffic_frame_detail_page(
 
 
 @router.get("/traffic")
+@_scoped_read_model
 def traffic_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -4556,6 +4658,7 @@ def traffic_page(
 
 
 @router.get("/statistics")
+@_scoped_read_model
 def statistics_page(
     request: Request,
     current_user: UserIdentity = Depends(get_current_user),
@@ -4579,6 +4682,7 @@ def statistics_page(
 
 
 @router.get("/messages")
+@_scoped_read_model
 def messages_page(
     request: Request,
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -4595,6 +4699,7 @@ def messages_page(
 
 
 @router.get("/api/messages")
+@_scoped_read_model
 def messages_snapshot(
     _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> JSONResponse:
@@ -4637,10 +4742,15 @@ async def messages_create_conversation(
 ) -> JSONResponse:
     payload = await request.json()
     try:
-        conversation = create_or_update_conversation(str(payload.get("callsign") or ""), path="")
+        conversation = await asyncio.to_thread(
+            create_or_update_conversation,
+            str(payload.get("callsign") or ""),
+            path="",
+        )
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
-    return JSONResponse({"conversation_id": str(conversation.get("id") or ""), "messages_view": get_live_messages_page_data()})
+    messages_view = await asyncio.to_thread(get_live_messages_page_data)
+    return JSONResponse({"conversation_id": str(conversation.get("id") or ""), "messages_view": messages_view})
 
 
 @router.put("/api/messages/settings")
@@ -4650,10 +4760,11 @@ async def messages_save_settings(
 ) -> JSONResponse:
     payload = await request.json()
     try:
-        settings = save_message_settings(payload if isinstance(payload, dict) else {})
+        settings = await asyncio.to_thread(save_message_settings, payload if isinstance(payload, dict) else {})
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
-    return JSONResponse({"ok": True, "settings": settings, "messages_view": get_live_messages_page_data()})
+    messages_view = await asyncio.to_thread(get_live_messages_page_data)
+    return JSONResponse({"ok": True, "settings": settings, "messages_view": messages_view})
 
 
 @router.post("/api/messages/send")
@@ -4665,15 +4776,21 @@ async def messages_send(
     try:
         conversation_id = payload.get("conversation_id")
         if conversation_id not in {None, ""}:
-            update_conversation_path(int(conversation_id), str(payload.get("path") or ""))
-        message = queue_outgoing_message(
+            await asyncio.to_thread(
+                update_conversation_path,
+                int(conversation_id),
+                str(payload.get("path") or ""),
+            )
+        message = await asyncio.to_thread(
+            queue_outgoing_message,
             callsign=str(payload.get("callsign") or ""),
             message_text=str(payload.get("message_text") or ""),
             path=str(payload.get("path") or ""),
         )
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
-    return JSONResponse({"message_id": str(message["id"]), "messages_view": get_live_messages_page_data()})
+    messages_view = await asyncio.to_thread(get_live_messages_page_data)
+    return JSONResponse({"message_id": str(message["id"]), "messages_view": messages_view})
 
 
 @router.post("/api/messages/conversations/{conversation_id}/read")
@@ -4693,10 +4810,11 @@ async def messages_update_path(
 ) -> JSONResponse:
     payload = await request.json()
     try:
-        update_conversation_path(conversation_id, str(payload.get("path") or ""))
+        await asyncio.to_thread(update_conversation_path, conversation_id, str(payload.get("path") or ""))
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=status.HTTP_400_BAD_REQUEST)
-    return JSONResponse({"ok": True, "messages_view": get_live_messages_page_data()})
+    messages_view = await asyncio.to_thread(get_live_messages_page_data)
+    return JSONResponse({"ok": True, "messages_view": messages_view})
 
 
 @router.post("/api/messages/conversations/{conversation_id}/delete")
@@ -4721,8 +4839,9 @@ async def messages_delete_selected(
         conversation_ids = [int(conversation_id) for conversation_id in raw_ids]
     except (TypeError, ValueError):
         return JSONResponse({"error": "conversation_ids must contain integer IDs."}, status_code=status.HTTP_400_BAD_REQUEST)
-    deleted = delete_message_conversations(conversation_ids)
-    return JSONResponse({"ok": True, "deleted": deleted, "messages_view": get_live_messages_page_data()})
+    deleted = await asyncio.to_thread(delete_message_conversations, conversation_ids)
+    messages_view = await asyncio.to_thread(get_live_messages_page_data)
+    return JSONResponse({"ok": True, "deleted": deleted, "messages_view": messages_view})
 
 
 @router.post("/api/messages/clear")
@@ -4746,7 +4865,7 @@ def messages_retry(
 
 
 @router.get("/api/traffic")
-async def traffic_snapshot(
+def traffic_snapshot(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     return JSONResponse(get_traffic_snapshot())
@@ -4758,7 +4877,8 @@ def dashboard_radio_activity(
     _: UserIdentity = Depends(get_current_user),
 ) -> JSONResponse:
     try:
-        payload = get_dashboard_radio_activity(range_value=range)
+        with connection_scope():
+            payload = get_dashboard_radio_activity(range_value=range)
     except ValueError:
         return JSONResponse({"error": "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)
@@ -4872,3 +4992,38 @@ async def traffic_stream(
         "X-Accel-Buffering": "no",
     }
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
+
+
+@router.get("/api/alerts/stream")
+async def alert_stream(
+    request: Request,
+    _: UserIdentity = Depends(get_current_user),
+) -> StreamingResponse:
+    broadcaster: TrafficSnapshotBroadcaster | None = getattr(request.app.state, "alert_stream_broadcaster", None)
+    if broadcaster is None:
+        log_event("ERROR", "alerts", "Alert SSE stream requested but broadcaster is not initialized.")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Alert stream is unavailable.")
+
+    try:
+        subscriber_id, queue = await broadcaster.subscribe()
+    except TrafficStreamCapacityError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                yield event
+        finally:
+            await broadcaster.unsubscribe(subscriber_id)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

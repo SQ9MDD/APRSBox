@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import re
+import socket
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -38,6 +39,11 @@ _APRSIS_STRICT_REASON_KEYS = {
 }
 _APRSIS_MINUTE_STATS_RETENTION_HOURS = 24 * 365
 APRSIS_TX_DRAIN_TIMEOUT_SECONDS = 0.25
+APRSIS_TX_MAX_FRAME_AGE_SECONDS = 5.0
+APRSIS_TCP_USER_TIMEOUT_MS = 3_000
+APRSIS_TCP_KEEPIDLE_SECONDS = 10
+APRSIS_TCP_KEEPINTVL_SECONDS = 3
+APRSIS_TCP_KEEPCNT = 2
 
 
 def _normalize_text(value: Any) -> str:
@@ -1143,18 +1149,47 @@ class AprsisClientService:
         payload_line = str(line or "").rstrip("\r\n")
         if not payload_line:
             return False, "APRS-IS TX dropped: empty packet line."
+        frame_age_ms = _monotonic_delta_ms((telemetry or {}).get("rx_received_monotonic"))
+        if frame_age_ms is None:
+            frame_age_ms = _monotonic_delta_ms((telemetry or {}).get("enqueue_monotonic"))
+        if frame_age_ms is not None and frame_age_ms > APRSIS_TX_MAX_FRAME_AGE_SECONDS * 1000.0:
+            return False, (
+                "APRS-IS TX dropped: frame is stale "
+                f"({frame_age_ms:.0f} ms > {APRSIS_TX_MAX_FRAME_AGE_SECONDS * 1000.0:.0f} ms)."
+            )
         wire = payload_line.encode("latin-1", errors="replace") + b"\r\n"
         async with self._connection_lock:
             writer = self._writer
             is_closing = getattr(writer, "is_closing", None) if writer is not None else None
             if writer is None or (callable(is_closing) and bool(is_closing())):
                 return False, "APRS-IS TX dropped: uplink is not connected."
+            transport = getattr(writer, "transport", None)
+            get_write_buffer_size = getattr(transport, "get_write_buffer_size", None)
+            pending_bytes = int(get_write_buffer_size()) if callable(get_write_buffer_size) else 0
+            if pending_bytes > 0:
+                detail = f"APRS-IS TX dropped: transport still has {pending_bytes} buffered bytes."
+                await self._disconnect_locked(
+                    reason=detail,
+                    status=APRSIS_STATUS_ERROR,
+                    error=detail,
+                    abort=True,
+                )
+                self._retry_not_before = time.monotonic() + self._reconnect_delay
+                return False, detail
             try:
                 writer.write(wire)
                 await asyncio.wait_for(writer.drain(), timeout=APRSIS_TX_DRAIN_TIMEOUT_SECONDS)
+                pending_bytes = int(get_write_buffer_size()) if callable(get_write_buffer_size) else 0
+                if pending_bytes > 0:
+                    raise RuntimeError(f"transport retained {pending_bytes} bytes after drain")
             except (OSError, RuntimeError, TimeoutError) as exc:
                 detail = f"APRS-IS TX dropped: write failed: {exc}"
-                await self._disconnect_locked(reason=detail, status=APRSIS_STATUS_ERROR, error=str(exc))
+                await self._disconnect_locked(
+                    reason=detail,
+                    status=APRSIS_STATUS_ERROR,
+                    error=str(exc),
+                    abort=True,
+                )
                 self._retry_not_before = time.monotonic() + self._reconnect_delay
                 return False, detail
         rx_to_aprsis_write_ms = _monotonic_delta_ms((telemetry or {}).get("rx_received_monotonic"))
@@ -1262,6 +1297,8 @@ class AprsisClientService:
             log_event("WARNING", "aprsis", f"APRS-IS connect failed for {server}:{port} ({error})")
             return
 
+        self._configure_transport_socket(writer)
+
         server_filter = str((rx_interface or {}).get("filter") or "").strip()
         login_line = build_aprsis_login_line(login=login, passcode=passcode, server_filter=server_filter)
         try:
@@ -1325,11 +1362,25 @@ class AprsisClientService:
         await self._disconnect(reason=reason, status=APRSIS_STATUS_ERROR, error=reason)
         self._retry_not_before = time.monotonic() + self._reconnect_delay
 
-    async def _disconnect(self, *, reason: str, status: str, error: str | None = None) -> None:
+    async def _disconnect(
+        self,
+        *,
+        reason: str,
+        status: str,
+        error: str | None = None,
+        abort: bool = True,
+    ) -> None:
         async with self._connection_lock:
-            await self._disconnect_locked(reason=reason, status=status, error=error)
+            await self._disconnect_locked(reason=reason, status=status, error=error, abort=abort)
 
-    async def _disconnect_locked(self, *, reason: str, status: str, error: str | None = None) -> None:
+    async def _disconnect_locked(
+        self,
+        *,
+        reason: str,
+        status: str,
+        error: str | None = None,
+        abort: bool = False,
+    ) -> None:
         reader_task = self._reader_task
         writer = self._writer
         config_key = self._connected_config
@@ -1346,9 +1397,14 @@ class AprsisClientService:
                 await reader_task
 
         if writer is not None:
-            writer.close()
-            with contextlib.suppress(OSError):
-                await writer.wait_closed()
+            transport = getattr(writer, "transport", None)
+            abort_transport = getattr(transport, "abort", None)
+            if abort and callable(abort_transport):
+                abort_transport()
+            else:
+                writer.close()
+                with contextlib.suppress(OSError):
+                    await writer.wait_closed()
 
         if config_key is None:
             if status == APRSIS_STATUS_INACTIVE:
@@ -1370,6 +1426,27 @@ class AprsisClientService:
             connected_at=connected_since if status == APRSIS_STATUS_CONNECTED else None,
             last_error=error,
         )
+
+    @staticmethod
+    def _configure_transport_socket(writer: asyncio.StreamWriter) -> None:
+        """Make a degraded APRS-IS TCP path fail quickly instead of replaying buffered data."""
+        get_extra_info = getattr(writer, "get_extra_info", None)
+        transport_socket = get_extra_info("socket") if callable(get_extra_info) else None
+        if transport_socket is None:
+            return
+        options: list[tuple[int, int, int]] = [(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)]
+        for option_name, value in (
+            ("TCP_USER_TIMEOUT", APRSIS_TCP_USER_TIMEOUT_MS),
+            ("TCP_KEEPIDLE", APRSIS_TCP_KEEPIDLE_SECONDS),
+            ("TCP_KEEPINTVL", APRSIS_TCP_KEEPINTVL_SECONDS),
+            ("TCP_KEEPCNT", APRSIS_TCP_KEEPCNT),
+        ):
+            option = getattr(socket, option_name, None)
+            if isinstance(option, int):
+                options.append((socket.IPPROTO_TCP, option, value))
+        for level, option, value in options:
+            with contextlib.suppress(OSError):
+                transport_socket.setsockopt(level, option, value)
 
     async def _sleep(self, delay: float) -> None:
         try:

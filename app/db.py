@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -29,6 +30,10 @@ _EVENT_LOG_LEVEL_RANK = {level: index for index, level in enumerate(EVENT_LOG_LE
 
 _event_log_min_level_cache: str | None = None
 _event_log_debug_enabled_cache: bool | None = None
+_request_connection: ContextVar[sqlite3.Connection | None] = ContextVar(
+    "aprsbox_request_connection",
+    default=None,
+)
 
 RUNTIME_MAINTENANCE_RESET_TABLES: tuple[str, ...] = (
     "event_logs",
@@ -83,11 +88,34 @@ def connect() -> sqlite3.Connection:
 
 @contextmanager
 def get_connection() -> Iterator[sqlite3.Connection]:
+    scoped_connection = _request_connection.get()
+    if scoped_connection is not None:
+        yield scoped_connection
+        return
+
     connection = connect()
     try:
         yield connection
         connection.commit()
     finally:
+        connection.close()
+
+
+@contextmanager
+def connection_scope() -> Iterator[sqlite3.Connection]:
+    """Reuse one SQLite connection for a composed read-model request."""
+    existing_connection = _request_connection.get()
+    if existing_connection is not None:
+        yield existing_connection
+        return
+
+    connection = connect()
+    token = _request_connection.set(connection)
+    try:
+        yield connection
+        connection.commit()
+    finally:
+        _request_connection.reset(token)
         connection.close()
 
 
@@ -999,18 +1027,25 @@ CREATE TABLE IF NOT EXISTS radio_activity_aggregator_state (
 
 CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_at ON traffic_frames(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_id ON traffic_frames(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_format_created_at ON traffic_frames(format, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_map_station_state_revision ON map_station_state(revision);
 CREATE INDEX IF NOT EXISTS idx_map_station_state_last_heard ON map_station_state(is_deleted, last_heard_at DESC, station_key);
 CREATE INDEX IF NOT EXISTS idx_map_station_state_last_seen ON map_station_state(is_deleted, last_seen_any_at, station_key);
 INSERT OR IGNORE INTO map_station_state_meta(id, revision, is_ready) VALUES (1, 0, 0);
 CREATE INDEX IF NOT EXISTS idx_aprs_alerts_last_seen_at ON aprs_alerts(last_seen_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_aprs_alerts_updated_at ON aprs_alerts(updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_aprs_alerts_active_last_seen
+    ON aprs_alerts(last_seen_at DESC, id DESC)
+    WHERE superseded_by_alert_id IS NULL AND is_active = 1;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aprs_alert_parts_identity
     ON aprs_alert_parts(part_identity_key);
 CREATE INDEX IF NOT EXISTS idx_aprs_alert_parts_alert_part
     ON aprs_alert_parts(alert_id, part_number, id);
 CREATE INDEX IF NOT EXISTS idx_aprs_alert_frames_alert_received_at
     ON aprs_alert_frames(alert_id, received_at DESC, frame_id DESC);
+CREATE INDEX IF NOT EXISTS idx_aprs_alert_frames_received_at
+    ON aprs_alert_frames(received_at DESC, frame_id DESC);
 CREATE INDEX IF NOT EXISTS idx_own_aprs_alerts_status_next
     ON own_aprs_alerts(status, next_transmission_at, id);
 CREATE INDEX IF NOT EXISTS idx_own_aprs_alert_tx_jobs_dispatch
@@ -1027,9 +1062,15 @@ CREATE INDEX IF NOT EXISTS idx_digi_flow_event_log_frame_uid ON digi_flow_event_
 CREATE INDEX IF NOT EXISTS idx_digi_flows_route_pair ON digi_flows(source_kind, source_ref, target_kind, target_ref);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_status_scheduled_at ON outbound_jobs(status, scheduled_at, id);
 CREATE INDEX IF NOT EXISTS idx_outbound_jobs_kind_status_scheduled_at ON outbound_jobs(kind, status, scheduled_at, id);
+CREATE INDEX IF NOT EXISTS idx_outbound_jobs_kind_activity_desc
+    ON outbound_jobs(kind, COALESCE(sent_at, started_at, scheduled_at, created_at) DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_aprs_objects_enabled_id ON aprs_objects(is_enabled, id);
+CREATE INDEX IF NOT EXISTS idx_bulletins_enabled_id ON bulletins(is_enabled, id);
 CREATE INDEX IF NOT EXISTS idx_system_jobs_created_at ON system_jobs(created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_aprs_message_conversations_remote ON aprs_message_conversations(remote_callsign, remote_ssid);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_conversation_created ON aprs_messages(conversation_id, created_at, id);
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_addressee
+    ON aprs_messages(direction, addressee, conversation_id);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_tx_lookup ON aprs_messages(direction, sender, addressee, message_number, status, id);
 CREATE INDEX IF NOT EXISTS idx_wx_sources_type_enabled ON wx_sources(source_type, enabled, name);
 CREATE INDEX IF NOT EXISTS idx_wx_mappings_source_enabled ON wx_mappings(source_id, enabled, parameter_name);
@@ -1584,6 +1625,24 @@ def init_db() -> None:
                 ADD COLUMN type_other_unknown_total INTEGER NOT NULL DEFAULT 0
                 """
             )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_aprs_alert_frames_received_at
+    ON aprs_alert_frames(received_at DESC, frame_id DESC)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_aprs_alerts_updated_at
+    ON aprs_alerts(updated_at DESC, id DESC)
+"""
+        )
+        connection.execute(
+            """
+CREATE INDEX IF NOT EXISTS idx_traffic_frames_created_id
+    ON traffic_frames(created_at DESC, id DESC)
+"""
+        )
         connection.execute(
             """
 CREATE INDEX IF NOT EXISTS idx_traffic_frames_interface_created_at
@@ -3615,6 +3674,19 @@ def get_app_setting(key: str) -> str | None:
     if row is None:
         return None
     return str(row["value"])
+
+
+def get_app_settings(keys: tuple[str, ...] | list[str]) -> dict[str, str]:
+    """Load a fixed group of settings with one query and one connection."""
+    normalized_keys = tuple(dict.fromkeys(str(key) for key in keys if str(key)))
+    if not normalized_keys:
+        return {}
+    placeholders = ", ".join("?" for _ in normalized_keys)
+    rows = fetch_all(
+        f"SELECT key, value FROM app_settings WHERE key IN ({placeholders})",
+        normalized_keys,
+    )
+    return {str(row["key"]): str(row["value"]) for row in rows}
 
 
 def set_app_setting(key: str, value: str) -> None:

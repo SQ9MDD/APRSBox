@@ -442,36 +442,9 @@ def _dashboard_heard_station_keys(
         if station_key:
             station_keys.add(station_key)
 
-    # The hourly buffer is updated synchronously for every statistics-eligible
-    # TNC2 frame. Keep the raw-history path only for databases predating it.
-    if hourly_rows:
-        return station_keys
-
-    recent_frame_rows = fetch_all(
-        f"""
-        SELECT direction, format, line
-        FROM traffic_frames
-        WHERE format = 'TNC2'
-          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
-          AND created_at >= ?
-          AND created_at < ?
-        ORDER BY created_at ASC, id ASC
-        """,
-        (window_start_utc.isoformat(), window_end_utc.isoformat()),
-    )
-    for row in recent_frame_rows:
-        direction = _normalize_direction(row["direction"], row["format"])
-        if direction != "RX":
-            continue
-        parsed = parse_tnc2_frame(str(row["line"] or ""))
-        if parsed is None:
-            continue
-        station_key = _normalize_station_key_for_devices(
-            parsed.get("logical_source_key") or parsed.get("source_key") or parsed.get("source") or ""
-        )
-        if station_key:
-            station_keys.add(station_key)
-
+    # Never rebuild the projection from raw 24-hour traffic in an HTTP request.
+    # New traffic updates this table synchronously and historical repair belongs
+    # to the background aggregator.
     return station_keys
 
 

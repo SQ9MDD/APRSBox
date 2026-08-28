@@ -30,7 +30,7 @@
     {% set health.label = "ONLINE" %}
     {% set health.tone = "ok" %}
 {% endif %}
-{% set kpi = namespace(heard="-", frames="-", interfaces="-", last_rx="-", last_tx="-", aprsis="Not configured") %}
+{% set kpi = namespace(heard="-", frames="-", interfaces="-") %}
 {% for item in dashboard_home.stats %}
     {% if item.label == "Heard stations" %}
         {% set kpi.heard = item.value %}
@@ -38,12 +38,6 @@
         {% set kpi.frames = item.value %}
     {% elif item.label == "Interfaces" %}
         {% set kpi.interfaces = item.value %}
-    {% elif item.label == "Last RF RX" %}
-        {% set kpi.last_rx = item.value %}
-    {% elif item.label == "Last RF TX" %}
-        {% set kpi.last_tx = item.value %}
-    {% elif item.label == "Last APRS-IS uplink" %}
-        {% set kpi.aprsis = item.value %}
     {% endif %}
 {% endfor %}
 {% set has_activity_chart = dashboard_home.activity_chart.labels and dashboard_home.activity_chart.labels|length > 0 %}
@@ -213,33 +207,6 @@
                 <strong class="dashboard-v2-kpi-value">{{ kpi.interfaces }}</strong>
             </span>
         </article>
-        <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-green">
-            <span class="dashboard-v2-kpi-icon" aria-hidden="true">
-                <img src="{{ request.scope.root_path }}/static/icons/download-circle-outline.svg" alt="">
-            </span>
-            <span class="dashboard-v2-kpi-copy">
-                <span class="dashboard-v2-kpi-label">{{ t("Last RF RX") }}</span>
-                <strong class="dashboard-v2-kpi-value dashboard-v2-kpi-value-time">{{ t(kpi.last_rx) }}</strong>
-            </span>
-        </article>
-        <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-amber">
-            <span class="dashboard-v2-kpi-icon" aria-hidden="true">
-                <img src="{{ request.scope.root_path }}/static/icons/upload-circle-outline.svg" alt="">
-            </span>
-            <span class="dashboard-v2-kpi-copy">
-                <span class="dashboard-v2-kpi-label">{{ t("Last RF TX") }}</span>
-                <strong class="dashboard-v2-kpi-value dashboard-v2-kpi-value-time">{{ t(kpi.last_tx) }}</strong>
-            </span>
-        </article>
-        <article class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-blue">
-            <span class="dashboard-v2-kpi-icon" aria-hidden="true">
-                <img src="{{ request.scope.root_path }}/static/icons/web.svg" alt="">
-            </span>
-            <span class="dashboard-v2-kpi-copy">
-                <span class="dashboard-v2-kpi-label">{{ t("Last APRS-IS uplink") }}</span>
-                <strong class="dashboard-v2-kpi-value dashboard-v2-kpi-value-time">{{ t(kpi.aprsis) }}</strong>
-            </span>
-        </article>
     </section>
 
     <section class="dashboard-v2-middle-grid">
@@ -378,7 +345,7 @@
 {% block extra_scripts %}
 <script src="{{ request.scope.root_path }}/static/vendor/chart.umd.min.js?v={{ app_version }}"></script>
 <script src="{{ request.scope.root_path }}/static/js/help-viewer.js?v={{ app_version }}"></script>
-<script type="application/json" id="dashboard-activity-data">{{ dashboard_home.activity_chart|tojson }}</script>
+<script type="application/json" id="dashboard-activity-data">{{ dashboard_activity|tojson }}</script>
 <script>
     (() => {
         const payloadNode = document.getElementById("dashboard-activity-data");
@@ -546,41 +513,6 @@
                 line: { tension: 0.28, borderWidth: 1.8 },
             },
         });
-
-        const normalizeLegacyPayload = (rawPayload) => {
-            const labels = Array.isArray(rawPayload?.labels) ? rawPayload.labels : [];
-            const sourceSeries = rawPayload?.series || {};
-            const totalSeries = toSeries(sourceSeries.total, labels.length);
-            const rxSeries = toSeries(sourceSeries.rx, labels.length);
-            const txSeries = toSeries(sourceSeries.tx, labels.length);
-            const repeatedSeries = toSeries(sourceSeries.repeated_tx, labels.length);
-            const mobileSeries = toSeries(sourceSeries.mobile, labels.length);
-            const messageSeries = toSeries(sourceSeries.message, labels.length);
-            const querySeries = toSeries(sourceSeries.query, labels.length);
-            const aprsisSeries = Array.from({ length: labels.length }, () => 0);
-            return {
-                range: "legacy",
-                outputBucketMinutes: Number(rawPayload?.bucket_minutes || 5),
-                labels,
-                series: {
-                    total: totalSeries,
-                    mobile: mobileSeries,
-                    message: messageSeries,
-                    query: querySeries,
-                    rx: rxSeries,
-                    tx: txSeries,
-                    repeated_tx: repeatedSeries,
-                    aprsis_uplink: aprsisSeries,
-                },
-                totals: {
-                    total: totalSeries.reduce((acc, value) => acc + value, 0),
-                    rx: rxSeries.reduce((acc, value) => acc + value, 0),
-                    tx: txSeries.reduce((acc, value) => acc + value, 0),
-                    repeated_tx: repeatedSeries.reduce((acc, value) => acc + value, 0),
-                },
-                kpis: null,
-            };
-        };
 
         const normalizeApiPayload = (rawPayload) => {
             const labels = Array.isArray(rawPayload?.labels) ? rawPayload.labels : [];
@@ -981,7 +913,7 @@
             }
         };
 
-        const fallbackPayload = normalizeLegacyPayload(payload);
+        const fallbackPayload = normalizeApiPayload(payload);
         zoomBounds = resolveStoredZoomBounds(activeRange, Array.isArray(fallbackPayload.labels) ? fallbackPayload.labels.length : 0);
         renderCharts(fallbackPayload);
 
@@ -1039,7 +971,9 @@
             }
         });
         themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
-        loadRangePayload(activeRange);
+        if (activeRange !== defaultRange) {
+            loadRangePayload(activeRange);
+        }
         const dashboardRefreshDelayMs = 30000;
         const helpViewerModal = document.getElementById("help-viewer-modal");
         let dashboardRefreshTimer = null;
@@ -1050,9 +984,10 @@
             dashboardRefreshTimer = window.setTimeout(() => {
                 dashboardRefreshTimer = null;
                 if (helpViewerModal instanceof HTMLElement && !helpViewerModal.hidden) {
+                    scheduleDashboardRefresh();
                     return;
                 }
-                window.location.reload();
+                void loadRangePayload(activeRange).finally(scheduleDashboardRefresh);
             }, dashboardRefreshDelayMs);
         };
         if (helpViewerModal instanceof HTMLElement) {

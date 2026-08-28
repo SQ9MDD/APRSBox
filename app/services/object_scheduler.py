@@ -4,7 +4,7 @@ import asyncio
 import random
 from datetime import datetime, timedelta, timezone
 
-from app.db import execute, fetch_all, get_app_setting, log_event, set_app_setting, utc_now
+from app.db import connection_scope, execute, fetch_all, log_event, set_app_setting, utc_now
 from app.services.activation_schedule import compute_activation_state
 from app.services.content import get_station_settings, station_has_tx_target
 from app.services.outbound import enqueue_object_job, latest_object_dispatch_at
@@ -39,10 +39,14 @@ class ObjectSchedulerService:
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
-            self._tick()
+            await asyncio.to_thread(self._tick)
             await self._sleep(self._poll_interval)
 
     def _tick(self) -> None:
+        with connection_scope():
+            self._tick_scoped()
+
+    def _tick_scoped(self) -> None:
         station_settings = get_station_settings()
         if not station_settings or not station_settings.get("callsign") or not station_has_tx_target(station_settings):
             return
@@ -51,14 +55,19 @@ class ObjectSchedulerService:
         due_objects = []
         for row in fetch_all(
             """
-            SELECT id, name, lifetime, state, is_enabled, interval_minutes, valid_until_utc,
+            SELECT objects.id, objects.name, objects.lifetime, objects.state,
+                   objects.is_enabled, objects.interval_minutes, objects.valid_until_utc,
                    activation_mode, active_from_utc, active_until_utc, first_activation_utc,
                    recurrence_duration_minutes, recurrence_interval_value, recurrence_interval_unit, recurrence_until_utc,
-                   latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment, updated_at
-            FROM aprs_objects
-            WHERE is_enabled = 1
-            ORDER BY id ASC
-            """
+                   latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment,
+                   objects.updated_at, scheduler_setting.value AS last_enqueued_at
+            FROM aprs_objects AS objects
+            LEFT JOIN app_settings AS scheduler_setting
+              ON scheduler_setting.key = ? || objects.id
+            WHERE objects.is_enabled = 1
+            ORDER BY objects.id ASC
+            """,
+            (OBJECT_LAST_ENQUEUED_KEY_PREFIX,),
         ):
             obj = dict(row)
             activation_state = compute_activation_state(obj, now)
@@ -68,7 +77,7 @@ class ObjectSchedulerService:
             if not activation_state.active_now:
                 continue
             interval_minutes = int(obj.get("interval_minutes") or 30)
-            last_enqueued = _parse_timestamp(get_app_setting(f"{OBJECT_LAST_ENQUEUED_KEY_PREFIX}{obj['id']}"))
+            last_enqueued = _parse_timestamp(obj.get("last_enqueued_at"))
             if last_enqueued is not None and (now - last_enqueued).total_seconds() < interval_minutes * 60:
                 continue
             due_objects.append(obj)

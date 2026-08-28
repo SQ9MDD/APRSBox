@@ -30,7 +30,7 @@ Para APRSIS, `Filtro de recepción APRS-IS` es el filtro del servidor APRS-IS. L
 - `Enabled` activa una interfaz física en el runtime de APRSBox. Para APRS-IS, `Activar conexión APRS-IS` activa la conexión compartida para recepción y transmisión; los flows que terminan en `TX APRS-IS` siguen decidiendo qué tramas pueden enviarse.
 - `Block TX on this interface` permite recibir tráfico, pero bloquea la transmisión outbound.
 - `TX Min Gap (s)` define la pausa mínima entre transmisiones en este TNC. El rango permitido es de `0.2` a `1.2` segundos.
-- `RX Silence Reconnect Timeout (s)` se aplica a interfaces serie. Tras una ausencia de RX más larga que este valor, el broker serie puede forzar una reconexión. `0` desactiva este watchdog.
+- `RX Silence Reconnect Timeout (s)` se aplica a interfaces SERIALL y KISS TCP nativas. Si no se recibe ningún byte durante más tiempo que este valor, se restablece la conexión. El puerto serie conserva un único watchdog físico; la conexión TCP local de su broker no inicia otro. `0` desactiva el watchdog.
 
 `Baud Rate` se usa solo para `SERIALL`. Para APRSIS se ocultan los campos propios de un TNC físico: ajustes seriales, bloqueo/pacing de TX RF y proxy LAN. La transmisión a APRS-IS requiere tanto una conexión activada como un flow de `Packet Routing` coincidente.
 
@@ -53,6 +53,8 @@ Debajo del formulario APRSIS, el estado actual de la conexión y el diagnóstico
 Ambos modos requieren un login APRS-IS verificado. `pass -1` identifica un cliente no verificado de solo recepción y no permite enviar tramas recibidas por RF. Para los uplinks RF, APRSBox usa `qAO` cuando el TNC receptor no tiene una ruta de retorno TX utilizable, o `qAR` cuando el TNC permite TX y un flow activo `APRS-IS -> RF` proporciona el retorno de mensajes. Las tramas generadas localmente usan `TCPIP*`.
 
 El destino `TX APRS-IS` incluye un filtro de seguridad del sistema que rechaza, entre otros casos, tramas con `TCPIP` / `TCPXX`, `NOGATE` / `RFONLY` y encapsulación third-party incorrecta. Consulta [Packet Routing](packet_routing.es.md) para construir los flows en detalle.
+
+La transmisión APRS-IS funciona estrictamente con datos actuales y en modo fail-closed. Una trama que espere más de 5 segundos entre la recepción/encolado y la escritura final en APRS-IS se descarta. La cola de routing está limitada y un transporte que ya contiene datos pendientes se aborta. Con una conexión deficiente, APRSBox pierde tramas deliberadamente en lugar de reproducir tráfico antiguo hacia APRS-IS.
 
 ## Expose Port
 

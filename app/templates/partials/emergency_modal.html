@@ -2,7 +2,7 @@
     id="aprs-emergency-root"
     data-root-path="{{ request.scope.root_path }}"
     data-static-root="{{ request.scope.root_path }}/static/"
-    data-traffic-stream-endpoint="{{ request.scope.root_path }}/api/traffic/stream"
+    data-traffic-stream-endpoint="{{ request.scope.root_path }}/api/alerts/stream"
     data-tile-url="{{ alert_modal_map_config.tile_url }}"
     data-tile-attribution="{{ alert_modal_map_config.tile_attribution }}"
     data-tile-min-zoom="{{ alert_modal_map_config.tile_min_zoom }}"
@@ -13,6 +13,8 @@
     data-i18n-aprs-alert-received="{{ t('APRS alert received') }}"
     data-i18n-active-aprs-alert="{{ t('Active APRS alert') }}"
     data-i18n-alert-muted="{{ t('Alert muted') }}"
+    data-i18n-no-position="{{ t('No position available in this frame') }}"
+    data-i18n-no-map-area="{{ t('No map area available') }}"
 >
     <audio
         id="aprs-emergency-audio"
@@ -65,6 +67,22 @@
                     <div class="aprs-emergency-row">
                         <dt>{{ t("Comment / summary") }}</dt>
                         <dd id="aprs-emergency-summary">-</dd>
+                    </div>
+                    <div class="aprs-emergency-row" id="aprs-emergency-group-row" hidden>
+                        <dt>{{ t("Destination group") }}</dt>
+                        <dd id="aprs-emergency-group">-</dd>
+                    </div>
+                    <div class="aprs-emergency-row" id="aprs-emergency-event-row" hidden>
+                        <dt>{{ t("Event code") }}</dt>
+                        <dd id="aprs-emergency-event">-</dd>
+                    </div>
+                    <div class="aprs-emergency-row" id="aprs-emergency-severity-row" hidden>
+                        <dt>{{ t("Severity level") }}</dt>
+                        <dd id="aprs-emergency-severity">-</dd>
+                    </div>
+                    <div class="aprs-emergency-row" id="aprs-emergency-areas-row" hidden>
+                        <dt>{{ t("Area codes") }}</dt>
+                        <dd id="aprs-emergency-areas">-</dd>
                     </div>
                 </dl>
                 <div class="aprs-emergency-map-wrap">
