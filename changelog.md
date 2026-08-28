@@ -1,9 +1,11 @@
 # Changelog
 
-## 1.12.2.dev - 28.08.2026
+## 1.12.3.dev - 28.08.2026
 - `APRS-IS / rygorystyczna świeżość`: TX APRS-IS działa teraz fail-closed przy przeciążeniu lub słabym połączeniu. Ramki starsze niż 5 sekund są odrzucane bezpośrednio przed zapisem do transportu, wspólna kolejka routingu jest ograniczona do 256 ramek, a pełna kolejka odrzuca nowe wejście zamiast gromadzić nieograniczony backlog.
 - `APRS-IS / TCP anti-burst`: połączenia TCP w systemie Linux używają 3-sekundowego `TCP_USER_TIMEOUT` i agresywnego keepalive. Zajęty bufor transportu blokuje następną ramkę i przerywa połączenie, dane pozostałe po `drain()` oznaczają błąd zapisu, a rozłączenie używa natychmiastowego abortu zamiast łagodnego opróżniania socketu.
-- `Testy`: dodano regresje dla odrzucania starych ramek, ograniczonej kolejki fail-closed oraz przerwania transportu bez dopisywania kolejnej ramki APRS-IS.
+- `Interfejsy / RX silence`: istniejący `RX Silence Reconnect Timeout (s)` obejmuje teraz także natywne połączenia KISS TCP. Timeout jest liczony od dowolnych odebranych bajtów; po jego przekroczeniu socket jest zamykany, a istniejąca pętla zestawia połączenie ponownie. Wartość `0` nadal wyłącza watchdog. Połączenie TCP lokalnego brokera serialowego nie uruchamia drugiego watchdoga — serial nadal kontroluje wyłącznie jeden wspólny mechanizm na fizycznym porcie.
+- `Interfejsy / GUI`: to samo pole timeoutu RX jest dostępne w formularzach SERIALL i TCP bez zmian konfiguracji ani bazy danych.
+- `Testy`: dodano regresje dla odrzucania starych ramek APRS-IS, ograniczonej kolejki fail-closed, przerwania transportu oraz timeoutu ciszy natywnego KISS TCP resetowanego przez dowolne odebrane bajty.
 
 ## 1.12 - 27.08.2026
 - `Wydanie stabilne`: udoskonalono mapę i ślady stacji, dodając rozsuwanie nakładających się markerów oraz natychmiastową aktualizację ostatniej ramki. Przebudowano ocenę warunków pasma i jej diagnostykę, rozdzielono grupy RF i APRS-IS, uproszczono zarządzanie interfejsami i pomocą oraz doprecyzowano transmisję APRS-IS w trybie best effort bez buforowania i ponawiania ramek.

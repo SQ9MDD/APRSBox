@@ -1,9 +1,11 @@
 # Changelog
 
-## 1.12.2.dev - 2026-08-28
+## 1.12.3.dev - 2026-08-28
 - `APRS-IS / strict freshness`: APRS-IS TX now fails closed under congestion or degraded connectivity. Frames older than 5 seconds are dropped immediately before the transport write, the shared routing queue is bounded to 256 frames, and a full queue drops new input instead of accumulating an unbounded backlog.
 - `APRS-IS / TCP anti-burst`: Linux TCP connections now use a 3-second `TCP_USER_TIMEOUT` with aggressive keepalive settings. A non-empty asyncio transport buffer blocks the next frame and aborts the connection, a buffer remaining after `drain()` fails the write, and disconnects use an immediate transport abort so socket closure cannot deliberately flush retained bytes after connectivity returns.
-- `Tests`: added regressions for stale-frame rejection, bounded queue fail-closed behavior, and transport-buffer abort without appending another APRS-IS frame.
+- `Interfaces / RX silence`: the existing `RX Silence Reconnect Timeout (s)` now also covers native KISS TCP connections. The timeout is measured from any received bytes; when exceeded, the socket is closed and the existing loop reconnects it. `0` still disables the watchdog. The serial broker's local TCP connection does not start a second watchdog, so serial retains one shared mechanism on the physical port.
+- `Interfaces / GUI`: the same RX timeout field is available for SERIALL and TCP without configuration or database changes.
+- `Tests`: added regressions for APRS-IS stale-frame rejection, bounded queue fail-closed behavior, transport abort, and native KISS TCP silence reset by any received bytes.
 
 ## 1.12 - 2026-08-27
 - `Stable release`: improved the station map and tracks with overlapping-marker spreading and immediate latest-frame updates. Reworked band-condition assessment and diagnostics, separated RF and APRS-IS groups, streamlined interface and help handling, and clarified APRS-IS best-effort transmission without frame buffering or retries.

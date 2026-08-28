@@ -17,7 +17,7 @@ from app.services.messages import process_incoming_tnc2_message
 from app.services.notifications import queue_radar_notifications
 from app.services.outbound import build_object_tnc2, persist_outbound_frame
 from app.services.radio_activity import record_traffic_device_station_observation
-from app.services.serial_broker import SerialKissTcpBroker
+from app.services.serial_broker import RxSilenceReconnectWatchdog, SerialKissTcpBroker
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
 from app.services.traffic_source import APRSIS_SOURCE_KIND, RF_SOURCE_KIND, normalize_source_kind, should_collect_statistics
 
@@ -90,6 +90,14 @@ def _normalize_serial_rx_silence_reconnect_seconds(value: Any) -> int:
     if timeout_seconds not in SERIAL_RX_SILENCE_RECONNECT_ALLOWED_SECONDS:
         return SERIAL_RX_SILENCE_RECONNECT_DEFAULT_SECONDS
     return timeout_seconds
+
+
+def _kiss_tcp_rx_silence_reconnect_seconds(modem: dict[str, Any]) -> int:
+    if _normalize_modem_type(modem.get("modem_type")) != "TCP":
+        return 0
+    return _normalize_serial_rx_silence_reconnect_seconds(
+        modem.get("serial_rx_silence_reconnect_seconds")
+    )
 
 
 def _decode_ax25_address_chunk(chunk: bytes) -> tuple[str, bool, bool] | None:
@@ -1438,7 +1446,13 @@ class _TrafficModemRuntime:
         log_event("INFO", "traffic", connect_message)
 
         try:
-            await self._consume_connection(reader, modem, host, port)
+            await self._consume_connection(
+                reader,
+                modem,
+                host,
+                port,
+                rx_silence_reconnect_seconds=_kiss_tcp_rx_silence_reconnect_seconds(modem),
+            )
         finally:
             if self._tnc_writer is writer:
                 self._tnc_writer = None
@@ -1455,7 +1469,10 @@ class _TrafficModemRuntime:
         modem: dict[str, Any],
         host: str,
         port: int,
+        *,
+        rx_silence_reconnect_seconds: float = 0,
     ) -> None:
+        silence_watchdog = RxSilenceReconnectWatchdog(rx_silence_reconnect_seconds)
         while not self._stop_event.is_set():
             current_modem = self._load_active_modem()
             if current_modem != modem:
@@ -1469,8 +1486,20 @@ class _TrafficModemRuntime:
                 return
 
             try:
-                chunk = await asyncio.wait_for(reader.read(1024), timeout=5.0)
+                chunk = await asyncio.wait_for(
+                    reader.read(1024),
+                    timeout=silence_watchdog.read_timeout(5.0),
+                )
             except TimeoutError:
+                if silence_watchdog.expired():
+                    message = (
+                        f"TCP RX silence timeout for {modem.get('name') or modem.get('id') or 'unknown'} "
+                        f"at {host}:{port}: no bytes for {rx_silence_reconnect_seconds:g}s; reconnecting."
+                    )
+                    self._clear_kiss_buffers()
+                    self._set_state(status="error", detail=message, modem=modem, error=message)
+                    log_event("WARNING", "traffic", message)
+                    return
                 continue
             except OSError as exc:
                 message = f"Read from TCP TNC {host}:{port} failed: {exc}"
@@ -1487,6 +1516,7 @@ class _TrafficModemRuntime:
                 await self._sleep(self._reconnect_delay)
                 return
 
+            silence_watchdog.record_rx()
             await self._broadcast_proxy_chunk(chunk)
             self._consume_kiss_chunk(chunk)
 

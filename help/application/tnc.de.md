@@ -30,7 +30,7 @@ Für APRSIS ist `APRS-IS-Empfangsfilter` der APRS-IS-Serverfilter. Neue Schnitts
 - `Enabled` aktiviert ein physisches Interface im APRSBox-Runtime. Bei APRS-IS aktiviert `APRS-IS-Verbindung aktivieren` die gemeinsame Verbindung für Empfang und Senden; Flows mit dem Ziel `TX APRS-IS` bestimmen weiterhin, welche Frames gesendet werden dürfen.
 - `Block TX on this interface` erlaubt Empfang, blockiert aber Outbound-Sendungen.
 - `TX Min Gap (s)` setzt die minimale Pause zwischen Sendungen auf diesem TNC. Erlaubt sind `0.2` bis `1.2` Sekunden.
-- `RX Silence Reconnect Timeout (s)` gilt für serielle Interfaces. Nach längerer RX-Stille kann der serielle Broker einen Reconnect erzwingen. `0` deaktiviert diesen Watchdog.
+- `RX Silence Reconnect Timeout (s)` gilt für SERIALL- und native KISS-TCP-Interfaces. Bleiben empfangene Bytes länger als dieser Wert aus, wird die Verbindung neu aufgebaut. Für Serial arbeitet nur der Watchdog des physischen Ports; die lokale TCP-Verbindung des Brokers startet keinen zweiten. `0` deaktiviert den Watchdog.
 
 `Baud Rate` wird nur für `SERIALL` verwendet. Für APRSIS werden die nur für physische TNCs relevanten Felder ausgeblendet: serielle Einstellungen, RF-TX-Sperre/Pacing und LAN-Proxy. Das Senden zu APRS-IS erfordert sowohl eine aktivierte Verbindung als auch einen passenden `Packet Routing`-Flow.
 

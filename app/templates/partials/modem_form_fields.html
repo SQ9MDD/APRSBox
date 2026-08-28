@@ -4,6 +4,16 @@
 {% set tnc_device_path = stored_device_path if selected_modem_type in ['SERIALL', 'TCP'] else '' %}
 {% set openwebrx_device_path = stored_device_path if selected_modem_type == 'OPENWEBRX_MQTT' else '' %}
 {% set aprsis_receive_filter = stored_device_path if selected_modem_type == 'APRSIS' else 'm/20' %}
+{% macro rx_silence_reconnect_field() -%}
+<label>
+    <span>{{ t("RX Silence Reconnect Timeout (s)") }}</span>
+    <select name="serial_rx_silence_reconnect_seconds" required>
+        {% for option in section.fields|selectattr("name", "equalto", "serial_rx_silence_reconnect_seconds")|map(attribute="options")|first %}
+        <option value="{{ option.value }}" {% if (modem_values.get('serial_rx_silence_reconnect_seconds', 150)|string) == (option.value|string) %}selected{% endif %}>{{ t(option.label) }}</option>
+        {% endfor %}
+    </select>
+</label>
+{%- endmacro %}
 <label>
     <span>{{ t("Name") }}</span>
     <input type="text" name="name" value="{{ modem_values.get('name') or '' }}" required>
@@ -43,14 +53,7 @@
                 <span>{{ t("Baud Rate") }}</span>
                 <input type="number" name="baud_rate" value="{{ modem_values.get('baud_rate') or '' }}" required>
             </label>
-            <label>
-                <span>{{ t("RX Silence Reconnect Timeout (s)") }}</span>
-                <select name="serial_rx_silence_reconnect_seconds" required>
-                    {% for option in section.fields|selectattr("name", "equalto", "serial_rx_silence_reconnect_seconds")|map(attribute="options")|first %}
-                    <option value="{{ option.value }}" {% if (modem_values.get('serial_rx_silence_reconnect_seconds', 150)|string) == (option.value|string) %}selected{% endif %}>{{ t(option.label) }}</option>
-                    {% endfor %}
-                </select>
-            </label>
+            {{ rx_silence_reconnect_field() }}
         </div>
         <div class="modem-capability-block">
             <label class="checkbox-row">
@@ -103,6 +106,7 @@
                     <option value="70cm" {% if modem_values.get('band') == '70cm' %}selected{% endif %}>{{ t("70cm — assess propagation") }}</option>
                 </select>
             </label>
+            {{ rx_silence_reconnect_field() }}
         </div>
         <div class="modem-capability-block">
             <label class="checkbox-row">

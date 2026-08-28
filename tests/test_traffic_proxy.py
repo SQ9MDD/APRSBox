@@ -7,12 +7,17 @@ import socket
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from app.db import execute, fetch_one, init_db
 from app.services.outbound import build_tnc2_kiss_frame
 from app.services.content import get_section_row, safe_create_section_row
 from app.services.map_service import get_map_station_payload
-from app.services.traffic import TrafficMonitorService
+from app.services.traffic import (
+    TrafficMonitorService,
+    _TrafficModemRuntime,
+    _kiss_tcp_rx_silence_reconnect_seconds,
+)
 
 
 @contextlib.contextmanager
@@ -101,6 +106,110 @@ async def wait_until(predicate, *, timeout: float = 2.0) -> None:
             return
         await asyncio.sleep(0.05)
     raise AssertionError("Condition was not met before timeout.")
+
+
+class NativeTcpRxSilenceTests(unittest.IsolatedAsyncioTestCase):
+    def test_timeout_setting_applies_only_to_native_kiss_tcp(self) -> None:
+        self.assertEqual(
+            _kiss_tcp_rx_silence_reconnect_seconds(
+                {"modem_type": "TCP", "serial_rx_silence_reconnect_seconds": 30}
+            ),
+            30,
+        )
+        self.assertEqual(
+            _kiss_tcp_rx_silence_reconnect_seconds(
+                {"modem_type": "TCP", "serial_rx_silence_reconnect_seconds": 0}
+            ),
+            0,
+        )
+        self.assertEqual(
+            _kiss_tcp_rx_silence_reconnect_seconds(
+                {"modem_type": "SERIALL", "serial_rx_silence_reconnect_seconds": 30}
+            ),
+            0,
+        )
+
+    async def test_native_tcp_silence_closes_socket_for_existing_reconnect_loop(self) -> None:
+        class SilentReader:
+            async def read(self, _max_bytes: int) -> bytes:
+                await asyncio.Event().wait()
+                return b""
+
+        class RecordingWriter:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+            async def wait_closed(self) -> None:
+                return None
+
+        modem = {
+            "id": 1,
+            "name": "Native TCP",
+            "modem_type": "TCP",
+            "serial_rx_silence_reconnect_seconds": 30,
+        }
+        runtime = _TrafficModemRuntime(reconnect_delay=0.1)
+        writer = RecordingWriter()
+        runtime._load_active_modem = lambda: modem  # type: ignore[method-assign]
+
+        with (
+            patch("app.services.traffic.asyncio.open_connection", new=AsyncMock(return_value=(SilentReader(), writer))),
+            patch("app.services.traffic._kiss_tcp_rx_silence_reconnect_seconds", return_value=0.05),
+            patch.object(runtime, "_sync_proxy_server", new=AsyncMock(return_value=None)),
+            patch.object(runtime, "_stop_proxy_server", new=AsyncMock()),
+            patch.object(runtime, "_set_state"),
+            patch("app.services.traffic.log_event") as log_mock,
+        ):
+            await asyncio.wait_for(
+                runtime._run_kiss_tcp_endpoint(
+                    modem=modem,
+                    host="127.0.0.1",
+                    port=8001,
+                    connect_label="native test TNC",
+                ),
+                timeout=1.0,
+            )
+
+        self.assertTrue(writer.closed)
+        self.assertTrue(
+            any("TCP RX silence timeout" in str(call.args[2]) for call in log_mock.call_args_list)
+        )
+
+    async def test_any_received_tcp_bytes_reset_silence_timeout(self) -> None:
+        class InvalidBytesReader:
+            def __init__(self) -> None:
+                self.read_count = 0
+
+            async def read(self, _max_bytes: int) -> bytes:
+                self.read_count += 1
+                if self.read_count <= 3:
+                    await asyncio.sleep(0.03)
+                    return b"\x01"
+                return b""
+
+        modem = {"id": 1, "name": "Native TCP", "modem_type": "TCP"}
+        runtime = _TrafficModemRuntime(reconnect_delay=0.1)
+        runtime._load_active_modem = lambda: modem  # type: ignore[method-assign]
+
+        with (
+            patch.object(runtime, "_set_state"),
+            patch.object(runtime, "_sleep", new=AsyncMock()),
+            patch("app.services.traffic.log_event") as log_mock,
+        ):
+            await runtime._consume_connection(
+                InvalidBytesReader(),  # type: ignore[arg-type]
+                modem,
+                "127.0.0.1",
+                8001,
+                rx_silence_reconnect_seconds=0.05,
+            )
+
+        self.assertFalse(
+            any("TCP RX silence timeout" in str(call.args[2]) for call in log_mock.call_args_list)
+        )
 
 
 class TrafficProxyValidationTests(unittest.TestCase):

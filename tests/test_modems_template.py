@@ -51,6 +51,11 @@ class ModemsTemplateTests(unittest.TestCase):
         self.assertIn(".form-grid > [hidden]", css_source)
         self.assertIn("display: none !important;", css_source)
 
+    def test_rx_silence_timeout_is_shared_by_serial_and_native_tcp_panels(self) -> None:
+        fields_source = Path("app/templates/partials/modem_form_fields.html").read_text(encoding="utf-8")
+        self.assertIn("{% macro rx_silence_reconnect_field()", fields_source)
+        self.assertEqual(fields_source.count("{{ rx_silence_reconnect_field() }}"), 2)
+
     def test_tnc_help_does_not_describe_aprsis_as_receive_only(self) -> None:
         receive_only_claims = {
             "pl": "APRS-IS można włączyć jako interfejs tylko do odbioru",

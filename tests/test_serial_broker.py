@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from app.db import init_db
 from app.services import serial_broker as serial_broker_module
-from app.services.serial_broker import SerialKissTcpBroker
+from app.services.serial_broker import RxSilenceReconnectWatchdog, SerialKissTcpBroker
 
 
 @contextlib.contextmanager
@@ -60,6 +60,23 @@ def read_master_chunk(master_fd: int, *, timeout: float = 1.0) -> bytes:
 
 
 class SerialBrokerTests(unittest.IsolatedAsyncioTestCase):
+    def test_shared_rx_silence_watchdog_resets_on_any_bytes_and_supports_disabled(self) -> None:
+        now = [100.0]
+        watchdog = RxSilenceReconnectWatchdog(30, clock=lambda: now[0])
+
+        now[0] = 129.0
+        self.assertFalse(watchdog.expired())
+        watchdog.record_rx()
+        now[0] = 158.0
+        self.assertFalse(watchdog.expired())
+        now[0] = 159.0
+        self.assertTrue(watchdog.expired())
+
+        disabled = RxSilenceReconnectWatchdog(0, clock=lambda: now[0])
+        now[0] = 10_000.0
+        self.assertFalse(disabled.expired())
+        self.assertEqual(disabled.read_timeout(5.0), 5.0)
+
     async def test_forwards_tcp_to_serial_without_modification(self) -> None:
         with temporary_database():
             with pseudo_serial_device() as (master_fd, slave_path):
