@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.8.dev - 2026-08-28
+- `GUI / color palettes`: added 29 varied palettes with light and dark variants, including pastel, terrain, retro, and technical sets. Palette selection now uses a compact, scrollable swatch grid without changing how the setting is stored.
+
 ## 1.12.7.dev - 2026-08-28
 - `Objects and items / list`: removed dot artifacts displayed next to symbols and status icons. Narrow icon cells now use fitted padding and no longer apply the ellipsis intended for truncated text; header and other long-value truncation remains unchanged.
 

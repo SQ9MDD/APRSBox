@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.8.dev - 2026-08-28
+- `GUI / paletas de colores`: se añadieron 29 paletas variadas con versiones clara y oscura, incluidos conjuntos pastel, de terreno, retro y técnicos. La selección utiliza ahora una cuadrícula compacta y desplazable de muestras sin cambiar la forma de guardar el ajuste.
+
 ## 1.12.7.dev - 2026-08-28
 - `Objetos e ítems / lista`: se eliminaron los artefactos en forma de punto mostrados junto a los símbolos y los iconos de estado. Las celdas estrechas de iconos ahora usan un relleno ajustado y ya no aplican los puntos suspensivos destinados a recortar texto; el recorte de encabezados y otros valores largos permanece sin cambios.
 
