@@ -6175,6 +6175,12 @@ select:focus-visible,
     align-items: start;
 }
 
+.settings-primary-side {
+    display: grid;
+    gap: var(--space-4);
+    min-width: 0;
+}
+
 .settings-panel-help-button {
     flex: 0 0 auto;
     margin-left: auto;

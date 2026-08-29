@@ -189,6 +189,7 @@
     </div>
 </section>
 
+<div class="settings-primary-side">
 <section class="panel" id="settings-panel-update" data-settings-panel="update">
     <div class="panel-body">
         <div class="panel-header">
@@ -267,6 +268,60 @@
         <div id="settings-version-result"></div>
     </div>
 </section>
+
+<section class="panel" id="settings-panel-device-identification" data-settings-panel="device-identification">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("APRS device identification") }}</h2>
+            </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_device_identification"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('APRS device identification') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
+        </div>
+        <dl class="details-grid">
+            <dt>{{ t("Status") }}</dt>
+            <dd>{{ t(aprs_device_identification_status.status_label) }}</dd>
+            <dt>{{ t("Active source") }}</dt>
+            <dd>{{ t(aprs_device_identification_status.active_source_label) }}</dd>
+            <dt>{{ t("Generation time") }}</dt>
+            <dd><code>{{ format_datetime(aprs_device_identification_status.generation_time, use_utc=True) or t("Unknown") }}</code></dd>
+            <dt>{{ t("Last successful update") }}</dt>
+            <dd><code>{{ format_datetime(aprs_device_identification_status.last_success_at, use_utc=True) or t("Never") }}</code></dd>
+            <dt>{{ t("Local cache") }}</dt>
+            <dd>{{ t("Available") if aprs_device_identification_status.cache_exists else t("Missing") }}</dd>
+            {% if aprs_device_identification_status.cache_updated_at %}
+            <dt>{{ t("Local cache updated") }}</dt>
+            <dd><code>{{ format_datetime(aprs_device_identification_status.cache_updated_at, use_utc=True) }}</code></dd>
+            {% endif %}
+            {% if aprs_device_identification_status.last_error %}
+            <dt>{{ t("Last update error") }}</dt>
+            <dd>{{ aprs_device_identification_status.last_error }}</dd>
+            {% endif %}
+        </dl>
+        {% if can_manage_updates %}
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/update-aprs-device-identification"
+            class="form-stack"
+            data-settings-action-id="update-aprs-device-identification"
+            data-auto-update-due="{{ 'true' if aprs_device_identification_status.auto_update_due else 'false' }}"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-aprs-device-identification', message: {{ t('Starting update, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
+        >
+            <button type="submit" class="button">{{ t("Update now") }}</button>
+        </form>
+        {% else %}
+        <p class="muted">{{ t("Your role can view APRS device identification status but cannot start updates.") }}</p>
+        {% endif %}
+    </div>
+</section>
+</div>
 </div>
 
 <section class="panel" id="settings-panel-https" data-settings-panel="https">
@@ -631,59 +686,6 @@
             <p class="muted">{{ t("Your role can view map source configuration but cannot change it.") }}</p>
             {% endif %}
         </div>
-    </div>
-</section>
-
-<section class="panel" id="settings-panel-device-identification" data-settings-panel="device-identification">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>{{ t("APRS device identification") }}</h2>
-            </div>
-            <button
-                class="help-icon-button settings-panel-help-button"
-                type="button"
-                data-help-page="application/settings_device_identification"
-                title="{{ t('Help') }}"
-                aria-label="{{ t('Help') }} — {{ t('APRS device identification') }}"
-            >
-                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
-            </button>
-        </div>
-        <dl class="details-grid">
-            <dt>{{ t("Status") }}</dt>
-            <dd>{{ t(aprs_device_identification_status.status_label) }}</dd>
-            <dt>{{ t("Active source") }}</dt>
-            <dd>{{ t(aprs_device_identification_status.active_source_label) }}</dd>
-            <dt>{{ t("Generation time") }}</dt>
-            <dd><code>{{ format_datetime(aprs_device_identification_status.generation_time, use_utc=True) or t("Unknown") }}</code></dd>
-            <dt>{{ t("Last successful update") }}</dt>
-            <dd><code>{{ format_datetime(aprs_device_identification_status.last_success_at, use_utc=True) or t("Never") }}</code></dd>
-            <dt>{{ t("Local cache") }}</dt>
-            <dd>{{ t("Available") if aprs_device_identification_status.cache_exists else t("Missing") }}</dd>
-            {% if aprs_device_identification_status.cache_updated_at %}
-            <dt>{{ t("Local cache updated") }}</dt>
-            <dd><code>{{ format_datetime(aprs_device_identification_status.cache_updated_at, use_utc=True) }}</code></dd>
-            {% endif %}
-            {% if aprs_device_identification_status.last_error %}
-            <dt>{{ t("Last update error") }}</dt>
-            <dd>{{ aprs_device_identification_status.last_error }}</dd>
-            {% endif %}
-        </dl>
-        {% if can_manage_updates %}
-        <form
-            method="post"
-            action="{{ request.scope.root_path }}/settings/update-aprs-device-identification"
-            class="form-stack"
-            data-settings-action-id="update-aprs-device-identification"
-            data-auto-update-due="{{ 'true' if aprs_device_identification_status.auto_update_due else 'false' }}"
-            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-aprs-device-identification', message: {{ t('Starting update, please wait...')|tojson|forceescape }}, busyLabel: {{ t('Updating...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 180000, minSpinnerMs: 500, reloadOnSuccess: true});"
-        >
-            <button type="submit" class="button">{{ t("Update now") }}</button>
-        </form>
-        {% else %}
-        <p class="muted">{{ t("Your role can view APRS device identification status but cannot start updates.") }}</p>
-        {% endif %}
     </div>
 </section>
 
