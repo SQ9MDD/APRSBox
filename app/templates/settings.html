@@ -217,27 +217,32 @@
             data-settings-action-group="update-controls"
             onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'update-channel', group: 'update-controls', message: {{ t('Saving update channel...')|tojson|forceescape }}, busyLabel: {{ t('Saving...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 45000, minSpinnerMs: 500, reloadOnSuccess: true});"
         >
-            <label>
-                <span>{{ t("Update channel") }}</span>
-                <select name="update_channel">
-                    {% for option in update_channel_options %}
-                    <option value="{{ option.value }}" {% if update_channel_selected == option.value %}selected{% endif %}>{{ option.label }}</option>
-                    {% endfor %}
-                </select>
-            </label>
+            <div class="settings-update-channel-row full">
+                <label>
+                    <span>{{ t("Update channel") }}</span>
+                    <select name="update_channel">
+                        {% for option in update_channel_options %}
+                        <option value="{{ option.value }}" {% if update_channel_selected == option.value %}selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                {% if update_channel_is_unstable %}
+                <div class="alert settings-update-channel-warning">{{ t("Warning: selected update channel may contain unstable changes.") }}</div>
+                {% endif %}
+            </div>
             <div class="form-actions">
                 <button type="submit" class="button button-secondary">{{ t("Save update channel") }}</button>
             </div>
         </form>
         {% else %}
         <p class="muted">{{ t("Your role can view GUI version information but cannot start updates.") }}</p>
+        {% if update_channel_is_unstable %}
+        <div class="alert">{{ t("Warning: selected update channel may contain unstable changes.") }}</div>
+        {% endif %}
         {% endif %}
         {% if not is_container_mode and update_channels_fetch_error %}
         <div class="alert">{{ t("Update channel list could not be refreshed. Using saved channel.") }}</div>
         <p class="muted"><code>{{ update_channels_fetch_error }}</code></p>
-        {% endif %}
-        {% if not is_container_mode and update_channel_is_unstable %}
-        <div class="alert">{{ t("Warning: selected update channel may contain unstable changes.") }}</div>
         {% endif %}
         <div class="settings-update-actions">
             <form
@@ -294,12 +299,6 @@
             <dd><code>{{ format_datetime(aprs_device_identification_status.generation_time, use_utc=True) or t("Unknown") }}</code></dd>
             <dt>{{ t("Last successful update") }}</dt>
             <dd><code>{{ format_datetime(aprs_device_identification_status.last_success_at, use_utc=True) or t("Never") }}</code></dd>
-            <dt>{{ t("Local cache") }}</dt>
-            <dd>{{ t("Available") if aprs_device_identification_status.cache_exists else t("Missing") }}</dd>
-            {% if aprs_device_identification_status.cache_updated_at %}
-            <dt>{{ t("Local cache updated") }}</dt>
-            <dd><code>{{ format_datetime(aprs_device_identification_status.cache_updated_at, use_utc=True) }}</code></dd>
-            {% endif %}
             {% if aprs_device_identification_status.last_error %}
             <dt>{{ t("Last update error") }}</dt>
             <dd>{{ aprs_device_identification_status.last_error }}</dd>
@@ -318,6 +317,54 @@
         </form>
         {% else %}
         <p class="muted">{{ t("Your role can view APRS device identification status but cannot start updates.") }}</p>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel" id="settings-panel-configuration-backup" data-settings-panel="configuration-backup">
+    <div class="panel-body">
+        <div class="panel-header">
+            <div class="panel-header-copy">
+                <h2>{{ t("Configuration backup") }}</h2>
+            </div>
+            <button
+                class="help-icon-button settings-panel-help-button"
+                type="button"
+                data-help-page="application/settings_configuration_backup"
+                title="{{ t('Help') }}"
+                aria-label="{{ t('Help') }} — {{ t('Configuration backup') }}"
+            >
+                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+            </button>
+        </div>
+        {% if can_manage_config_backup %}
+        <div class="settings-update-actions">
+            <a href="{{ request.scope.root_path }}/settings/config/export" class="button button-secondary">{{ t("Export configuration backup") }}</a>
+        </div>
+        <form
+            method="post"
+            action="{{ request.scope.root_path }}/settings/config/import"
+            enctype="multipart/form-data"
+            class="form-grid"
+            data-settings-action-id="import-config-backup"
+            data-settings-confirm="{{ t('Import configuration backup now? Current settings will be replaced.') }}"
+            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'import-config-backup', message: {{ t('Importing configuration backup...')|tojson|forceescape }}, busyLabel: {{ t('Importing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500, reloadOnSuccess: true, errorAutoHideMs: 12000});"
+        >
+            <label class="full">
+                <span>{{ t("Backup file") }}</span>
+                <input type="file" name="backup_file" accept=".json,application/json" required>
+            </label>
+            {% if is_container_mode %}
+            <p class="muted full">{{ t("Import rewrites current configuration tables. Keep an exported file before restoring another snapshot. After import, restart or recreate APRSBox container using Docker commands.") }}</p>
+            {% else %}
+            <p class="muted full">{{ t("Import rewrites current configuration tables. Keep an exported file before restoring another snapshot. After import, restart services from Danger zone.") }}</p>
+            {% endif %}
+            <div class="form-actions">
+                <button type="submit" class="button">{{ t("Import configuration backup") }}</button>
+            </div>
+        </form>
+        {% else %}
+        <p class="muted">{{ t("Your role can view backup information but cannot run export/import actions.") }}</p>
         {% endif %}
     </div>
 </section>
@@ -686,54 +733,6 @@
             <p class="muted">{{ t("Your role can view map source configuration but cannot change it.") }}</p>
             {% endif %}
         </div>
-    </div>
-</section>
-
-<section class="panel" id="settings-panel-configuration-backup" data-settings-panel="configuration-backup">
-    <div class="panel-body">
-        <div class="panel-header">
-            <div class="panel-header-copy">
-                <h2>{{ t("Configuration backup") }}</h2>
-            </div>
-            <button
-                class="help-icon-button settings-panel-help-button"
-                type="button"
-                data-help-page="application/settings_configuration_backup"
-                title="{{ t('Help') }}"
-                aria-label="{{ t('Help') }} — {{ t('Configuration backup') }}"
-            >
-                <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
-            </button>
-        </div>
-        {% if can_manage_config_backup %}
-        <div class="settings-update-actions">
-            <a href="{{ request.scope.root_path }}/settings/config/export" class="button button-secondary">{{ t("Export configuration backup") }}</a>
-        </div>
-        <form
-            method="post"
-            action="{{ request.scope.root_path }}/settings/config/import"
-            enctype="multipart/form-data"
-            class="form-grid"
-            data-settings-action-id="import-config-backup"
-            data-settings-confirm="{{ t('Import configuration backup now? Current settings will be replaced.') }}"
-            onsubmit="return aprsboxSubmitSettingsAction(this, {actionId: 'import-config-backup', message: {{ t('Importing configuration backup...')|tojson|forceescape }}, busyLabel: {{ t('Importing...')|tojson|forceescape }}, mode: 'json', lockTimeoutMs: 120000, minSpinnerMs: 500, reloadOnSuccess: true, errorAutoHideMs: 12000});"
-        >
-            <label class="full">
-                <span>{{ t("Backup file") }}</span>
-                <input type="file" name="backup_file" accept=".json,application/json" required>
-            </label>
-            {% if is_container_mode %}
-            <p class="muted full">{{ t("Import rewrites current configuration tables. Keep an exported file before restoring another snapshot. After import, restart or recreate APRSBox container using Docker commands.") }}</p>
-            {% else %}
-            <p class="muted full">{{ t("Import rewrites current configuration tables. Keep an exported file before restoring another snapshot. After import, restart services from Danger zone.") }}</p>
-            {% endif %}
-            <div class="form-actions">
-                <button type="submit" class="button">{{ t("Import configuration backup") }}</button>
-            </div>
-        </form>
-        {% else %}
-        <p class="muted">{{ t("Your role can view backup information but cannot run export/import actions.") }}</p>
-        {% endif %}
     </div>
 </section>
 

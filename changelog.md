@@ -2,6 +2,7 @@
 
 ## 1.12.8.dev - 28.08.2026
 - `GUI / palety kolorów`: dodano 29 zróżnicowanych palet z wariantami jasnym i ciemnym, w tym zestawy pastelowe, terenowe, retro i techniczne. Wybór palety przeniesiono do zwartej, przewijanej siatki próbek bez zmiany sposobu zapisu ustawienia.
+- `Ustawienia / układ`: po prawej stronie Globalnych ustawień utworzono zwartą kolumnę z panelami Aktualizacja aplikacji, Identyfikacja urządzenia APRS i Kopia konfiguracji. Z panelu identyfikacji usunięto powtórzone informacje o dostępności i czasie aktualizacji lokalnego cache, a skrócone ostrzeżenie o niestabilnym kanale przeniesiono obok listy wyboru.
 
 ## 1.12.7.dev - 28.08.2026
 - `Obiekty i itemy / lista`: usunięto kropki-artefakty wyświetlane obok symboli i ikon statusu. Wąskie komórki ikon mają teraz dopasowany padding i nie stosują wielokropka przeznaczonego do skracania tekstu; skracanie nagłówków i pozostałych długich wartości pozostaje bez zmian.

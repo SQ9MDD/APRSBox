@@ -6304,6 +6304,20 @@ select:focus-visible,
     flex-wrap: wrap;
 }
 
+.settings-update-channel-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-3);
+    align-items: end;
+}
+
+.settings-update-channel-warning {
+    display: flex;
+    align-items: center;
+    min-height: var(--control-height);
+    white-space: nowrap;
+}
+
 .settings-map-sources-grid {
     display: grid;
     grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 1fr);
@@ -9164,6 +9178,14 @@ button.message-delivery-badge {
     .digi-flow-endpoints,
     .digi-flow-builder {
         grid-template-columns: 1fr;
+    }
+
+    .settings-update-channel-row {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-update-channel-warning {
+        white-space: normal;
     }
 
     .dashboard-hero {

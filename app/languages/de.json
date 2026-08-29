@@ -397,7 +397,7 @@
   "Update channel": "Kanal aktualisieren",
   "Save update channel": "Update-Kanal speichern",
   "Update channel list could not be refreshed. Using saved channel.": "Die Update-Kanalliste konnte nicht aktualisiert werden. Gespeicherten Kanal verwenden.",
-  "Warning: selected update channel may contain unstable changes.": "Warnung: Der ausgewählte Update-Kanal kann instabile Änderungen enthalten.",
+  "Warning: selected update channel may contain unstable changes.": "Kanal kann instabil sein.",
   "Services are restarted only after update preparation. The GUI may temporarily lose connection during restart.": "Die Dienste werden erst nach der Update-Vorbereitung neu gestartet. Der GUI kann während des Neustarts vorübergehend die Verbindung verlieren.",
   "Update channel saved: {channel}": "Update-Kanal gespeichert: {channel}",
   "Update channel saved.": "Kanal aktualisieren gespeichert.",
