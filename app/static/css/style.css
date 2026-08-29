@@ -658,11 +658,11 @@
 ) {
     --bg: var(--palette-bg);
     --bg-layer: var(--palette-bg-layer);
-    --sidebar: color-mix(in srgb, var(--palette-panel) 92%, transparent);
-    --panel: color-mix(in srgb, var(--palette-panel) 97%, transparent);
+    --sidebar: color-mix(in srgb, var(--palette-panel) 97%, transparent);
+    --panel: color-mix(in srgb, var(--palette-panel) 98%, transparent);
     --panel-alt: var(--palette-surface);
     --panel-soft: color-mix(in srgb, var(--palette-surface) 74%, var(--palette-panel));
-    --panel-emphasis: color-mix(in srgb, var(--palette-surface) 88%, var(--palette-secondary) 12%);
+    --panel-emphasis: color-mix(in srgb, var(--palette-surface) 88%, var(--palette-border) 12%);
     --border: var(--palette-border);
     --text: var(--palette-text);
     --muted: var(--palette-muted);
@@ -675,15 +675,15 @@
     --accent-2: var(--palette-accent-2);
     --accent-soft: color-mix(in srgb, var(--palette-accent) 14%, transparent);
     --focus-ring: color-mix(in srgb, var(--palette-accent) 23%, transparent);
-    --hover-layer: color-mix(in srgb, var(--palette-secondary) 9%, transparent);
+    --hover-layer: color-mix(in srgb, var(--palette-secondary) 6%, transparent);
     --border-hover: color-mix(in srgb, var(--palette-accent) 36%, transparent);
-    --code: color-mix(in srgb, var(--palette-secondary) 8%, var(--palette-panel));
-    --page-glow: color-mix(in srgb, var(--palette-secondary) 8%, transparent);
+    --code: color-mix(in srgb, var(--palette-text) 6%, var(--palette-panel));
+    --page-glow: color-mix(in srgb, var(--palette-secondary) 2%, transparent);
     --nav-selection-bg: color-mix(in srgb, var(--palette-secondary) 14%, var(--palette-panel));
     --nav-selection-border: color-mix(in srgb, var(--palette-secondary) 44%, transparent);
-    --secondary-control-bg: color-mix(in srgb, var(--palette-secondary) 8%, var(--palette-surface));
-    --secondary-control-border: color-mix(in srgb, var(--palette-secondary) 32%, var(--palette-border));
-    --secondary-control-hover-bg: color-mix(in srgb, var(--palette-secondary) 15%, var(--palette-surface));
+    --secondary-control-bg: color-mix(in srgb, var(--palette-secondary) 4%, var(--palette-surface));
+    --secondary-control-border: color-mix(in srgb, var(--palette-secondary) 26%, var(--palette-border));
+    --secondary-control-hover-bg: color-mix(in srgb, var(--palette-secondary) 9%, var(--palette-surface));
     --notice-bg: color-mix(in srgb, var(--palette-accent-2) 11%, transparent);
     --notice-color: color-mix(in srgb, var(--palette-accent-2) 70%, var(--palette-text));
     --notice-border: color-mix(in srgb, var(--palette-accent-2) 34%, transparent);
@@ -1066,6 +1066,109 @@
     --palette-surface: #e0dddd; --palette-border: #bdb7b8; --palette-text: #363132;
     --palette-muted: #6d6568; --palette-accent: #922d51; --palette-accent-strong: #6e203c;
     --palette-secondary: #176f67; --palette-secondary-strong: #10534d; --palette-accent-2: #7f620e;
+}
+
+/* Extended palettes share a restrained neutral canvas. These three families
+   differ only by a slight temperature bias; palette identity stays in the
+   action, selection, focus and decorative role colors above. */
+:root[data-theme="dark"]:is(
+    [data-palette="pastel-mint"],
+    [data-palette="pastel-lavender"],
+    [data-palette="pastel-rose"],
+    [data-palette="lilac-dream"],
+    [data-palette="deep-purple"],
+    [data-palette="emerald-city"]
+) {
+    --palette-bg: #0f1113; --palette-bg-layer: #15181b; --palette-panel: #1d2124;
+    --palette-surface: #272c30; --palette-border: #40484e; --palette-text: #edf0f2;
+    --palette-muted: #a1a9ae;
+}
+
+:root[data-theme="light"]:is(
+    [data-palette="pastel-mint"],
+    [data-palette="pastel-lavender"],
+    [data-palette="pastel-rose"],
+    [data-palette="lilac-dream"],
+    [data-palette="deep-purple"],
+    [data-palette="emerald-city"]
+) {
+    --palette-bg: #e6e8e9; --palette-bg-layer: #f1f2f3; --palette-panel: #fbfbfa;
+    --palette-surface: #e2e5e6; --palette-border: #b8bfc3; --palette-text: #2d3337;
+    --palette-muted: #656d72;
+}
+
+:root[data-theme="dark"]:is(
+    [data-palette="pastel-sky"],
+    [data-palette="powder-blue"],
+    [data-palette="turquoise-wave"],
+    [data-palette="petrol-night"],
+    [data-palette="royal-blue"],
+    [data-palette="deep-indigo"],
+    [data-palette="electric-magenta"],
+    [data-palette="teal-horizon"],
+    [data-palette="ice-blue"],
+    [data-palette="synthwave"],
+    [data-palette="cold-gray"],
+    [data-palette="midnight-navy"]
+) {
+    --palette-bg: #0d1114; --palette-bg-layer: #13181c; --palette-panel: #1b2125;
+    --palette-surface: #252c31; --palette-border: #3e484f; --palette-text: #edf1f3;
+    --palette-muted: #9fa9af;
+}
+
+:root[data-theme="light"]:is(
+    [data-palette="pastel-sky"],
+    [data-palette="powder-blue"],
+    [data-palette="turquoise-wave"],
+    [data-palette="petrol-night"],
+    [data-palette="royal-blue"],
+    [data-palette="deep-indigo"],
+    [data-palette="electric-magenta"],
+    [data-palette="teal-horizon"],
+    [data-palette="ice-blue"],
+    [data-palette="synthwave"],
+    [data-palette="cold-gray"],
+    [data-palette="midnight-navy"]
+) {
+    --palette-bg: #e4e8ea; --palette-bg-layer: #eff2f4; --palette-panel: #fafbfc;
+    --palette-surface: #e0e5e8; --palette-border: #b5bfc5; --palette-text: #293238;
+    --palette-muted: #616d74;
+}
+
+:root[data-theme="dark"]:is(
+    [data-palette="pastel-peach"],
+    [data-palette="pastel-lemon"],
+    [data-palette="pastel-sage"],
+    [data-palette="dusty-pink"],
+    [data-palette="coral-bay"],
+    [data-palette="olive-field"],
+    [data-palette="desert-sand"],
+    [data-palette="earth-brown"],
+    [data-palette="retro-terminal"],
+    [data-palette="warm-gray"],
+    [data-palette="burgundy-wine"]
+) {
+    --palette-bg: #111110; --palette-bg-layer: #181716; --palette-panel: #211f1e;
+    --palette-surface: #2b2927; --palette-border: #46423f; --palette-text: #f0ede9;
+    --palette-muted: #aaa49d;
+}
+
+:root[data-theme="light"]:is(
+    [data-palette="pastel-peach"],
+    [data-palette="pastel-lemon"],
+    [data-palette="pastel-sage"],
+    [data-palette="dusty-pink"],
+    [data-palette="coral-bay"],
+    [data-palette="olive-field"],
+    [data-palette="desert-sand"],
+    [data-palette="earth-brown"],
+    [data-palette="retro-terminal"],
+    [data-palette="warm-gray"],
+    [data-palette="burgundy-wine"]
+) {
+    --palette-bg: #e9e7e3; --palette-bg-layer: #f3f1ed; --palette-panel: #fcfbf8;
+    --palette-surface: #e5e2dc; --palette-border: #beb8af; --palette-text: #35322e;
+    --palette-muted: #6d6860;
 }
 
 * {
