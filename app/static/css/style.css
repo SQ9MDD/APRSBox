@@ -6175,8 +6175,14 @@ select:focus-visible,
     align-items: start;
 }
 
+.settings-primary-grid > #settings-panel-global,
+.settings-primary-grid > .settings-primary-side {
+    align-self: stretch;
+}
+
 .settings-primary-side {
     display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
     gap: var(--space-4);
     min-width: 0;
 }
@@ -6316,6 +6322,10 @@ select:focus-visible,
     align-items: center;
     min-height: var(--control-height);
     white-space: nowrap;
+}
+
+.form-grid .settings-update-channel-row > .settings-update-channel-warning {
+    grid-column: auto;
 }
 
 .settings-map-sources-grid {
