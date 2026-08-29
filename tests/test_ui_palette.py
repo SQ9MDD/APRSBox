@@ -18,7 +18,24 @@ class UiPaletteTests(unittest.TestCase):
         values = [option["value"] for option in UI_PALETTE_OPTIONS]
         self.assertEqual(DEFAULT_UI_PALETTE, "green-core")
         self.assertEqual(len(values), len(set(values)))
-        self.assertGreaterEqual(len(values), 31)
+        self.assertEqual(len(values), 24)
+        self.assertEqual(
+            values[:12],
+            [
+                "green-core",
+                "red-tactic",
+                "forest-pine",
+                "nordic-blue",
+                "slate-cyan",
+                "amber-graphite",
+                "crimson-ops",
+                "violet-signal",
+                "monochrome-neutral",
+                "copper-radar",
+                "orange-workshop",
+                "pastel-mint",
+            ],
+        )
 
     def test_every_extended_palette_has_both_theme_definitions_and_a_gui_swatch(self) -> None:
         stylesheet = Path("app/static/css/style.css").read_text(encoding="utf-8")
