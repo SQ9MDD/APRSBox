@@ -3,6 +3,7 @@
 ## 1.12.8.dev - 2026-08-28
 - `GUI / Farbpaletten`: 29 abwechslungsreiche Paletten mit hellen und dunklen Varianten wurden ergänzt, darunter Pastell-, Gelände-, Retro- und Technik-Sets. Die Auswahl erfolgt jetzt über ein kompaktes, scrollbar angeordnetes Farbmuster-Raster, ohne die Speicherung der Einstellung zu ändern.
 - `Einstellungen / Layout`: Rechts neben den globalen Einstellungen fasst eine kompakte Spalte jetzt Anwendungsaktualisierung, APRS-Geräteerkennung und Konfigurationssicherung zusammen. Wiederholte Angaben zur Verfügbarkeit und zum Aktualisierungszeitpunkt des lokalen Caches wurden aus dem Erkennungspanel entfernt; der verkürzte Hinweis auf einen instabilen Kanal steht jetzt neben der Auswahlliste.
+- `Packet Routing / Leistung`: Regeleditor und Verlaufs-APIs verwenden jetzt gemeinsam eine SQLite-Verbindung, führen bei Lesezugriffen keine Alert-Wartungsschreibvorgänge aus und laden Kartenkonfiguration sowie initialen Verlauf beim Öffnen nicht mehr doppelt.
 
 ## 1.12.7.dev - 2026-08-28
 - `Objekte und Items / Liste`: Punktartefakte neben Symbolen und Statussymbolen wurden entfernt. Schmale Symbolzellen verwenden jetzt einen passenden Innenabstand und nicht mehr die für gekürzten Text vorgesehene Auslassungsmarkierung; die Kürzung von Überschriften und anderen langen Werten bleibt unverändert.

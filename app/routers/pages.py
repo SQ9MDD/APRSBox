@@ -725,11 +725,14 @@ def _digi_flow_editor_context(
     flash_success: bool = False,
 ) -> dict[str, object]:
     station_form_options = _station_form_options()
+    map_picker_config = get_map_page_config(root_path=request.scope.get("root_path", ""))
     return build_template_context(
         request,
         page_title="Packet Routing Editor" if flow_id else "New Packet Routing Flow",
         current_user=current_user,
         active_nav="digi-flows",
+        perform_alert_maintenance=False,
+        prefetched_map_config=map_picker_config,
         flow_id=flow_id,
         form_data=form_data,
         type_meta=get_digi_flow_type_meta(),
@@ -743,7 +746,7 @@ def _digi_flow_editor_context(
         filter_step_types=FILTER_STEP_TYPES,
         target_step_types=TARGET_STEP_TYPES,
         flow_execution_summaries=get_digi_flow_execution_summaries(flow_id, execution_limit=10) if flow_id is not None else [],
-        map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
+        map_picker_config=map_picker_config,
         symbol_table_options=station_form_options["symbol_table_options"],
         symbol_code_options=station_form_options["symbol_code_options"],
         flash=flash,
@@ -2704,6 +2707,7 @@ def digi_flow_new_page(
 
 
 @router.get("/digi-flows/{flow_id}")
+@_scoped_read_model
 def digi_flow_edit_page(
     flow_id: int,
     request: Request,
@@ -2723,6 +2727,7 @@ def digi_flow_edit_page(
 
 
 @router.get("/api/digi-flows/{flow_id}/events")
+@_scoped_read_model
 def digi_flow_event_log_api(
     flow_id: int,
     _: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -2734,6 +2739,7 @@ def digi_flow_event_log_api(
 
 
 @router.get("/api/digi-flows/{flow_id}/executions")
+@_scoped_read_model
 def digi_flow_execution_summaries_api(
     flow_id: int,
     _: UserIdentity = Depends(require_roles("admin", "operator")),
