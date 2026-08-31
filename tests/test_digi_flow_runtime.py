@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 import app.services.digi_flows as digi_flows
 from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
-from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries, update_digi_flow
+from app.services.digi_flows import DigiFlowTraceWriter, create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries, update_digi_flow
 from app.services.outbound import (
     claim_next_outbound_job,
     enqueue_digi_tx_job,
@@ -2576,6 +2576,101 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(summaries[0]["steps"][2]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][3]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][4]["status"], "executed")
+
+    async def test_slow_aprsis_send_does_not_block_following_routing_frames(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            insert_aprsis_interface()
+            create_flow(
+                {
+                    "name": "Non-blocking APRSIS",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_aprsis",
+                    "target_ref": "aprsis",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "tx_aprsis", "title": "TX APRS-IS", "enabled": 1, "config": {"aprsis_target": "aprsis"}},
+                    ],
+                }
+            )
+
+            class SlowAprsisClient:
+                def __init__(self) -> None:
+                    self.started = asyncio.Event()
+                    self.release = asyncio.Event()
+                    self.lines: list[str] = []
+
+                async def send_tnc2_line(self, line: str) -> tuple[bool, str]:
+                    self.lines.append(line)
+                    if len(self.lines) == 1:
+                        self.started.set()
+                        await self.release.wait()
+                    return True, "sent"
+
+            client = SlowAprsisClient()
+            runtime = DigiFlowRuntimeService(aprsis_client=client)
+            await runtime.start()
+            try:
+                for index in range(3):
+                    runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload=f"SP8ABC-{index + 1}>APRS:>Frame {index + 1}",
+                    )
+                await asyncio.wait_for(client.started.wait(), timeout=1.0)
+                await asyncio.wait_for(runtime._queue.join(), timeout=0.25)
+                snapshot = runtime.latency_snapshot()["aprsis_tx_dispatcher"]
+                self.assertEqual(snapshot["current_queue_depth"], 2)
+                client.release.set()
+                await runtime.wait_until_idle()
+            finally:
+                client.release.set()
+                await runtime.stop()
+
+            self.assertEqual(len(client.lines), 3)
+
+    async def test_trace_writer_batches_events_and_preserves_rows(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Trace batch",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "action_log", "title": "Log", "enabled": 1, "config": {"log_tag": "log-only"}},
+                    ],
+                }
+            )
+            writer = DigiFlowTraceWriter(batch_size=50, flush_interval=0.05)
+            original_write = digi_flows._write_digi_flow_event_batch
+            with patch("app.services.digi_flows._write_digi_flow_event_batch", wraps=original_write) as batch_write:
+                await writer.start()
+                try:
+                    for index in range(3):
+                        writer.enqueue(
+                            frame_uid="batch-frame",
+                            flow_id=flow_id,
+                            step_id=None,
+                            event_type="pipeline_finished" if index == 2 else "step_decision",
+                            decision="continue",
+                            message=f"event-{index}",
+                        )
+                    await writer.wait_until_idle()
+                finally:
+                    await writer.stop()
+
+            self.assertEqual(batch_write.call_count, 1)
+            self.assertEqual(len(batch_write.call_args.args[0]), 3)
+            rows = fetch_all("SELECT message FROM digi_flow_event_log WHERE frame_uid = ? ORDER BY id", ("batch-frame",))
+            self.assertEqual([row["message"] for row in rows], ["event-0", "event-1", "event-2"])
 
 
 if __name__ == "__main__":

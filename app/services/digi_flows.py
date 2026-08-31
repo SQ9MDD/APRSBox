@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import re
@@ -2340,6 +2341,116 @@ def log_digi_flow_event(
             (frame_uid, flow_id, step_id, event_type, decision, message, timestamp),
         )
         if event_type == "pipeline_finished":
+            _prune_digi_flow_event_log(connection, flow_id=flow_id)
+
+
+class DigiFlowTraceWriter:
+    def __init__(self, *, batch_size: int = 50, flush_interval: float = 0.075, queue_max_events: int = 4096) -> None:
+        self._batch_size = max(1, int(batch_size))
+        self._flush_interval = max(0.01, float(flush_interval))
+        self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=max(1, int(queue_max_events)))
+        self._task: asyncio.Task[None] | None = None
+        self._running = False
+        self._dropped = 0
+        self._high_water = 0
+
+    async def start(self) -> None:
+        if self._task is not None:
+            return
+        self._running = True
+        self._task = asyncio.create_task(self._run(), name="aprsbox-digi-flow-trace-writer")
+
+    def is_running(self) -> bool:
+        return self._task is not None and not self._task.done()
+
+    async def stop(self) -> None:
+        await self.wait_until_idle()
+        self._running = False
+        if self._task is None:
+            return
+        self._task.cancel()
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+        self._task = None
+
+    def enqueue(self, **event: Any) -> bool:
+        item = dict(event)
+        item["created_at"] = str(item.get("created_at") or utc_now())
+        try:
+            self._queue.put_nowait(item)
+        except asyncio.QueueFull:
+            self._dropped += 1
+            return False
+        self._high_water = max(self._high_water, self._queue.qsize())
+        return True
+
+    async def wait_until_idle(self) -> None:
+        await self._queue.join()
+
+    def snapshot(self) -> dict[str, int]:
+        return {
+            "current_queue_depth": self._queue.qsize(),
+            "queue_capacity": self._queue.maxsize,
+            "high_water": self._high_water,
+            "dropped": self._dropped,
+        }
+
+    async def _run(self) -> None:
+        while self._running:
+            first = await self._queue.get()
+            batch = [first]
+            deadline = asyncio.get_running_loop().time() + self._flush_interval
+            while len(batch) < self._batch_size:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    break
+                try:
+                    batch.append(await asyncio.wait_for(self._queue.get(), timeout=remaining))
+                except TimeoutError:
+                    break
+            try:
+                await asyncio.to_thread(_write_digi_flow_event_batch, batch)
+            except Exception as exc:
+                await asyncio.to_thread(
+                    log_event,
+                    "WARNING",
+                    "digi_flow_runtime",
+                    f"Failed to persist DIGI Flow trace batch: {exc}",
+                )
+            finally:
+                for _item in batch:
+                    self._queue.task_done()
+
+
+def _write_digi_flow_event_batch(events: list[dict[str, Any]]) -> None:
+    if not events:
+        return
+    completed_flow_ids: set[int] = set()
+    with get_connection() as connection:
+        connection.executemany(
+            """
+            INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(event["frame_uid"]),
+                    int(event["flow_id"]),
+                    int(event["step_id"]) if event.get("step_id") is not None else None,
+                    str(event["event_type"]),
+                    event.get("decision"),
+                    str(event["message"]),
+                    str(event["created_at"]),
+                )
+                for event in events
+            ],
+        )
+        for event in events:
+            if str(event.get("event_type") or "") == "pipeline_finished":
+                completed_flow_ids.add(int(event["flow_id"]))
+        for flow_id in completed_flow_ids:
             _prune_digi_flow_event_log(connection, flow_id=flow_id)
 
 

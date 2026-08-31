@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.db import init_db, log_event
 from app.services.aprsis import AprsisClientService
+from app.services.aprsis_tx_dispatcher import AprsIsTxDispatcher
 from app.services.alerts import expire_aprs_alerts
 from app.services.beacon_scheduler import BeaconSchedulerService
 from app.services.bulletin_scheduler import BulletinSchedulerService
@@ -27,10 +28,12 @@ async def lifespan(app_instance: FastAPI):
     init_db()
     expire_aprs_alerts()
     aprsis_uplink = AprsisClientService()
+    aprsis_tx_dispatcher = AprsIsTxDispatcher(client=aprsis_uplink)
     traffic_monitor = TrafficMonitorService()
     rf_tx_dispatcher = RfTxDispatcher(traffic_monitor=traffic_monitor)
     digi_flow_runtime = DigiFlowRuntimeService(
         aprsis_client=aprsis_uplink,
+        aprsis_tx_dispatcher=aprsis_tx_dispatcher,
         rf_tx_dispatcher=rf_tx_dispatcher,
     )
     aprsis_uplink.set_frame_consumer(digi_flow_runtime.enqueue_aprsis_tnc2_frame)
@@ -44,6 +47,7 @@ async def lifespan(app_instance: FastAPI):
     wx_scheduler = WxSchedulerService()
     radio_activity_aggregator = RadioActivityAggregatorService()
     app_instance.state.aprsis_uplink = aprsis_uplink
+    app_instance.state.aprsis_tx_dispatcher = aprsis_tx_dispatcher
     app_instance.state.digi_flow_runtime = digi_flow_runtime
     app_instance.state.traffic_monitor = traffic_monitor
     app_instance.state.outbound_service = outbound_service
@@ -55,10 +59,11 @@ async def lifespan(app_instance: FastAPI):
     app_instance.state.own_alert_scheduler = own_alert_scheduler
     app_instance.state.wx_scheduler = wx_scheduler
     app_instance.state.radio_activity_aggregator = radio_activity_aggregator
+    await aprsis_uplink.start()
+    await aprsis_tx_dispatcher.start()
     await rf_tx_dispatcher.start()
     await digi_flow_runtime.start()
     await traffic_monitor.start()
-    await aprsis_uplink.start()
     await outbound_service.start()
     await beacon_scheduler.start()
     await bulletin_scheduler.start()
@@ -79,9 +84,11 @@ async def lifespan(app_instance: FastAPI):
         await bulletin_scheduler.stop()
         await beacon_scheduler.stop()
         await outbound_service.stop()
-        await aprsis_uplink.stop()
         await traffic_monitor.stop()
+        await digi_flow_runtime.wait_until_idle()
         await digi_flow_runtime.stop()
+        await aprsis_tx_dispatcher.stop()
+        await aprsis_uplink.stop()
         await rf_tx_dispatcher.stop()
 
 
