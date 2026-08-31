@@ -1193,6 +1193,27 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             assert diagnostics_row is not None
             self.assertEqual(int(diagnostics_row["drop_total"]), 1)
 
+    async def test_full_routing_queue_keeps_latest_position_for_same_source(self) -> None:
+        with temporary_database():
+            runtime = DigiFlowRuntimeService(queue_max_frames=1)
+            first = runtime.enqueue_tnc2_frame(
+                source_kind="receiver_rf",
+                source_ref="TNC-1",
+                raw_payload="SP8ABC-9>APRS:!5210.00N/02100.00E>Old position",
+            )
+            latest = runtime.enqueue_tnc2_frame(
+                source_kind="receiver_rf",
+                source_ref="TNC-1",
+                raw_payload="SP8ABC-9>APRS:!5211.00N/02101.00E>Latest position",
+            )
+
+            self.assertTrue(first["accepted"])
+            self.assertTrue(latest["accepted"])
+            self.assertEqual(latest["superseded_frame_uid"], first["frame_uid"])
+            queued = runtime._queue.get_nowait()
+            runtime._queue.task_done()
+            self.assertIn("Latest position", queued["raw_payload"])
+
     async def test_local_tx_strict_filter_enforces_local_metadata_and_blocks_disallowed_paths(self) -> None:
         with temporary_database():
             set_local_station_identity()
@@ -1309,6 +1330,68 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "NOGATE" in row["message"] for row in nogate_rows))
             self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "RFONLY" in row["message"] for row in rfonly_rows))
             self.assertEqual(len(fake_client.lines), 1)
+
+    async def test_local_tx_position_older_than_its_aprsis_limit_is_dropped(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            insert_aprsis_interface()
+            create_flow(
+                {
+                    "name": "Fresh local positions only",
+                    "description": "",
+                    "source_kind": "receiver_local_tx",
+                    "source_ref": "local_tx",
+                    "target_kind": "tx_aprsis",
+                    "target_ref": "aprsis",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_local_tx", "title": "Local TX", "enabled": 1, "config": {"local_tx_source": "local_tx"}},
+                        {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
+                        {"step_type": "tx_aprsis", "title": "TX APRS-IS", "enabled": 1, "config": {"aprsis_target": "aprsis"}},
+                    ],
+                }
+            )
+
+            class FakeAprsisClient:
+                def __init__(self) -> None:
+                    self.lines: list[str] = []
+
+                async def send_tnc2_line(self, line: str) -> tuple[bool, str]:
+                    self.lines.append(line)
+                    return True, "APRS-IS TX sent."
+
+            fake_client = FakeAprsisClient()
+            runtime = DigiFlowRuntimeService(aprsis_client=fake_client)
+            await runtime.start()
+            try:
+                frame = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_local_tx",
+                    source_ref="local_tx",
+                    raw_payload="SQ9MDD-4>APRS:=5215.02N/02055.60E>Old local position",
+                    metadata={
+                        "origin": "local_generated",
+                        "local_generated": True,
+                        "frame_purpose": "beacon",
+                        "local_tx_created_at": (
+                            datetime.now(timezone.utc) - timedelta(seconds=30)
+                        ).isoformat(),
+                        "aprsis_position_max_age_seconds": 15.0,
+                    },
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            self.assertEqual(fake_client.lines, [])
+            rows = event_rows_for_frame(str(frame["frame_uid"]))
+            self.assertTrue(
+                any(
+                    row["event_type"] == "output_action"
+                    and row["decision"] == "drop"
+                    and "stale locally generated position" in row["message"]
+                    for row in rows
+                )
+            )
 
     async def test_receiver_rf_frames_do_not_match_local_tx_source_flow(self) -> None:
         with temporary_database():

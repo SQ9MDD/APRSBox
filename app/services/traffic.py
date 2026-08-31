@@ -376,6 +376,8 @@ class _TrafficModemRuntime:
         self._last_error: str | None = None
         self._updated_at = utc_now()
         self._kiss_buffer = bytearray()
+        self._kiss_partial_received_monotonic: float | None = None
+        self._kiss_partial_received_at: str | None = None
         self._proxy_uplink_buffer = bytearray()
         self._tnc_writer: asyncio.StreamWriter | None = None
         self._serial_broker: SerialKissTcpBroker | None = None
@@ -1527,9 +1529,35 @@ class _TrafficModemRuntime:
 
             silence_watchdog.record_rx()
             await self._broadcast_proxy_chunk(chunk)
-            self._consume_kiss_chunk(chunk)
+            broker_timestamp = None
+            broker = self._serial_broker
+            if broker is not None:
+                broker_timestamp = broker.consume_serial_rx_timestamp(len(chunk))
+            if broker_timestamp is None:
+                chunk_received_monotonic = time.monotonic()
+                chunk_received_at = utc_now()
+            else:
+                chunk_received_monotonic, chunk_received_at = broker_timestamp
+            self._consume_kiss_chunk(
+                chunk,
+                received_monotonic=chunk_received_monotonic,
+                received_at=chunk_received_at,
+            )
 
-    def _consume_kiss_chunk(self, chunk: bytes) -> None:
+    def _consume_kiss_chunk(
+        self,
+        chunk: bytes,
+        *,
+        received_monotonic: float | None = None,
+        received_at: str | None = None,
+    ) -> None:
+        chunk_received_monotonic = (
+            float(received_monotonic)
+            if isinstance(received_monotonic, (int, float))
+            else time.monotonic()
+        )
+        chunk_received_at = str(received_at or utc_now())
+        previous_buffer_len = len(self._kiss_buffer)
         self._kiss_buffer.extend(chunk)
 
         while True:
@@ -1548,6 +1576,8 @@ class _TrafficModemRuntime:
                         ),
                     )
                     self._kiss_buffer.clear()
+                    self._kiss_partial_received_monotonic = None
+                    self._kiss_partial_received_at = None
                 return
 
             if start > 0:
@@ -1570,15 +1600,33 @@ class _TrafficModemRuntime:
                         ),
                     )
                     self._kiss_buffer.clear()
+                    self._kiss_partial_received_monotonic = None
+                    self._kiss_partial_received_at = None
+                elif len(self._kiss_buffer) > 1:
+                    if previous_buffer_len <= 1 or self._kiss_partial_received_monotonic is None:
+                        self._kiss_partial_received_monotonic = chunk_received_monotonic
+                        self._kiss_partial_received_at = chunk_received_at
                 return
 
+            frame_received_monotonic = chunk_received_monotonic
+            frame_received_at = chunk_received_at
+            if previous_buffer_len > 1 and self._kiss_partial_received_monotonic is not None:
+                frame_received_monotonic = self._kiss_partial_received_monotonic
+                frame_received_at = str(self._kiss_partial_received_at or chunk_received_at)
             raw_frame = bytes(self._kiss_buffer[1:end])
             del self._kiss_buffer[:end]
+            previous_buffer_len = max(0, previous_buffer_len - end)
+            self._kiss_partial_received_monotonic = None
+            self._kiss_partial_received_at = None
 
             if not raw_frame:
                 continue
 
-            self._record_kiss_frame(raw_frame)
+            self._record_kiss_frame(
+                raw_frame,
+                rx_monotonic=frame_received_monotonic,
+                received_at=frame_received_at,
+            )
 
     def _consume_proxy_uplink_chunk(self, chunk: bytes) -> None:
         self._proxy_uplink_buffer.extend(chunk)
@@ -1674,8 +1722,18 @@ class _TrafficModemRuntime:
             payload_hex=kiss_frame.hex(" ").upper(),
         )
 
-    def _record_kiss_frame(self, raw_frame: bytes) -> None:
-        rx_monotonic = time.monotonic()
+    def _record_kiss_frame(
+        self,
+        raw_frame: bytes,
+        *,
+        rx_monotonic: float | None = None,
+        received_at: str | None = None,
+    ) -> None:
+        frame_received_monotonic = (
+            float(rx_monotonic)
+            if isinstance(rx_monotonic, (int, float))
+            else time.monotonic()
+        )
         command = raw_frame[0]
         port = (command >> 4) & 0x0F
         command_id = command & 0x0F
@@ -1701,7 +1759,7 @@ class _TrafficModemRuntime:
             return
         if not payload:
             return
-        timestamp = utc_now()
+        timestamp = str(received_at or utc_now())
 
         entry: dict[str, Any] = {
             "timestamp": timestamp,
@@ -1713,7 +1771,7 @@ class _TrafficModemRuntime:
             "format": "RAW",
             "line": f"port={port} cmd=0x{command_id:X} len={len(payload)}",
             "text": payload.decode("utf-8", errors="replace").strip() or "<binary>",
-            "_rx_monotonic": rx_monotonic,
+            "_rx_monotonic": frame_received_monotonic,
         }
 
         decoded, decode_reason = self._decode_ax25_to_tnc2_with_diagnostics(payload)
@@ -2459,6 +2517,8 @@ class _TrafficModemRuntime:
 
     def _clear_kiss_buffers(self) -> None:
         self._kiss_buffer.clear()
+        self._kiss_partial_received_monotonic = None
+        self._kiss_partial_received_at = None
         self._proxy_uplink_buffer.clear()
 
 

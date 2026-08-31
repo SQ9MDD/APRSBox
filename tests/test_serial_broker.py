@@ -60,6 +60,23 @@ def read_master_chunk(master_fd: int, *, timeout: float = 1.0) -> bytes:
 
 
 class SerialBrokerTests(unittest.IsolatedAsyncioTestCase):
+    def test_serial_rx_timestamp_segments_follow_tcp_split_and_merge(self) -> None:
+        broker = SerialKissTcpBroker(
+            modem_id=99,
+            tnc_name="Timestamp test",
+            device_path="/dev/null",
+            baud_rate=9600,
+        )
+        with broker._lock:
+            broker._serial_rx_segments.extend(
+                ([4, 10.0, "first"], [6, 20.0, "second"])
+            )
+
+        self.assertEqual(broker.consume_serial_rx_timestamp(2), (10.0, "first"))
+        self.assertEqual(broker.consume_serial_rx_timestamp(5), (10.0, "first"))
+        self.assertEqual(broker.consume_serial_rx_timestamp(3), (20.0, "second"))
+        self.assertIsNone(broker.consume_serial_rx_timestamp(1))
+
     def test_shared_rx_silence_watchdog_resets_on_any_bytes_and_supports_disabled(self) -> None:
         now = [100.0]
         watchdog = RxSilenceReconnectWatchdog(30, clock=lambda: now[0])

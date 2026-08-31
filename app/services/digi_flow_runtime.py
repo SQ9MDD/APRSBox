@@ -8,6 +8,7 @@ import time
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from app.db import fetch_one, log_event, utc_now
@@ -239,6 +240,38 @@ class DigiFlowRuntimeService:
         try:
             self._queue.put_nowait(frame)
         except asyncio.QueueFull:
+            superseded = self._supersede_queued_position(frame)
+            if superseded is not None:
+                matching_old_flows = self._matching_flows(
+                    source_kind=str(superseded["source_kind"]),
+                    source_ref=str(superseded["source_ref"]),
+                )
+                if any(
+                    str(flow.get("target_kind") or "").strip() == "tx_aprsis"
+                    for flow in matching_old_flows
+                ):
+                    record_aprsis_tx_result(
+                        sent=False,
+                        frame_line=str(superseded["raw_payload"]),
+                    )
+                log_event(
+                    "WARNING",
+                    "digi_flow_runtime",
+                    (
+                        "Replaced an older queued position with the latest position "
+                        f"because the routing queue is full (limit={self._queue.maxsize}) | "
+                        f"old_frame_uid={superseded['frame_uid']} | new_frame_uid={frame['frame_uid']} | "
+                        f"source={frame['source_kind']}:{frame['source_ref']}"
+                    ),
+                )
+                return {
+                    "frame_uid": frame["frame_uid"],
+                    "created_at": frame["created_at"],
+                    "queue_depth": self._queue.qsize(),
+                    "parsed": bool(frame["parsed"]),
+                    "accepted": True,
+                    "superseded_frame_uid": superseded["frame_uid"],
+                }
             matching_flows = self._matching_flows(
                 source_kind=str(frame["source_kind"]),
                 source_ref=str(frame["source_ref"]),
@@ -283,6 +316,44 @@ class DigiFlowRuntimeService:
             "parsed": bool(frame["parsed"]),
             "accepted": True,
         }
+
+    def _supersede_queued_position(
+        self,
+        incoming: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        incoming_key = _queued_position_key(incoming)
+        if incoming_key is None:
+            return None
+
+        queued: list[dict[str, Any]] = []
+        while True:
+            try:
+                queued.append(self._queue.get_nowait())
+            except asyncio.QueueEmpty:
+                break
+        if not queued:
+            return None
+
+        replacement_index = next(
+            (
+                index
+                for index, candidate in enumerate(queued)
+                if _queued_position_key(candidate) == incoming_key
+            ),
+            None,
+        )
+        for _candidate in queued:
+            self._queue.task_done()
+        if replacement_index is None:
+            for candidate in queued:
+                self._queue.put_nowait(candidate)
+            return None
+
+        superseded = queued[replacement_index]
+        queued[replacement_index] = incoming
+        for candidate in queued:
+            self._queue.put_nowait(candidate)
+        return superseded
 
     def enqueue_rx_tnc2_frame(
         self,
@@ -2114,7 +2185,7 @@ class DigiFlowRuntimeService:
                     "normalized_packet_hash": entry.packet_hash,
                 },
                 received_at=str(entry.context.get("created_at") or ""),
-                max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + delay_sec,
+                max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + entry.delay_sec,
             )
             if not success:
                 reason = str(detail or "target_unavailable")
@@ -2272,6 +2343,38 @@ class DigiFlowRuntimeService:
         flow_id = int(context["flow"]["id"])
         step_id = int(step["id"])
         now_monotonic = time.monotonic()
+        metadata = dict(context.get("metadata") or {})
+        if str(context.get("source_kind") or "") == LOCAL_TX_SOURCE_KIND:
+            created_at = _parse_utc_datetime(metadata.get("local_tx_created_at"))
+            try:
+                position_max_age_seconds = float(
+                    metadata.get("aprsis_position_max_age_seconds") or 0.0
+                )
+            except (TypeError, ValueError):
+                position_max_age_seconds = 0.0
+            if created_at is not None and position_max_age_seconds > 0:
+                wall_age_seconds = max(
+                    0.0,
+                    (datetime.now(timezone.utc) - created_at).total_seconds(),
+                )
+                if wall_age_seconds > position_max_age_seconds:
+                    message = _t(
+                        "APRS-IS TX dropped stale locally generated position "
+                        f"(age={wall_age_seconds:.1f}s, limit={position_max_age_seconds:.1f}s)."
+                    )
+                    log_digi_flow_event(
+                        frame_uid=context["frame_uid"],
+                        flow_id=flow_id,
+                        step_id=step_id,
+                        event_type="output_action",
+                        decision="drop",
+                        message=message,
+                    )
+                    record_aprsis_tx_result(
+                        sent=False,
+                        frame_line=str(context.get("current_line") or ""),
+                    )
+                    return {"decision": "drop"}
         frame_age_ms = _monotonic_delta_ms(
             context.get("rx_received_monotonic")
             if isinstance(context.get("rx_received_monotonic"), (int, float))
@@ -2484,6 +2587,45 @@ def _normalize_frame_metadata(metadata: Any) -> dict[str, Any]:
             continue
         normalized[key_text] = value
     return normalized
+
+
+def _queued_position_key(frame: dict[str, Any]) -> tuple[str, str, str] | None:
+    parsed = frame.get("parsed")
+    if not isinstance(parsed, dict):
+        return None
+    aprs_data = dict(parsed.get("aprs_data") or {})
+    if str(aprs_data.get("packet_group") or "").strip().casefold() not in {
+        "position",
+        "object",
+    }:
+        return None
+    entity = str(
+        aprs_data.get("entity_name")
+        or parsed.get("logical_source_key")
+        or parsed.get("source_key")
+        or parsed.get("source")
+        or ""
+    ).strip().upper()
+    if not entity:
+        return None
+    return (
+        str(frame.get("source_kind") or "").strip(),
+        str(frame.get("source_ref") or "").strip(),
+        entity,
+    )
+
+
+def _parse_utc_datetime(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _optional_int(value: Any) -> int | None:

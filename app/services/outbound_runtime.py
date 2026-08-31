@@ -42,6 +42,8 @@ from app.services.traffic import TrafficMonitorService
 
 KISS_FEND = 0xC0
 LOCAL_TX_PACING_KINDS = {"object", "bulletin", "beacon", "wx", "freq_object", "net_sked", "status", "manual"}
+LOCAL_TX_APRSIS_POSITION_MAX_AGE_SECONDS = 15.0
+LOCAL_TX_APRSIS_POSITION_KINDS = {"beacon", "object", "wx"}
 
 
 def _parse_utc_timestamp(value: object) -> datetime | None:
@@ -506,6 +508,9 @@ class OutboundService:
         metadata["tx_origin"] = str(payload.get("tx_origin") or metadata.get("tx_origin") or metadata["origin"]).strip() or metadata["origin"]
         metadata["tx_kind"] = str(payload.get("tx_kind") or metadata.get("tx_kind") or metadata.get("frame_purpose") or purpose).strip() or purpose
         metadata["frame_purpose"] = str(metadata.get("frame_purpose") or metadata["tx_kind"] or purpose).strip() or purpose
+        metadata["local_tx_created_at"] = str(job.get("created_at") or "").strip()
+        if kind in LOCAL_TX_APRSIS_POSITION_KINDS:
+            metadata["aprsis_position_max_age_seconds"] = LOCAL_TX_APRSIS_POSITION_MAX_AGE_SECONDS
 
         event_id = str(payload.get("local_tx_event_id") or "").strip()
         forward_key = event_id or f"legacy:{kind}:{tnc2_line}"

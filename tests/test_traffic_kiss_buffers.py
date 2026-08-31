@@ -53,6 +53,7 @@ class TrafficKissRxParserTests(unittest.TestCase):
         decode_map = {
             b"A": "A",
             b"B": "B",
+            b"PARTIAL": "PARTIAL",
             b"PAYLOAD": "PAYLOAD",
         }
         runtime._decode_ax25_to_tnc2 = lambda payload: decode_map.get(bytes(payload))  # type: ignore[method-assign]
@@ -66,6 +67,39 @@ class TrafficKissRxParserTests(unittest.TestCase):
         self.assertEqual(len(persisted), 1)
         self.assertEqual(persisted[0]["format"], "TNC2")
         self.assertEqual(persisted[0]["line"], "PAYLOAD")
+
+    def test_all_frames_from_one_read_keep_the_transport_timestamp(self) -> None:
+        runtime, persisted = self._runtime_with_capture()
+        stream = bytes(
+            [KISS_FEND, 0x00, 0x41, KISS_FEND, KISS_FEND, 0x00, 0x42, KISS_FEND]
+        )
+
+        runtime._consume_kiss_chunk(
+            stream,
+            received_monotonic=123.5,
+            received_at="2026-08-31T10:00:00+00:00",
+        )
+
+        self.assertEqual([entry["line"] for entry in persisted], ["A", "B"])
+        self.assertEqual([entry["_rx_monotonic"] for entry in persisted], [123.5, 123.5])
+
+    def test_frame_split_across_reads_keeps_first_payload_timestamp(self) -> None:
+        runtime, persisted = self._runtime_with_capture()
+
+        runtime._consume_kiss_chunk(
+            bytes([KISS_FEND, 0x00]) + b"PART",
+            received_monotonic=100.0,
+            received_at="2026-08-31T10:00:00+00:00",
+        )
+        runtime._consume_kiss_chunk(
+            b"IAL" + bytes([KISS_FEND]),
+            received_monotonic=105.0,
+            received_at="2026-08-31T10:00:05+00:00",
+        )
+
+        self.assertEqual(persisted[0]["line"], "PARTIAL")
+        self.assertEqual(persisted[0]["_rx_monotonic"], 100.0)
+        self.assertEqual(persisted[0]["timestamp"], "2026-08-31T10:00:00+00:00")
 
     def test_valid_frame_with_trailing_crlf_does_not_create_extra_pseudo_frame(self) -> None:
         runtime, persisted = self._runtime_with_capture()
