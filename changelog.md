@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.11 - 31.08.2026
+- `Wydanie stabilne`: poprawiono wydajność i obsługę reguł Packet Routing, uporządkowano interfejs ustawień oraz palety kolorów, a transmisja DIGI i APRS-IS odrzuca teraz przeterminowane ramki zamiast wypuszczać je po opóźnieniu. Log wskazuje wiek i limit odrzuconej ramki, co ułatwia wykrywanie przeciążenia backendu lub TNC.
+
 ## 1.12.10.dev - 31.08.2026
 - `Packet Routing / ochrona przed starymi ramkami`: kolejka retransmisji DIGI zachowuje czas pierwotnego odbioru i automatycznie odrzuca przed TX RF ramki starsze niż 5 sekund; jedynym rozszerzeniem limitu jest skonfigurowany viscous delay. Ten sam limit `5 s + viscous delay` obowiązuje dla uplinku APRS-IS, także przy końcowej kontroli przed zapisem TCP. Odrzucone zadanie zapisuje w logu `WARNING` oraz w kolejce przyczynę zawierającą wiek ramki, limit i czas odbioru, co ułatwia diagnozę przeciążonego backendu lub TNC.
 

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.11 - 2026-08-31
+- `Versión estable`: se mejoraron el rendimiento y la gestión de reglas de Packet Routing, se perfeccionaron la interfaz de Ajustes y las paletas de color, y las tramas DIGI y APRS-IS vencidas ahora se descartan en lugar de enviarse tras un retraso. El registro conserva la edad y el límite de una trama descartada para facilitar el diagnóstico de sobrecarga del backend o TNC.
+
 ## 1.12.10.dev - 2026-08-31
 - `Packet Routing / protección contra tramas antiguas`: la cola de repetición DIGI conserva la hora de recepción original y descarta automáticamente antes de TX RF las tramas con más de 5 segundos; el viscous delay configurado es la única ampliación de ese límite. El mismo límite de `5 s + viscous delay` se aplica al uplink APRS-IS, incluida la comprobación final inmediatamente antes de escribir por TCP. Un trabajo descartado registra un `WARNING` y un motivo en la cola con la edad de la trama, el límite y la hora de recepción, facilitando el diagnóstico de retrasos del backend o TNC sobrecargados.
 

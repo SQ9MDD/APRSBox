@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.11 - 2026-08-31
+- `Stable release`: improved Packet Routing performance and rule handling, refined the Settings interface and color palettes, and now drops expired DIGI and APRS-IS frames instead of releasing them after a delay. The log records the age and limit of a dropped frame to help identify backend or TNC overload.
+
 ## 1.12.10.dev - 2026-08-31
 - `Packet Routing / stale-frame protection`: the DIGI repeat queue preserves the original receive time and automatically drops frames older than 5 seconds before RF TX; the configured viscous delay is the only extension to that limit. The same `5 s + viscous delay` limit applies to APRS-IS uplink, including the final check immediately before the TCP write. A dropped job records a `WARNING` and a queue reason containing the frame age, limit, and receive time, making overloaded backend or TNC delays diagnosable.
 
