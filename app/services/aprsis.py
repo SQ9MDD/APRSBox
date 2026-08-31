@@ -1149,13 +1149,21 @@ class AprsisClientService:
         payload_line = str(line or "").rstrip("\r\n")
         if not payload_line:
             return False, "APRS-IS TX dropped: empty packet line."
-        frame_age_ms = _monotonic_delta_ms((telemetry or {}).get("rx_received_monotonic"))
+        telemetry_payload = dict(telemetry or {})
+        try:
+            max_frame_age_seconds = float(
+                telemetry_payload.get("max_frame_age_seconds") or APRSIS_TX_MAX_FRAME_AGE_SECONDS
+            )
+        except (TypeError, ValueError):
+            max_frame_age_seconds = APRSIS_TX_MAX_FRAME_AGE_SECONDS
+        max_frame_age_seconds = max(APRSIS_TX_MAX_FRAME_AGE_SECONDS, max_frame_age_seconds)
+        frame_age_ms = _monotonic_delta_ms(telemetry_payload.get("rx_received_monotonic"))
         if frame_age_ms is None:
-            frame_age_ms = _monotonic_delta_ms((telemetry or {}).get("enqueue_monotonic"))
-        if frame_age_ms is not None and frame_age_ms > APRSIS_TX_MAX_FRAME_AGE_SECONDS * 1000.0:
+            frame_age_ms = _monotonic_delta_ms(telemetry_payload.get("enqueue_monotonic"))
+        if frame_age_ms is not None and frame_age_ms > max_frame_age_seconds * 1000.0:
             return False, (
                 "APRS-IS TX dropped: frame is stale "
-                f"({frame_age_ms:.0f} ms > {APRSIS_TX_MAX_FRAME_AGE_SECONDS * 1000.0:.0f} ms)."
+                f"({frame_age_ms:.0f} ms > {max_frame_age_seconds * 1000.0:.0f} ms)."
             )
         wire = payload_line.encode("latin-1", errors="replace") + b"\r\n"
         async with self._connection_lock:

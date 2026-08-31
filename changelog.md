@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.10.dev - 31.08.2026
+- `Packet Routing / ochrona przed starymi ramkami`: kolejka retransmisji DIGI zachowuje czas pierwotnego odbioru i automatycznie odrzuca przed TX RF ramki starsze niż 5 sekund; jedynym rozszerzeniem limitu jest skonfigurowany viscous delay. Ten sam limit `5 s + viscous delay` obowiązuje dla uplinku APRS-IS, także przy końcowej kontroli przed zapisem TCP. Odrzucone zadanie zapisuje w logu `WARNING` oraz w kolejce przyczynę zawierającą wiek ramki, limit i czas odbioru, co ułatwia diagnozę przeciążonego backendu lub TNC.
+
 ## 1.12.9.dev - 30.08.2026
 - `Packet Routing / wydajność`: edytor reguły i API historii współdzielą teraz jedno połączenie SQLite, nie wykonują zapisu maintenance alertów podczas odczytu oraz unikają podwójnego pobierania konfiguracji mapy i historii przy otwarciu strony.
 

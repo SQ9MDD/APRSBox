@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.10.dev - 2026-08-31
+- `Packet Routing / stale-frame protection`: the DIGI repeat queue preserves the original receive time and automatically drops frames older than 5 seconds before RF TX; the configured viscous delay is the only extension to that limit. The same `5 s + viscous delay` limit applies to APRS-IS uplink, including the final check immediately before the TCP write. A dropped job records a `WARNING` and a queue reason containing the frame age, limit, and receive time, making overloaded backend or TNC delays diagnosable.
+
 ## 1.12.9.dev - 2026-08-30
 - `Packet Routing / performance`: the rule editor and history APIs now share one SQLite connection, avoid alert-maintenance writes during reads, and no longer fetch map configuration or initial history twice when opening the page.
 

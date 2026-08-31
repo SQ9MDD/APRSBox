@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.10.dev - 2026-08-31
+- `Packet Routing / Schutz vor alten Frames`: Die DIGI-Weiterleitungswarteschlange bewahrt den ursprünglichen Empfangszeitpunkt und verwirft Frames, die älter als 5 Sekunden sind, automatisch vor dem RF-TX; nur die konfigurierte Viscous-Delay verlängert dieses Limit. Dasselbe Limit `5 s + Viscous Delay` gilt für den APRS-IS-Uplink einschließlich der abschließenden Prüfung direkt vor dem TCP-Schreibvorgang. Ein verworfenes Job protokolliert ein `WARNING` sowie einen Warteschlangengrund mit Frame-Alter, Limit und Empfangszeit, wodurch Verzögerungen durch überlastetes Backend oder TNC nachvollziehbar werden.
+
 ## 1.12.9.dev - 2026-08-30
 - `Packet Routing / Leistung`: Regeleditor und Verlaufs-APIs verwenden jetzt gemeinsam eine SQLite-Verbindung, führen bei Lesezugriffen keine Alert-Wartungsschreibvorgänge aus und laden Kartenkonfiguration sowie initialen Verlauf beim Öffnen nicht mehr doppelt.
 

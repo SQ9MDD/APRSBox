@@ -5,7 +5,7 @@ import os
 import tempfile
 import time
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -1652,6 +1652,8 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             payload = json.loads(job_row["payload_json"])
             self.assertEqual(payload["frame_uid"], str(result["frame_uid"]))
             self.assertEqual(payload["flow_id"], flow_id)
+            self.assertEqual(payload["digi_max_age_seconds"], 5.0)
+            self.assertTrue(payload["digi_received_at"])
 
             summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
             self.assertEqual(len(summaries), 1)
@@ -1715,6 +1717,92 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             assert traffic_row is not None
             self.assertEqual(traffic_row["source"], "RF-OUT")
             self.assertEqual(traffic_row["line"], "SQ9MDD-4>APRS,SQ9MDD-4*,WIDE2-1:>DIGI outbound test")
+
+    async def test_outbound_service_drops_expired_digi_tx_job_and_logs_the_evidence(self) -> None:
+        with temporary_database():
+            insert_modem(name="RF-OUT", device_path="127.0.0.1:9005")
+            received_at = (datetime.now(timezone.utc) - timedelta(seconds=6)).isoformat()
+            success, _ = enqueue_digi_tx_job(
+                interface_name="RF-OUT",
+                line="SQ9MDD-4>APRS,WIDE1-1:>Expired DIGI TX",
+                received_at=received_at,
+                max_age_seconds=5,
+            )
+            self.assertTrue(success)
+            job = claim_next_outbound_job()
+            assert job is not None
+
+            outbound_service = OutboundService()
+            with patch("app.services.outbound_runtime.asyncio.open_connection") as open_connection_mock:
+                await outbound_service._process_job(job)
+
+            stored_job = get_outbound_job(int(job["id"]))
+            assert stored_job is not None
+            self.assertEqual(stored_job["status"], "sent")
+            self.assertIn("DIGI TX dropped as expired", str(stored_job["last_error"]))
+            open_connection_mock.assert_not_called()
+            log_row = fetch_one(
+                "SELECT level, category, message FROM event_logs WHERE category = 'outbound' ORDER BY id DESC LIMIT 1"
+            )
+            assert log_row is not None
+            self.assertEqual(log_row["level"], "WARNING")
+            self.assertIn("Dropped expired DIGI TX outbound job", log_row["message"])
+            self.assertIn("frame age=", log_row["message"])
+
+    def test_digi_tx_age_limit_includes_the_viscous_delay(self) -> None:
+        with temporary_database():
+            insert_modem(name="RF-OUT", device_path="127.0.0.1:9006")
+            received_at = (datetime.now(timezone.utc) - timedelta(seconds=6)).isoformat()
+            success, _ = enqueue_digi_tx_job(
+                interface_name="RF-OUT",
+                line="SQ9MDD-4>APRS,WIDE1-1:>Viscous DIGI TX",
+                received_at=received_at,
+                max_age_seconds=7,
+            )
+            self.assertTrue(success)
+            job = claim_next_outbound_job()
+            assert job is not None
+            stored_job = get_outbound_job(int(job["id"]))
+            assert stored_job is not None
+            self.assertEqual(stored_job["payload"]["digi_max_age_seconds"], 7.0)
+
+    async def test_viscous_delay_is_included_in_digi_tx_expiry_limit(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            insert_modem(name="RF-OUT", device_path="127.0.0.1:9007")
+            create_flow(
+                {
+                    "name": "Viscous delay RF TX",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_rf",
+                    "target_ref": "RF-OUT",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "filter_path", "title": "Path Rule", "enabled": 1, "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []}},
+                        {"step_type": "filter_dupe", "title": "Viscous delay", "enabled": 1, "config": {"window_sec": 2}},
+                        {"step_type": "tx_rf", "title": "TX RF", "enabled": 1, "config": {"rf_target": "RF-OUT"}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SQ9MDD-9>APRS,WIDE1-1:>Viscous expiry limit",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            job_row = fetch_one("SELECT payload_json FROM outbound_jobs WHERE kind = 'digi_tx' ORDER BY id DESC LIMIT 1")
+            assert job_row is not None
+            payload = json.loads(job_row["payload_json"])
+            self.assertEqual(payload["digi_max_age_seconds"], 7.0)
 
     async def test_outbound_service_forwards_local_tx_to_routing_once_per_event_id(self) -> None:
         with temporary_database():

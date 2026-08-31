@@ -25,6 +25,7 @@ OUTBOUND_KIND_OBJECT = "object"
 OUTBOUND_KIND_MESSAGE = "message"
 OUTBOUND_KIND_WX = "wx"
 OUTBOUND_KIND_DIGI_TX = "digi_tx"
+DIGI_TX_BASE_MAX_AGE_SECONDS = 5.0
 OUTBOUND_STATUS_QUEUED = "queued"
 OUTBOUND_STATUS_PROCESSING = "processing"
 OUTBOUND_STATUS_SENT = "sent"
@@ -723,6 +724,8 @@ def enqueue_digi_tx_job(
     flow_id: int | None = None,
     frame_uid: str | None = None,
     metadata: dict[str, Any] | None = None,
+    received_at: str | None = None,
+    max_age_seconds: float | None = None,
 ) -> tuple[bool, str]:
     target_name = str(interface_name or "").strip()
     tnc2_line = str(line or "").strip()
@@ -762,6 +765,12 @@ def enqueue_digi_tx_job(
         "tx_origin": LOCAL_TX_ORIGIN_ROUTED,
         "tx_kind": LOCAL_TX_KIND_ROUTED,
     }
+    try:
+        allowed_age_seconds = float(max_age_seconds) if max_age_seconds is not None else DIGI_TX_BASE_MAX_AGE_SECONDS
+    except (TypeError, ValueError):
+        allowed_age_seconds = DIGI_TX_BASE_MAX_AGE_SECONDS
+    payload["digi_received_at"] = str(received_at or utc_now()).strip() or utc_now()
+    payload["digi_max_age_seconds"] = max(DIGI_TX_BASE_MAX_AGE_SECONDS, allowed_age_seconds)
     for key in ("origin", "aprsis_interface_id", "target_interface_id", "normalized_packet_hash", "rf_guard_reason"):
         if key in normalized_metadata and normalized_metadata[key] is not None:
             payload[key] = normalized_metadata[key]
