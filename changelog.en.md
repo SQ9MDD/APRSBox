@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.13.dev - 2026-09-01
+- `Packet Routing / latency`: added lightweight in-memory timing and queue-depth aggregates. Regular RF DIGI now bypasses persistent `outbound_jobs` and uses ephemeral per-interface queues and workers, so one TNC's TX gap or slow transport cannot block another TNC.
+- `APRS-IS / TX`: routing now hands frames to a bounded in-memory queue without blocking; a dedicated worker retains the existing socket, `drain()`, and reconnect behavior. Queue overflow immediately drops the frame with a warning and counter.
+- `DigiFlow / trace`: per-step diagnostics are persisted outside the realtime path in batches of up to 50 events or every 75 ms using one transaction. History pruning was also moved out of frame processing.
+
 ## 1.12.11 - 2026-08-31
 - `Stable release`: improved Packet Routing performance and rule handling, refined the Settings interface and color palettes, and now drops expired DIGI and APRS-IS frames instead of releasing them after a delay. The log records the age and limit of a dropped frame to help identify backend or TNC overload.
 
