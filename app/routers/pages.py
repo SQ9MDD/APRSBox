@@ -725,11 +725,14 @@ def _digi_flow_editor_context(
     flash_success: bool = False,
 ) -> dict[str, object]:
     station_form_options = _station_form_options()
+    map_picker_config = get_map_page_config(root_path=request.scope.get("root_path", ""))
     return build_template_context(
         request,
         page_title="Packet Routing Editor" if flow_id else "New Packet Routing Flow",
         current_user=current_user,
         active_nav="digi-flows",
+        perform_alert_maintenance=False,
+        prefetched_map_config=map_picker_config,
         flow_id=flow_id,
         form_data=form_data,
         type_meta=get_digi_flow_type_meta(),
@@ -743,7 +746,7 @@ def _digi_flow_editor_context(
         filter_step_types=FILTER_STEP_TYPES,
         target_step_types=TARGET_STEP_TYPES,
         flow_execution_summaries=get_digi_flow_execution_summaries(flow_id, execution_limit=10) if flow_id is not None else [],
-        map_picker_config=get_map_page_config(root_path=request.scope.get("root_path", "")),
+        map_picker_config=map_picker_config,
         symbol_table_options=station_form_options["symbol_table_options"],
         symbol_code_options=station_form_options["symbol_code_options"],
         flash=flash,
@@ -2704,6 +2707,7 @@ def digi_flow_new_page(
 
 
 @router.get("/digi-flows/{flow_id}")
+@_scoped_read_model
 def digi_flow_edit_page(
     flow_id: int,
     request: Request,
@@ -2723,6 +2727,7 @@ def digi_flow_edit_page(
 
 
 @router.get("/api/digi-flows/{flow_id}/events")
+@_scoped_read_model
 def digi_flow_event_log_api(
     flow_id: int,
     _: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -2734,6 +2739,7 @@ def digi_flow_event_log_api(
 
 
 @router.get("/api/digi-flows/{flow_id}/executions")
+@_scoped_read_model
 def digi_flow_execution_summaries_api(
     flow_id: int,
     _: UserIdentity = Depends(require_roles("admin", "operator")),
@@ -4664,10 +4670,13 @@ def statistics_page(
     current_user: UserIdentity = Depends(get_current_user),
 ) -> object:
     templates = request.app.state.templates
-    statistics_payload = get_traffic_statistics(range_value="24h")
-    statistics_devices_payload = get_traffic_devices_statistics(range_value="24h")
-    statistics_users_payload = get_traffic_users_statistics(range_value="24h")
-    statistics_direct_heard_payload = get_traffic_direct_heard_statistics(range_value="24h")
+    initial_range = str(request.cookies.get("aprsbox_statistics_range") or "24h").strip().lower()
+    if initial_range not in {"1h", "24h", "7d", "30d"}:
+        initial_range = "24h"
+    statistics_payload = get_traffic_statistics(range_value=initial_range)
+    statistics_devices_payload = get_traffic_devices_statistics(range_value=initial_range)
+    statistics_users_payload = get_traffic_users_statistics(range_value=initial_range)
+    statistics_direct_heard_payload = get_traffic_direct_heard_statistics(range_value=initial_range)
     context = build_template_context(
         request,
         page_title="Statistics",
@@ -4885,6 +4894,7 @@ def dashboard_radio_activity(
 
 
 @router.get("/api/statistics/traffic")
+@_scoped_read_model
 def statistics_traffic(
     range: str = "24h",
     shift: int = 0,
@@ -4898,6 +4908,7 @@ def statistics_traffic(
 
 
 @router.get("/api/statistics/devices")
+@_scoped_read_model
 def statistics_devices(
     range: str = "24h",
     shift: int = 0,
@@ -4912,6 +4923,7 @@ def statistics_devices(
 
 
 @router.get("/api/statistics/users")
+@_scoped_read_model
 def statistics_users(
     range: str = "24h",
     shift: int = 0,
@@ -4925,6 +4937,7 @@ def statistics_users(
 
 
 @router.get("/api/statistics/direct-heard")
+@_scoped_read_model
 def statistics_direct_heard(
     range: str = "24h",
     shift: int = 0,
@@ -4932,6 +4945,25 @@ def statistics_direct_heard(
 ) -> JSONResponse:
     try:
         payload = get_traffic_direct_heard_statistics(range_value=range, shift_windows=shift)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
+    return JSONResponse(payload)
+
+
+@router.get("/api/statistics/all")
+@_scoped_read_model
+def statistics_all(
+    range: str = "24h",
+    shift: int = 0,
+    _: UserIdentity = Depends(get_current_user),
+) -> JSONResponse:
+    try:
+        payload = {
+            "traffic": get_traffic_statistics(range_value=range, shift_windows=shift),
+            "devices": get_traffic_devices_statistics(range_value=range, shift_windows=shift),
+            "users": get_traffic_users_statistics(range_value=range, shift_windows=shift),
+            "direct_heard": get_traffic_direct_heard_statistics(range_value=range, shift_windows=shift),
+        }
     except ValueError as exc:
         return JSONResponse({"error": str(exc) or "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)

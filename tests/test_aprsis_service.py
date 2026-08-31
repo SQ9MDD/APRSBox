@@ -203,6 +203,37 @@ class AprsisClientRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("frame is stale", detail)
             self.assertEqual(writer.writes, [])
 
+    async def test_viscous_delay_extends_stale_line_limit_before_transport_write(self) -> None:
+        class RecordingWriter:
+            def __init__(self) -> None:
+                self.writes: list[bytes] = []
+
+            def is_closing(self) -> bool:
+                return False
+
+            def write(self, data: bytes) -> None:
+                self.writes.append(data)
+
+            async def drain(self) -> None:
+                return None
+
+        with temporary_database():
+            service = AprsisClientService()
+            writer = RecordingWriter()
+            service._writer = writer  # type: ignore[assignment]
+
+            success, detail = await service.send_tnc2_line(
+                "SQ9MDD-9>APRS:>Viscous-delay packet",
+                telemetry={
+                    "rx_received_monotonic": time.monotonic() - 6.0,
+                    "max_frame_age_seconds": 7.0,
+                },
+            )
+
+            self.assertTrue(success)
+            self.assertEqual(detail, "APRS-IS TX sent.")
+            self.assertEqual(len(writer.writes), 1)
+
     async def test_existing_transport_backlog_is_aborted_without_appending_line(self) -> None:
         class BufferedTransport:
             def __init__(self) -> None:

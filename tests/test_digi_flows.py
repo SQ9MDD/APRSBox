@@ -246,6 +246,22 @@ class DigiFlowsTests(unittest.TestCase):
         script_source = Path("app/static/js/help-viewer.js").read_text(encoding="utf-8")
         self.assertNotIn('data-help-autoload="1"', script_source)
 
+    def test_digi_flow_read_models_share_one_connection_and_skip_alert_writes(self) -> None:
+        router_source = Path("app/routers/pages.py").read_text(encoding="utf-8")
+        self.assertIn('@router.get("/digi-flows/{flow_id}")\n@_scoped_read_model', router_source)
+        self.assertIn('@router.get("/api/digi-flows/{flow_id}/events")\n@_scoped_read_model', router_source)
+        self.assertIn('@router.get("/api/digi-flows/{flow_id}/executions")\n@_scoped_read_model', router_source)
+        self.assertIn("perform_alert_maintenance=False", router_source)
+        self.assertIn("prefetched_map_config=map_picker_config", router_source)
+
+    def test_digi_flow_execution_polling_does_not_duplicate_initial_payload(self) -> None:
+        template_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
+        polling_start = template_source.index("const initialExecutions =")
+        polling_end = template_source.index('toggleButton.addEventListener("click"', polling_start)
+        polling_setup = template_source[polling_start:polling_end]
+        self.assertIn("pollingTimer = window.setInterval(refreshExecutions, 2000);", polling_setup)
+        self.assertNotIn("\n        refreshExecutions();", polling_setup)
+
     def test_digi_flow_editor_save_uses_shared_progress_modal(self) -> None:
         template_source = Path("app/templates/digi_flow_form.html").read_text(encoding="utf-8")
         self.assertIn('id="digi-flow-save-progress"', template_source)

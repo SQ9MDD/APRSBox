@@ -2113,7 +2113,6 @@
         previousPayload = executionSignature(initialExecutions);
         renderExecutions(initialExecutions);
         pollingTimer = window.setInterval(refreshExecutions, 2000);
-        refreshExecutions();
 
         toggleButton.addEventListener("click", () => {
             frozen = !frozen;

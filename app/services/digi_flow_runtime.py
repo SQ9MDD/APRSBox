@@ -47,6 +47,7 @@ from app.services.igate_messaging import (
 from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, get_digi_flow, list_enabled_digi_flows, log_digi_flow_event
 from app.services.outbound import (
     APRSIS_TO_RF_ORIGIN,
+    DIGI_TX_BASE_MAX_AGE_SECONDS,
     build_aprsis_third_party_tnc2,
     enqueue_digi_tx_job,
     persist_outbound_frame,
@@ -946,6 +947,11 @@ class DigiFlowRuntimeService:
                     self._pending_viscous_wait_count = max(0, self._pending_viscous_wait_count - 1)
 
         if created_entry:
+            try:
+                existing_delay = float(context.get("digi_tx_viscous_delay_seconds") or 0.0)
+            except (TypeError, ValueError):
+                existing_delay = 0.0
+            context["digi_tx_viscous_delay_seconds"] = max(existing_delay, float(window_sec))
             log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
@@ -1856,11 +1862,17 @@ class DigiFlowRuntimeService:
             return self._schedule_aprsis_rf_pending(context, None, step)
         config = dict(step.get("config") or {})
         target = str(config.get("rf_target") or "").strip()
+        try:
+            viscous_delay_seconds = max(0.0, float(context.get("digi_tx_viscous_delay_seconds") or 0.0))
+        except (TypeError, ValueError):
+            viscous_delay_seconds = 0.0
         success, detail = enqueue_digi_tx_job(
             interface_name=target,
             line=str(context["current_line"]),
             flow_id=int(context["flow"]["id"]),
             frame_uid=str(context["frame_uid"]),
+            received_at=str(context.get("created_at") or ""),
+            max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + viscous_delay_seconds,
         )
         decision = "tx" if success else "drop"
         message = (
@@ -2101,6 +2113,8 @@ class DigiFlowRuntimeService:
                     "target_interface_id": int(target_row["id"]),
                     "normalized_packet_hash": entry.packet_hash,
                 },
+                received_at=str(entry.context.get("created_at") or ""),
+                max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + delay_sec,
             )
             if not success:
                 reason = str(detail or "target_unavailable")
@@ -2264,7 +2278,12 @@ class DigiFlowRuntimeService:
             else context.get("enqueue_monotonic"),
             now_monotonic,
         )
-        max_frame_age_ms = self._aprsis_tx_max_frame_age_seconds * 1000.0
+        try:
+            viscous_delay_seconds = max(0.0, float(context.get("digi_tx_viscous_delay_seconds") or 0.0))
+        except (TypeError, ValueError):
+            viscous_delay_seconds = 0.0
+        max_frame_age_seconds = self._aprsis_tx_max_frame_age_seconds + viscous_delay_seconds
+        max_frame_age_ms = max_frame_age_seconds * 1000.0
         if frame_age_ms is None or frame_age_ms > max_frame_age_ms:
             age_label = "unknown" if frame_age_ms is None else f"{frame_age_ms:.0f} ms"
             message = _t(
@@ -2376,6 +2395,7 @@ class DigiFlowRuntimeService:
             "enqueue_monotonic": context.get("enqueue_monotonic"),
             "rx_to_igate_enqueue_ms": rx_to_igate_enqueue_ms,
             "igate_queue_wait_ms": igate_queue_wait_ms,
+            "max_frame_age_seconds": max_frame_age_seconds,
         }
         if isinstance(self._aprsis_client, AprsisClientService):
             success, detail = await self._aprsis_client.send_tnc2_line(tx_line, telemetry=tx_telemetry)

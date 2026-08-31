@@ -20,6 +20,7 @@ from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, LOCAL_TX_SOURCE_REF
 from app.services.aprsis_rf import record_aprsis_rf_stat
 from app.services.outbound import (
     APRSIS_TO_RF_ORIGIN,
+    DIGI_TX_BASE_MAX_AGE_SECONDS,
     LOCAL_TX_ORIGIN,
     LOCAL_TX_ORIGIN_ROUTED,
     OUTBOUND_KIND_DIGI_TX,
@@ -41,6 +42,37 @@ from app.services.traffic import TrafficMonitorService
 
 KISS_FEND = 0xC0
 LOCAL_TX_PACING_KINDS = {"object", "bulletin", "beacon", "wx", "freq_object", "net_sked", "status", "manual"}
+
+
+def _parse_utc_timestamp(value: object) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value or "").strip())
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _digi_tx_stale_reason(job: dict[str, Any], payload: dict[str, Any], *, now: datetime) -> str | None:
+    received_at = _parse_utc_timestamp(
+        payload.get("digi_received_at") or job.get("created_at") or job.get("scheduled_at")
+    )
+    if received_at is None:
+        return "DIGI TX dropped as expired: missing receive timestamp."
+    try:
+        max_age_seconds = float(payload.get("digi_max_age_seconds") or DIGI_TX_BASE_MAX_AGE_SECONDS)
+    except (TypeError, ValueError):
+        max_age_seconds = DIGI_TX_BASE_MAX_AGE_SECONDS
+    max_age_seconds = max(DIGI_TX_BASE_MAX_AGE_SECONDS, max_age_seconds)
+    age_seconds = max(0.0, (now.astimezone(timezone.utc) - received_at).total_seconds())
+    if age_seconds <= max_age_seconds:
+        return None
+    return (
+        "DIGI TX dropped as expired: "
+        f"frame age={age_seconds:.1f}s exceeds limit={max_age_seconds:.1f}s "
+        f"(received_at={received_at.isoformat()})."
+    )
 
 
 def _kiss_frame_hex_preview(frame: bytes, *, max_bytes: int = 32) -> str:
@@ -143,6 +175,13 @@ class OutboundService:
             payload = job.get("payload") or {}
             aprsis_to_rf = str(payload.get("origin") or payload.get("tx_origin") or "").strip() == APRSIS_TO_RF_ORIGIN
             traffic_source_kind = "aprsis_to_rf" if aprsis_to_rf else "rf"
+            if kind == OUTBOUND_KIND_DIGI_TX:
+                stale_reason = _digi_tx_stale_reason(job, payload, now=datetime.now(timezone.utc))
+                if stale_reason:
+                    mark_outbound_job_skipped(job_id, stale_reason)
+                    self._record_aprsis_rf_tx_result(payload, sent=False)
+                    log_event("WARNING", "outbound", f"Dropped expired DIGI TX outbound job #{job_id}: {stale_reason}")
+                    return
             skip_reason = _skip_reason_for_inactive_aprs_content(kind=kind, payload=payload, now=datetime.now(timezone.utc))
             if skip_reason:
                 mark_outbound_job_skipped(job_id, skip_reason)
@@ -263,6 +302,13 @@ class OutboundService:
                 return
             tx_gap_seconds = self._resolve_tx_gap_seconds(job)
             await self._wait_for_tx_gap(interface_id=normalized_interface_id, gap_seconds=tx_gap_seconds)
+            if kind == OUTBOUND_KIND_DIGI_TX:
+                stale_reason = _digi_tx_stale_reason(job, payload, now=datetime.now(timezone.utc))
+                if stale_reason:
+                    mark_outbound_job_skipped(job_id, stale_reason)
+                    self._record_aprsis_rf_tx_result(payload, sent=False)
+                    log_event("WARNING", "outbound", f"Dropped expired DIGI TX outbound job #{job_id}: {stale_reason}")
+                    return
             if modem_type == "TCP":
                 if self._traffic_monitor is not None:
                     sent_via_monitor = await self._traffic_monitor.send_outbound_frame(

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.12.11 - 2026-08-31
+- `Stabile Version`: Leistung und Regelverarbeitung von Packet Routing wurden verbessert, die Einstellungen und Farbpaletten wurden verfeinert, und abgelaufene DIGI- sowie APRS-IS-Frames werden jetzt verworfen, statt nach einer Verzögerung gesendet zu werden. Das Protokoll enthält Alter und Limit eines verworfenen Frames und erleichtert damit die Diagnose einer Überlastung von Backend oder TNC.
+
+## 1.12.10.dev - 2026-08-31
+- `Packet Routing / Schutz vor alten Frames`: Die DIGI-Weiterleitungswarteschlange bewahrt den ursprünglichen Empfangszeitpunkt und verwirft Frames, die älter als 5 Sekunden sind, automatisch vor dem RF-TX; nur die konfigurierte Viscous-Delay verlängert dieses Limit. Dasselbe Limit `5 s + Viscous Delay` gilt für den APRS-IS-Uplink einschließlich der abschließenden Prüfung direkt vor dem TCP-Schreibvorgang. Ein verworfenes Job protokolliert ein `WARNING` sowie einen Warteschlangengrund mit Frame-Alter, Limit und Empfangszeit, wodurch Verzögerungen durch überlastetes Backend oder TNC nachvollziehbar werden.
+
+## 1.12.9.dev - 2026-08-30
+- `Packet Routing / Leistung`: Regeleditor und Verlaufs-APIs verwenden jetzt gemeinsam eine SQLite-Verbindung, führen bei Lesezugriffen keine Alert-Wartungsschreibvorgänge aus und laden Kartenkonfiguration sowie initialen Verlauf beim Öffnen nicht mehr doppelt.
+
+## 1.12.8.dev - 2026-08-28
+- `GUI / Farbpaletten`: 29 abwechslungsreiche Paletten mit hellen und dunklen Varianten wurden ergänzt, darunter Pastell-, Gelände-, Retro- und Technik-Sets. Die Auswahl erfolgt jetzt über ein kompaktes, scrollbar angeordnetes Farbmuster-Raster, ohne die Speicherung der Einstellung zu ändern.
+- `Einstellungen / Layout`: Rechts neben den globalen Einstellungen fasst eine kompakte Spalte jetzt Anwendungsaktualisierung, APRS-Geräteerkennung und Konfigurationssicherung zusammen. Wiederholte Angaben zur Verfügbarkeit und zum Aktualisierungszeitpunkt des lokalen Caches wurden aus dem Erkennungspanel entfernt; der verkürzte Hinweis auf einen instabilen Kanal steht jetzt neben der Auswahlliste.
+
+## 1.12.7.dev - 2026-08-28
+- `Objekte und Items / Liste`: Punktartefakte neben Symbolen und Statussymbolen wurden entfernt. Schmale Symbolzellen verwenden jetzt einen passenden Innenabstand und nicht mehr die für gekürzten Text vorgesehene Auslassungsmarkierung; die Kürzung von Überschriften und anderen langen Werten bleibt unverändert.
+
+## 1.12.6.dev - 2026-08-28
+- `Bandbedingungen / Bewertungsstabilität`: die stundenspezifische Referenzbasis wird jetzt erst nach 7–14 passenden Stichproben schrittweise einbezogen, statt die gesamte Historie bereits nach drei Stunden zu ersetzen. Die Voraussetzungen für W4 wurden verschärft; bei geringer Modellzuverlässigkeit wird der höchste ausgegebene Pegel auf W2, W3 oder W4 begrenzt, sodass eine unreife Basis kein falsches starkes Bandopening mehr meldet.
+
 ## 1.12.4 - 2026-08-28
 - `Stabile Version`: diese Version konzentriert sich auf einen strikten, Burst-resistenten APRS-IS-Uplink und eine zuverlässigere Wiederherstellung nativer KISS-TCP-Verbindungen nach RX-Stille. Bei schlechter Verbindung verwirft APRSBox veraltete Frames bewusst, statt sie später gesammelt auszugeben.
 - `APRS-IS / strikte Aktualität`: APRS-IS TX arbeitet bei Überlastung oder schlechter Verbindung jetzt fail-closed. Frames, die älter als 5 Sekunden sind, werden direkt vor dem Transport-Schreibvorgang verworfen; die gemeinsame Routing-Warteschlange ist auf 256 Frames begrenzt.

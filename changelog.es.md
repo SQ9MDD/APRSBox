@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.12.11 - 2026-08-31
+- `Versión estable`: se mejoraron el rendimiento y la gestión de reglas de Packet Routing, se perfeccionaron la interfaz de Ajustes y las paletas de color, y las tramas DIGI y APRS-IS vencidas ahora se descartan en lugar de enviarse tras un retraso. El registro conserva la edad y el límite de una trama descartada para facilitar el diagnóstico de sobrecarga del backend o TNC.
+
+## 1.12.10.dev - 2026-08-31
+- `Packet Routing / protección contra tramas antiguas`: la cola de repetición DIGI conserva la hora de recepción original y descarta automáticamente antes de TX RF las tramas con más de 5 segundos; el viscous delay configurado es la única ampliación de ese límite. El mismo límite de `5 s + viscous delay` se aplica al uplink APRS-IS, incluida la comprobación final inmediatamente antes de escribir por TCP. Un trabajo descartado registra un `WARNING` y un motivo en la cola con la edad de la trama, el límite y la hora de recepción, facilitando el diagnóstico de retrasos del backend o TNC sobrecargados.
+
+## 1.12.9.dev - 2026-08-30
+- `Packet Routing / rendimiento`: el editor de reglas y las API del historial comparten ahora una sola conexión SQLite, evitan escrituras de mantenimiento de alertas durante las lecturas y ya no cargan dos veces la configuración del mapa ni el historial inicial al abrir la página.
+
+## 1.12.8.dev - 2026-08-28
+- `GUI / paletas de colores`: se añadieron 29 paletas variadas con versiones clara y oscura, incluidos conjuntos pastel, de terreno, retro y técnicos. La selección utiliza ahora una cuadrícula compacta y desplazable de muestras sin cambiar la forma de guardar el ajuste.
+- `Ajustes / diseño`: una columna compacta a la derecha de Ajustes globales agrupa ahora Actualización de la aplicación, Identificación del dispositivo APRS y Copia de seguridad de la configuración. Se eliminaron del panel de identificación los datos repetidos sobre la disponibilidad y la hora de actualización de la caché local, y el aviso abreviado sobre el canal inestable se trasladó junto al selector.
+
+## 1.12.7.dev - 2026-08-28
+- `Objetos e ítems / lista`: se eliminaron los artefactos en forma de punto mostrados junto a los símbolos y los iconos de estado. Las celdas estrechas de iconos ahora usan un relleno ajustado y ya no aplican los puntos suspensivos destinados a recortar texto; el recorte de encabezados y otros valores largos permanece sin cambios.
+
+## 1.12.6.dev - 2026-08-28
+- `Condiciones de banda / estabilidad de la evaluación`: la referencia específica de cada hora se incorpora ahora de forma gradual solo después de reunir entre 7 y 14 muestras equivalentes, en lugar de sustituir todo el historial tras apenas tres horas. Se endurecieron los requisitos de W4 y, cuando la confianza del modelo es baja, el nivel máximo comunicado queda limitado a W2, W3 o W4, evitando falsas indicaciones de apertura fuerte con una referencia aún inmadura.
+
 ## 1.12.4 - 2026-08-28
 - `Versión estable`: esta versión se centra en un uplink APRS-IS estricto y resistente a ráfagas, y en una recuperación más fiable de las conexiones KISS TCP nativas tras silencio RX. Con mala conectividad, APRSBox descarta deliberadamente las tramas antiguas en lugar de liberarlas posteriormente en ráfagas.
 - `APRS-IS / actualidad estricta`: la transmisión APRS-IS ahora falla de forma cerrada ante congestión o mala conectividad. Las tramas con más de 5 segundos se descartan justo antes de escribir en el transporte y la cola compartida de routing queda limitada a 256 tramas.

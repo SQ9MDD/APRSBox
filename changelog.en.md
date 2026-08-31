@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.12.11 - 2026-08-31
+- `Stable release`: improved Packet Routing performance and rule handling, refined the Settings interface and color palettes, and now drops expired DIGI and APRS-IS frames instead of releasing them after a delay. The log records the age and limit of a dropped frame to help identify backend or TNC overload.
+
+## 1.12.10.dev - 2026-08-31
+- `Packet Routing / stale-frame protection`: the DIGI repeat queue preserves the original receive time and automatically drops frames older than 5 seconds before RF TX; the configured viscous delay is the only extension to that limit. The same `5 s + viscous delay` limit applies to APRS-IS uplink, including the final check immediately before the TCP write. A dropped job records a `WARNING` and a queue reason containing the frame age, limit, and receive time, making overloaded backend or TNC delays diagnosable.
+
+## 1.12.9.dev - 2026-08-30
+- `Packet Routing / performance`: the rule editor and history APIs now share one SQLite connection, avoid alert-maintenance writes during reads, and no longer fetch map configuration or initial history twice when opening the page.
+
+## 1.12.8.dev - 2026-08-28
+- `GUI / color palettes`: added 29 varied palettes with light and dark variants, including pastel, terrain, retro, and technical sets. Palette selection now uses a compact, scrollable swatch grid without changing how the setting is stored.
+- `Settings / layout`: a compact right-hand column beside Global Settings now groups Application update, APRS device identification, and Configuration backup. Repeated local-cache availability and update-time details were removed from the identification panel, while the shortened unstable-channel warning was moved beside the selector.
+
+## 1.12.7.dev - 2026-08-28
+- `Objects and items / list`: removed dot artifacts displayed next to symbols and status icons. Narrow icon cells now use fitted padding and no longer apply the ellipsis intended for truncated text; header and other long-value truncation remains unchanged.
+
+## 1.12.6.dev - 2026-08-28
+- `Band conditions / assessment stability`: the hour-specific baseline is now phased in only after 7–14 matching samples instead of replacing the full history after just three hours. W4 evidence requirements were tightened, while low model confidence caps the highest reported level at W2, W3, or W4 so an immature baseline no longer reports a false strong opening.
+
 ## 1.12.4 - 2026-08-28
 - `Stable release`: this release focuses on a strict, burst-resistant APRS-IS uplink and more reliable recovery of native KISS TCP connections after RX silence. Under poor connectivity APRSBox deliberately drops stale frames instead of releasing them later in bursts.
 - `APRS-IS / strict freshness`: APRS-IS TX now fails closed under congestion or degraded connectivity. Frames older than 5 seconds are dropped immediately before the transport write, the shared routing queue is bounded to 256 frames, and a full queue drops new input instead of accumulating an unbounded backlog.

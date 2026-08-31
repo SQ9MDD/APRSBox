@@ -64,6 +64,7 @@ TRAFFIC_STATISTICS_TOCALL_UNKNOWN = "UNKNOWN"
 _TRAFFIC_STATISTICS_TOCALL_RE = re.compile(r"^AP[A-Z0-9]{2,5}$")
 _TRAFFIC_STATISTICS_TOCALL_NON_AP_ALLOWED = frozenset({"PSKAPR"})
 TRAFFIC_STATISTICS_USERS_DEFAULT_TOP_LIMIT = 20
+TRAFFIC_STATISTICS_DEVICES_MAX_ENTRIES_PER_ITEM = 100
 _SOURCE_BUCKET_DEFAULTS: dict[str, int | None] = {
     "rx_total": 0,
     "tx_total": 0,
@@ -675,23 +676,25 @@ def get_traffic_devices_statistics(
         window_end_utc=window_end_utc,
         labels_by_key=labels_by_key,
     )
-    frame_rows = fetch_all(
-        f"""
-        SELECT direction, format, line, created_at
-        FROM traffic_frames
-        WHERE format LIKE 'TNC2%'
-          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
-          AND created_at >= ?
-          AND created_at < ?
-        ORDER BY created_at ASC, id ASC
-        """,
-        (window_start_utc.isoformat(), window_end_utc.isoformat()),
-    )
-    observations_from_frames = _build_device_pair_observations_from_frame_rows(
-        frame_rows=frame_rows,
-        labels_by_key=labels_by_key,
-        database=get_aprs_device_identification_database(),
-    )
+    observations_from_frames: list[dict[str, Any]] = []
+    if not observations_from_buffer:
+        frame_rows = fetch_all(
+            f"""
+            SELECT direction, format, line, created_at
+            FROM traffic_frames
+            WHERE format LIKE 'TNC2%'
+              AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
+              AND created_at >= ?
+              AND created_at < ?
+            ORDER BY created_at ASC, id ASC
+            """,
+            (window_start_utc.isoformat(), window_end_utc.isoformat()),
+        )
+        observations_from_frames = _build_device_pair_observations_from_frame_rows(
+            frame_rows=frame_rows,
+            labels_by_key=labels_by_key,
+            database=get_aprs_device_identification_database(),
+        )
     resolve_group_key, grouped_labels_by_key = _build_device_group_key_resolver(labels_by_key=labels_by_key)
     pair_assignments = _resolve_unique_station_tocall_pair_assignments(
         observations=[*observations_from_buffer, *observations_from_frames],
@@ -870,35 +873,62 @@ def get_traffic_direct_heard_statistics(
     window_end_utc = latest_output_bucket_start + timedelta(minutes=output_bucket_minutes)
 
     station_counts: dict[str, int] = {}
-    frame_rows = fetch_all(
-        f"""
-        SELECT direction, format, line
-        FROM traffic_frames
-        WHERE format LIKE 'TNC2%'
-          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
-          AND created_at >= ?
-          AND created_at < ?
-        ORDER BY created_at ASC, id ASC
+    hourly_rows = fetch_all(
+        """
+        SELECT
+            station_key,
+            SUM(direct_frame_count) AS frame_total,
+            MIN(direct_count_ready) AS direct_count_ready
+        FROM traffic_device_station_device_hourly
+        WHERE bucket_start_utc >= ?
+          AND bucket_start_utc < ?
+        GROUP BY station_key
+        ORDER BY frame_total DESC, station_key ASC
         """,
         (window_start_utc.isoformat(), window_end_utc.isoformat()),
     )
-    for row in frame_rows:
-        frame_format = str(row["format"] or "").strip().upper()
-        direction = _normalize_direction(row["direction"], frame_format)
-        if direction != "RX":
-            continue
-        parsed = parse_tnc2_frame(str(row["line"] or ""))
-        if parsed is None:
-            continue
-        path_tokens = _split_path_tokens(str(parsed.get("logical_path") or parsed.get("path") or ""))
-        if any(token.endswith("*") for token in path_tokens):
-            continue
-        station_key = _normalize_station_key_for_devices(
-            parsed.get("logical_source_key") or parsed.get("source_key") or parsed.get("source") or ""
-        )
+    # After upgrading an existing database, use the raw fallback only until the
+    # first observation confirms that the new projection is being populated.
+    projection_ready = any(bool(int(row["direct_count_ready"] or 0)) for row in hourly_rows)
+    for row in hourly_rows:
+        station_key = _normalize_station_key_for_devices(row["station_key"])
         if not station_key:
             continue
-        station_counts[station_key] = int(station_counts.get(station_key) or 0) + 1
+        frame_total = int(row["frame_total"] or 0)
+        if frame_total > 0:
+            station_counts[station_key] = frame_total
+
+    if not projection_ready:
+        station_counts.clear()
+        frame_rows = fetch_all(
+            f"""
+            SELECT direction, format, line
+            FROM traffic_frames
+            WHERE format LIKE 'TNC2%'
+              AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
+              AND created_at >= ?
+              AND created_at < ?
+            ORDER BY created_at ASC, id ASC
+            """,
+            (window_start_utc.isoformat(), window_end_utc.isoformat()),
+        )
+        for row in frame_rows:
+            frame_format = str(row["format"] or "").strip().upper()
+            direction = _normalize_direction(row["direction"], frame_format)
+            if direction != "RX":
+                continue
+            parsed = parse_tnc2_frame(str(row["line"] or ""))
+            if parsed is None:
+                continue
+            path_tokens = _split_path_tokens(str(parsed.get("logical_path") or parsed.get("path") or ""))
+            if any(token.endswith("*") for token in path_tokens):
+                continue
+            station_key = _normalize_station_key_for_devices(
+                parsed.get("logical_source_key") or parsed.get("source_key") or parsed.get("source") or ""
+            )
+            if not station_key:
+                continue
+            station_counts[station_key] = int(station_counts.get(station_key) or 0) + 1
 
     total = sum(max(0, int(value)) for value in station_counts.values())
     items = _build_traffic_users_items(counts=station_counts, total=total, top_limit=normalized_top_limit)
@@ -919,12 +949,14 @@ def record_traffic_device_station_observation(
     frame_format: str,
     line: str,
     timestamp: str,
+    parsed_frame: dict[str, Any] | None = None,
+    connection: Any = None,
 ) -> None:
     normalized_format = str(frame_format or "").strip().upper()
     if not normalized_format.startswith("TNC2"):
         return
 
-    parsed = parse_tnc2_frame(str(line or ""))
+    parsed = parsed_frame if parsed_frame is not None else parse_tnc2_frame(str(line or ""))
     if parsed is None:
         return
 
@@ -949,14 +981,16 @@ def record_traffic_device_station_observation(
     normalized_timestamp_value = parsed_timestamp if parsed_timestamp is not None else datetime.now(timezone.utc).replace(microsecond=0)
     normalized_timestamp = normalized_timestamp_value.isoformat()
     bucket_start_utc = _floor_to_bucket_start(normalized_timestamp_value, bucket_minutes=60).isoformat()
-    with get_connection() as connection:
-        connection.execute(
+    path_tokens = _split_path_tokens(str(parsed.get("logical_path") or parsed.get("path") or ""))
+    direct_frame_count = 0 if any(token.endswith("*") for token in path_tokens) else 1
+    def persist(target_connection: Any) -> None:
+        target_connection.execute(
             """
             INSERT INTO traffic_device_station_device_hourly(
                 bucket_start_utc, station_key, device_key, destination_key,
-                device_label, recognized_flag, frame_count, last_seen_at
+                device_label, recognized_flag, frame_count, direct_frame_count, direct_count_ready, last_seen_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, 1, ?)
             ON CONFLICT(bucket_start_utc, station_key, device_key, destination_key) DO UPDATE SET
                 device_label = excluded.device_label,
                 recognized_flag = CASE
@@ -964,6 +998,7 @@ def record_traffic_device_station_observation(
                     ELSE 0
                 END,
                 frame_count = traffic_device_station_device_hourly.frame_count + 1,
+                direct_frame_count = traffic_device_station_device_hourly.direct_frame_count + excluded.direct_frame_count,
                 last_seen_at = CASE
                     WHEN excluded.last_seen_at > traffic_device_station_device_hourly.last_seen_at THEN excluded.last_seen_at
                     ELSE traffic_device_station_device_hourly.last_seen_at
@@ -976,9 +1011,16 @@ def record_traffic_device_station_observation(
                 destination_key,
                 device_label,
                 1 if is_recognized else 0,
+                direct_frame_count,
                 normalized_timestamp,
             ),
         )
+
+    if connection is not None:
+        persist(connection)
+        return
+    with get_connection() as scoped_connection:
+        persist(scoped_connection)
 
 
 def _build_device_pair_observations_from_frame_rows(
@@ -1039,7 +1081,6 @@ def _build_device_pair_observations_from_hourly_buffer(
         WHERE frame_count > 0
           AND bucket_start_utc >= ?
           AND bucket_start_utc < ?
-        ORDER BY bucket_start_utc ASC, last_seen_at ASC, station_key ASC, device_key ASC, destination_key ASC
         """,
         (window_start_utc.isoformat(), window_end_utc.isoformat()),
     )
@@ -1353,8 +1394,8 @@ def _traffic_devices_item(
 ) -> dict[str, Any]:
     normalized_entries = _normalize_traffic_device_station_entries(entries)
     normalized_count = max(0, int(count))
-    if normalized_entries:
-        normalized_count = len(normalized_entries)
+    entries_total = len(normalized_entries)
+    returned_entries = normalized_entries[:TRAFFIC_STATISTICS_DEVICES_MAX_ENTRIES_PER_ITEM]
     normalized_total = max(0, int(total))
     percent = 0.0
     if normalized_total > 0:
@@ -1362,14 +1403,14 @@ def _traffic_devices_item(
     unique_station_keys = sorted(
         {
             _normalize_station_key_for_devices(entry.get("callsign_ssid"))
-            for entry in normalized_entries
+            for entry in returned_entries
             if _normalize_station_key_for_devices(entry.get("callsign_ssid"))
         }
     )
     unique_tocalls = sorted(
         {
             _normalize_statistics_tocall(value)
-            for entry in normalized_entries
+            for entry in returned_entries
             for value in list(entry.get("tocalls") or ([entry.get("tocall")] if entry.get("tocall") else []))
             if _normalize_statistics_tocall(value)
         }
@@ -1384,7 +1425,9 @@ def _traffic_devices_item(
         "tocall": tocall_value,
         "stations_tocall": unique_station_keys,
         "stations_model": unique_station_keys,
-        "entries": normalized_entries,
+        "entries": returned_entries,
+        "entries_total": entries_total,
+        "entries_truncated": entries_total > len(returned_entries),
     }
 
 
@@ -1779,6 +1822,13 @@ def _prune_radio_activity_history(*, now_utc: datetime) -> None:
         connection.execute(
             """
             DELETE FROM radio_activity_5m
+            WHERE bucket_start_utc < ?
+            """,
+            (cutoff_utc.isoformat(),),
+        )
+        connection.execute(
+            """
+            DELETE FROM traffic_device_station_device_hourly
             WHERE bucket_start_utc < ?
             """,
             (cutoff_utc.isoformat(),),

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.12.11 - 31.08.2026
+- `Wydanie stabilne`: poprawiono wydajność i obsługę reguł Packet Routing, uporządkowano interfejs ustawień oraz palety kolorów, a transmisja DIGI i APRS-IS odrzuca teraz przeterminowane ramki zamiast wypuszczać je po opóźnieniu. Log wskazuje wiek i limit odrzuconej ramki, co ułatwia wykrywanie przeciążenia backendu lub TNC.
+
+## 1.12.10.dev - 31.08.2026
+- `Packet Routing / ochrona przed starymi ramkami`: kolejka retransmisji DIGI zachowuje czas pierwotnego odbioru i automatycznie odrzuca przed TX RF ramki starsze niż 5 sekund; jedynym rozszerzeniem limitu jest skonfigurowany viscous delay. Ten sam limit `5 s + viscous delay` obowiązuje dla uplinku APRS-IS, także przy końcowej kontroli przed zapisem TCP. Odrzucone zadanie zapisuje w logu `WARNING` oraz w kolejce przyczynę zawierającą wiek ramki, limit i czas odbioru, co ułatwia diagnozę przeciążonego backendu lub TNC.
+
+## 1.12.9.dev - 30.08.2026
+- `Packet Routing / wydajność`: edytor reguły i API historii współdzielą teraz jedno połączenie SQLite, nie wykonują zapisu maintenance alertów podczas odczytu oraz unikają podwójnego pobierania konfiguracji mapy i historii przy otwarciu strony.
+
+## 1.12.8.dev - 28.08.2026
+- `GUI / palety kolorów`: dodano 29 zróżnicowanych palet z wariantami jasnym i ciemnym, w tym zestawy pastelowe, terenowe, retro i techniczne. Wybór palety przeniesiono do zwartej, przewijanej siatki próbek bez zmiany sposobu zapisu ustawienia.
+- `Ustawienia / układ`: po prawej stronie Globalnych ustawień utworzono zwartą kolumnę z panelami Aktualizacja aplikacji, Identyfikacja urządzenia APRS i Kopia konfiguracji. Z panelu identyfikacji usunięto powtórzone informacje o dostępności i czasie aktualizacji lokalnego cache, a skrócone ostrzeżenie o niestabilnym kanale przeniesiono obok listy wyboru.
+
+## 1.12.7.dev - 28.08.2026
+- `Obiekty i itemy / lista`: usunięto kropki-artefakty wyświetlane obok symboli i ikon statusu. Wąskie komórki ikon mają teraz dopasowany padding i nie stosują wielokropka przeznaczonego do skracania tekstu; skracanie nagłówków i pozostałych długich wartości pozostaje bez zmian.
+
+## 1.12.6.dev - 28.08.2026
+- `Warunki pasma / stabilność oceny`: baza właściwa dla danej godziny jest teraz włączana płynnie dopiero po zebraniu 7–14 odpowiadających próbek, zamiast zastępować całą historię już po trzech godzinach. Zaostrzono przesłanki W4, a niska pewność modelu ogranicza maksymalny komunikowany poziom do W2, W3 lub W4, dzięki czemu niedojrzała baza nie sygnalizuje fałszywego silnego otwarcia.
+
 ## 1.12.4 - 28.08.2026
 - `Wydanie stabilne`: wydanie koncentruje się na rygorystycznym, odpornym na bursty uplinku APRS-IS oraz pewniejszym odzyskiwaniu natywnych połączeń KISS TCP po ciszy RX. Przy słabej łączności APRSBox celowo odrzuca nieaktualne ramki zamiast wypuszczać je później seriami.
 - `APRS-IS / rygorystyczna świeżość`: TX APRS-IS działa teraz fail-closed przy przeciążeniu lub słabym połączeniu. Ramki starsze niż 5 sekund są odrzucane bezpośrednio przed zapisem do transportu, wspólna kolejka routingu jest ograniczona do 256 ramek, a pełna kolejka odrzuca nowe wejście zamiast gromadzić nieograniczony backlog.

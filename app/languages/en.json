@@ -393,7 +393,7 @@
   "Update channel": "Update channel",
   "Save update channel": "Save update channel",
   "Update channel list could not be refreshed. Using saved channel.": "Update channel list could not be refreshed. Using saved channel.",
-  "Warning: selected update channel may contain unstable changes.": "Warning: selected update channel may contain unstable changes.",
+  "Warning: selected update channel may contain unstable changes.": "Channel may be unstable.",
   "Services are restarted only after update preparation. The GUI may temporarily lose connection during restart.": "Services are restarted only after update preparation. The GUI may temporarily lose connection during restart.",
   "Update channel saved: {channel}": "Update channel saved: {channel}",
   "Update channel saved.": "Update channel saved.",

@@ -14,6 +14,19 @@ UI_PALETTE_OPTIONS: tuple[dict[str, str], ...] = (
     {"value": "monochrome-neutral", "label": "Monochrome Neutral"},
     {"value": "copper-radar", "label": "Copper Radar"},
     {"value": "orange-workshop", "label": "Orange Workshop"},
+    {"value": "pastel-mint", "label": "Pastel Mint"},
+    {"value": "pastel-sky", "label": "Pastel Sky"},
+    {"value": "pastel-lemon", "label": "Pastel Lemon"},
+    {"value": "powder-blue", "label": "Powder Blue"},
+    {"value": "coral-bay", "label": "Coral Bay"},
+    {"value": "petrol-night", "label": "Petrol Night"},
+    {"value": "electric-magenta", "label": "Electric Magenta"},
+    {"value": "olive-field", "label": "Olive Field"},
+    {"value": "desert-sand", "label": "Desert Sand"},
+    {"value": "retro-terminal", "label": "Retro Terminal"},
+    {"value": "synthwave", "label": "Synthwave"},
+    {"value": "midnight-navy", "label": "Midnight Navy"},
+    {"value": "burgundy-wine", "label": "Burgundy Wine"},
 )
 
 UI_PALETTE_VALUES = frozenset(option["value"] for option in UI_PALETTE_OPTIONS)
