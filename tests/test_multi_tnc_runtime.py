@@ -1,12 +1,13 @@
 import asyncio
 import contextlib
+import json
 import os
 import socket
 import tempfile
 import unittest
 from pathlib import Path
 
-from app.db import execute, fetch_one, init_db
+from app.db import execute, fetch_one, init_db, utc_now
 from app.services.content import get_aprs_symbol_icon_path, traffic_snapshot as build_traffic_snapshot
 from app.services.outbound import build_tnc2_kiss_frame, claim_next_outbound_job
 from app.services.outbound_runtime import OutboundService
@@ -494,6 +495,7 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
                 line = "SQ9MDD-4>APRS:>TCP monitor TX"
                 expected_frame = build_tnc2_kiss_frame(line)
+                queued_at = utc_now()
                 execute(
                     """
                     INSERT INTO outbound_jobs(
@@ -501,11 +503,17 @@ class MultiTncRuntimeTests(unittest.IsolatedAsyncioTestCase):
                         locked_at, started_at, sent_at, attempt_count, last_error, created_at, updated_at
                     )
                     VALUES (
-                        'digi_tx', ?, ?, 'queued', '2026-01-01T00:00:00+00:00',
-                        NULL, NULL, NULL, 0, NULL, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00'
+                        'digi_tx', ?, ?, 'queued', ?,
+                        NULL, NULL, NULL, 0, NULL, ?, ?
                     )
                     """,
-                    (modem_id, '{"line":"SQ9MDD-4>APRS:>TCP monitor TX"}'),
+                    (
+                        modem_id,
+                        json.dumps({"line": line, "digi_received_at": queued_at}),
+                        queued_at,
+                        queued_at,
+                        queued_at,
+                    ),
                 )
 
                 job = claim_next_outbound_job()

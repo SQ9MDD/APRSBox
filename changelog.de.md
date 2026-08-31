@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.13.dev - 2026-09-01
+- `Packet Routing / Latenz`: leichte Zeit- und Queue-Tiefen-Aggregate im RAM wurden ergänzt. Reguläres RF-DIGI umgeht nun persistente `outbound_jobs` und nutzt flüchtige Queues sowie eigene Worker pro Schnittstelle, sodass TX-Gap oder ein langsames TNC andere TNCs nicht blockieren.
+- `APRS-IS / TX`: Das Routing übergibt Frames blockierungsfrei an eine begrenzte RAM-Queue; ein eigener Worker behält die bestehende Socket-, `drain()`- und Reconnect-Logik bei. Bei Überlauf wird der Frame sofort mit Warnung und Zähler verworfen.
+- `DigiFlow / Trace`: Die Diagnose der einzelnen Schritte wird außerhalb des Echtzeitpfads in Batches mit bis zu 50 Ereignissen oder alle 75 ms in einer Transaktion gespeichert. Auch das Bereinigen der Historie wurde aus der Frame-Verarbeitung entfernt.
+
 ## 1.12.11 - 2026-08-31
 - `Stabile Version`: Leistung und Regelverarbeitung von Packet Routing wurden verbessert, die Einstellungen und Farbpaletten wurden verfeinert, und abgelaufene DIGI- sowie APRS-IS-Frames werden jetzt verworfen, statt nach einer Verzögerung gesendet zu werden. Das Protokoll enthält Alter und Limit eines verworfenen Frames und erleichtert damit die Diagnose einer Überlastung von Backend oder TNC.
 

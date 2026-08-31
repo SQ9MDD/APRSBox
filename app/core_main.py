@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.db import init_db, log_event
 from app.services.aprsis import AprsisClientService
+from app.services.aprsis_tx_dispatcher import AprsIsTxDispatcher
 from app.services.alerts import expire_aprs_alerts
 from app.services.beacon_scheduler import BeaconSchedulerService
 from app.services.bulletin_scheduler import BulletinSchedulerService
@@ -17,6 +18,7 @@ from app.services.object_scheduler import ObjectSchedulerService
 from app.services.own_alert_scheduler import OwnAlertSchedulerService
 from app.services.outbound_runtime import OutboundService
 from app.services.radio_activity import RadioActivityAggregatorService
+from app.services.rf_tx_dispatcher import RfTxDispatcher
 from app.services.traffic import TrafficMonitorService
 from app.services.wx_scheduler import WxSchedulerService
 
@@ -26,9 +28,16 @@ async def lifespan(app_instance: FastAPI):
     init_db()
     expire_aprs_alerts()
     aprsis_uplink = AprsisClientService()
-    digi_flow_runtime = DigiFlowRuntimeService(aprsis_client=aprsis_uplink)
+    aprsis_tx_dispatcher = AprsIsTxDispatcher(client=aprsis_uplink)
+    traffic_monitor = TrafficMonitorService()
+    rf_tx_dispatcher = RfTxDispatcher(traffic_monitor=traffic_monitor)
+    digi_flow_runtime = DigiFlowRuntimeService(
+        aprsis_client=aprsis_uplink,
+        aprsis_tx_dispatcher=aprsis_tx_dispatcher,
+        rf_tx_dispatcher=rf_tx_dispatcher,
+    )
     aprsis_uplink.set_frame_consumer(digi_flow_runtime.enqueue_aprsis_tnc2_frame)
-    traffic_monitor = TrafficMonitorService(frame_consumer=digi_flow_runtime.enqueue_rx_tnc2_frame)
+    traffic_monitor.set_frame_consumer(digi_flow_runtime.enqueue_rx_tnc2_frame)
     outbound_service = OutboundService(traffic_monitor=traffic_monitor, digi_flow_runtime=digi_flow_runtime)
     beacon_scheduler = BeaconSchedulerService()
     bulletin_scheduler = BulletinSchedulerService()
@@ -38,9 +47,11 @@ async def lifespan(app_instance: FastAPI):
     wx_scheduler = WxSchedulerService()
     radio_activity_aggregator = RadioActivityAggregatorService()
     app_instance.state.aprsis_uplink = aprsis_uplink
+    app_instance.state.aprsis_tx_dispatcher = aprsis_tx_dispatcher
     app_instance.state.digi_flow_runtime = digi_flow_runtime
     app_instance.state.traffic_monitor = traffic_monitor
     app_instance.state.outbound_service = outbound_service
+    app_instance.state.rf_tx_dispatcher = rf_tx_dispatcher
     app_instance.state.beacon_scheduler = beacon_scheduler
     app_instance.state.bulletin_scheduler = bulletin_scheduler
     app_instance.state.maintenance_scheduler = maintenance_scheduler
@@ -49,6 +60,8 @@ async def lifespan(app_instance: FastAPI):
     app_instance.state.wx_scheduler = wx_scheduler
     app_instance.state.radio_activity_aggregator = radio_activity_aggregator
     await aprsis_uplink.start()
+    await aprsis_tx_dispatcher.start()
+    await rf_tx_dispatcher.start()
     await digi_flow_runtime.start()
     await traffic_monitor.start()
     await outbound_service.start()
@@ -72,8 +85,11 @@ async def lifespan(app_instance: FastAPI):
         await beacon_scheduler.stop()
         await outbound_service.stop()
         await traffic_monitor.stop()
+        await digi_flow_runtime.wait_until_idle()
         await digi_flow_runtime.stop()
+        await aprsis_tx_dispatcher.stop()
         await aprsis_uplink.stop()
+        await rf_tx_dispatcher.stop()
 
 
 app = FastAPI(title="APRSBox Core", version=__version__, lifespan=lifespan)
@@ -92,6 +108,11 @@ def version() -> dict[str, str]:
 @app.get("/api/traffic")
 def traffic_snapshot() -> JSONResponse:
     return JSONResponse(app.state.traffic_monitor.snapshot())
+
+
+@app.get("/api/digi-flows/latency")
+def digi_flow_latency_snapshot() -> JSONResponse:
+    return JSONResponse(app.state.digi_flow_runtime.latency_snapshot())
 
 
 @app.post("/api/traffic/restart")

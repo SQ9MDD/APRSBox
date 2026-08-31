@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.13.dev - 2026-09-01
+- `Packet Routing / latencia`: se añadieron agregados ligeros en RAM para tiempos y profundidad de colas. El DIGI RF normal ya no usa `outbound_jobs` persistente y funciona con colas efímeras y un worker por interfaz, por lo que el TX gap o un TNC lento no bloquean otros TNC.
+- `APRS-IS / TX`: el routing entrega las tramas sin bloqueo a una cola RAM limitada; un worker separado conserva la lógica existente de socket, `drain()` y reconexión. El desbordamiento descarta inmediatamente la trama con aviso y contador.
+- `DigiFlow / trace`: el diagnóstico de cada paso se guarda fuera del camino realtime en lotes de hasta 50 eventos o cada 75 ms, usando una sola transacción. La limpieza del historial también se retiró del procesamiento de cada trama.
+
 ## 1.12.11 - 2026-08-31
 - `Versión estable`: se mejoraron el rendimiento y la gestión de reglas de Packet Routing, se perfeccionaron la interfaz de Ajustes y las paletas de color, y las tramas DIGI y APRS-IS vencidas ahora se descartan en lugar de enviarse tras un retraso. El registro conserva la edad y el límite de una trama descartada para facilitar el diagnóstico de sobrecarga del backend o TNC.
 
