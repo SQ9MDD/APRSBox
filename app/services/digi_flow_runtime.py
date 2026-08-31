@@ -138,12 +138,14 @@ class DigiFlowRuntimeService:
         *,
         poll_interval: float = 0.5,
         aprsis_client: AprsisClientService | None = None,
+        rf_tx_dispatcher: Any | None = None,
         aprsis_rf_delay_override: float | None = None,
         queue_max_frames: int = DIGI_FLOW_QUEUE_MAX_FRAMES,
         aprsis_tx_max_frame_age_seconds: float = APRSIS_TX_MAX_FRAME_AGE_SECONDS,
     ) -> None:
         self._poll_interval = poll_interval
         self._aprsis_client = aprsis_client
+        self._rf_tx_dispatcher = rf_tx_dispatcher
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=max(1, int(queue_max_frames)))
         self._aprsis_tx_max_frame_age_seconds = max(0.1, float(aprsis_tx_max_frame_age_seconds))
         self._task: asyncio.Task[None] | None = None
@@ -158,6 +160,42 @@ class DigiFlowRuntimeService:
         self._aprsis_rf_flow_buckets: dict[tuple[int, str], _TokenBucket] = {}
         self._aprsis_rf_source_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
         self._aprsis_rf_recipient_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
+        self._latency_metrics: dict[str, dict[str, float | int | None]] = {}
+        self._max_queue_depth = 0
+
+    def latency_snapshot(self) -> dict[str, Any]:
+        dispatcher_snapshot = (
+            self._rf_tx_dispatcher.latency_snapshot()
+            if self._rf_tx_dispatcher is not None
+            else {
+                "queue_depth_by_interface": {},
+                "current_queue_depth": 0,
+                "max_queue_depth": 0,
+                "worker_count": 0,
+            }
+        )
+        return {
+            "metrics_ms": {name: dict(values) for name, values in self._latency_metrics.items()},
+            "digiflow_queue": {
+                "current_depth": self._queue.qsize(),
+                "max_depth": self._max_queue_depth,
+                "capacity": self._queue.maxsize,
+            },
+            "rf_tx_dispatcher": dispatcher_snapshot,
+        }
+
+    def _record_latency(self, name: str, value_ms: float | None) -> None:
+        if value_ms is None:
+            return
+        metric = self._latency_metrics.setdefault(
+            name,
+            {"count": 0, "total_ms": 0.0, "last_ms": None, "max_ms": 0.0},
+        )
+        metric["count"] = int(metric["count"] or 0) + 1
+        metric["total_ms"] = float(metric["total_ms"] or 0.0) + value_ms
+        metric["last_ms"] = value_ms
+        metric["max_ms"] = max(float(metric["max_ms"] or 0.0), value_ms)
+        metric["avg_ms"] = float(metric["total_ms"]) / int(metric["count"])
 
     async def start(self) -> None:
         if self._task is not None:
@@ -299,6 +337,11 @@ class DigiFlowRuntimeService:
                 "accepted": False,
                 "drop_reason": "routing_queue_full",
             }
+        self._max_queue_depth = max(self._max_queue_depth, self._queue.qsize())
+        self._record_latency(
+            "rx_to_digiflow_enqueue",
+            _monotonic_delta_ms(rx_received_monotonic, enqueue_monotonic),
+        )
         source_is_aprsis = str(frame["source_kind"]) == APRSIS_FLOW_SOURCE_KIND
         log_event(
             "DEBUG" if source_is_aprsis else "INFO",
@@ -429,11 +472,20 @@ class DigiFlowRuntimeService:
                 continue
 
             try:
+                processing_started = time.monotonic()
+                self._record_latency(
+                    "digiflow_enqueue_to_processing_start",
+                    _monotonic_delta_ms(frame.get("enqueue_monotonic"), processing_started),
+                )
                 await self._process_frame(frame)
             except Exception as exc:
                 error = str(exc).strip() or exc.__class__.__name__
                 log_event("WARNING", "digi_flow_runtime", f"Failed to process DIGI Flow frame {frame['frame_uid']}: {error}")
             finally:
+                self._record_latency(
+                    "digiflow_processing",
+                    _monotonic_delta_ms(processing_started, time.monotonic()),
+                )
                 self._queue.task_done()
 
     async def _process_frame(self, frame: dict[str, Any]) -> None:
@@ -1937,13 +1989,23 @@ class DigiFlowRuntimeService:
             viscous_delay_seconds = max(0.0, float(context.get("digi_tx_viscous_delay_seconds") or 0.0))
         except (TypeError, ValueError):
             viscous_delay_seconds = 0.0
-        success, detail = enqueue_digi_tx_job(
-            interface_name=target,
-            line=str(context["current_line"]),
-            flow_id=int(context["flow"]["id"]),
-            frame_uid=str(context["frame_uid"]),
-            received_at=str(context.get("created_at") or ""),
-            max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + viscous_delay_seconds,
+        decision_monotonic = time.monotonic()
+        if self._rf_tx_dispatcher is None:
+            success, detail = False, "RF TX dispatcher is unavailable."
+        else:
+            success, detail = self._rf_tx_dispatcher.enqueue_digi_tx(
+                interface_name=target,
+                line=str(context["current_line"]),
+                flow_id=int(context["flow"]["id"]),
+                frame_uid=str(context["frame_uid"]),
+                received_monotonic=context.get("rx_received_monotonic")
+                if isinstance(context.get("rx_received_monotonic"), (int, float))
+                else context.get("enqueue_monotonic"),
+                max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + viscous_delay_seconds,
+            )
+        self._record_latency(
+            "digi_decision_to_rf_tx_enqueue",
+            _monotonic_delta_ms(decision_monotonic, time.monotonic()),
         )
         decision = "tx" if success else "drop"
         message = (
@@ -2500,6 +2562,11 @@ class DigiFlowRuntimeService:
             "igate_queue_wait_ms": igate_queue_wait_ms,
             "max_frame_age_seconds": max_frame_age_seconds,
         }
+        aprsis_decision_monotonic = time.monotonic()
+        self._record_latency(
+            "igate_decision_to_aprsis_tx_enqueue",
+            _monotonic_delta_ms(aprsis_decision_monotonic, time.monotonic()),
+        )
         if isinstance(self._aprsis_client, AprsisClientService):
             success, detail = await self._aprsis_client.send_tnc2_line(tx_line, telemetry=tx_telemetry)
         else:

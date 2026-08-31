@@ -2539,6 +2539,9 @@ class TrafficMonitorService:
         self._runtimes: dict[int, _TrafficModemRuntime] = {}
         self._runtime_signatures: dict[int, tuple[Any, ...]] = {}
 
+    def set_frame_consumer(self, frame_consumer: Callable[[str], None] | Callable[..., None] | None) -> None:
+        self._frame_consumer = frame_consumer
+
     async def start(self) -> None:
         if self._task is not None:
             return

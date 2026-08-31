@@ -115,6 +115,23 @@ def event_rows_for_frame(frame_uid: str) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+class FakeRfTxDispatcher:
+    def __init__(self) -> None:
+        self.jobs: list[dict] = []
+
+    def enqueue_digi_tx(self, **job) -> tuple[bool, str]:
+        self.jobs.append(dict(job))
+        return True, "DIGI TX queued in RAM."
+
+    def latency_snapshot(self) -> dict:
+        return {
+            "queue_depth_by_interface": {},
+            "current_queue_depth": 0,
+            "max_queue_depth": len(self.jobs),
+            "worker_count": 1,
+        }
+
+
 class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_rx_to_log_only_records_runtime_log(self) -> None:
         with temporary_database():
@@ -1708,13 +1725,15 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     ],
                 }
             )
-            runtime = DigiFlowRuntimeService()
+            rf_dispatcher = FakeRfTxDispatcher()
+            runtime = DigiFlowRuntimeService(rf_tx_dispatcher=rf_dispatcher)
             await runtime.start()
             try:
                 result = runtime.enqueue_tnc2_frame(
                     source_kind="receiver_rf",
                     source_ref="TNC-1",
                     raw_payload="SP8ABC-9>APRS,WIDE1-1:>Transmit me",
+                    rx_received_monotonic=time.monotonic(),
                 )
                 await runtime.wait_until_idle()
             finally:
@@ -1728,15 +1747,20 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sum(1 for row in rows if row["event_type"] == "pipeline_finished"), 1)
             self.assertEqual(sum(1 for row in rows if row["event_type"] == "output_action"), 1)
 
-            job_row = fetch_one("SELECT kind, status, payload_json FROM outbound_jobs ORDER BY id DESC LIMIT 1")
-            assert job_row is not None
-            self.assertEqual(job_row["kind"], "digi_tx")
-            self.assertEqual(job_row["status"], "queued")
-            payload = json.loads(job_row["payload_json"])
-            self.assertEqual(payload["frame_uid"], str(result["frame_uid"]))
-            self.assertEqual(payload["flow_id"], flow_id)
-            self.assertEqual(payload["digi_max_age_seconds"], 5.0)
-            self.assertTrue(payload["digi_received_at"])
+            self.assertIsNone(fetch_one("SELECT id FROM outbound_jobs ORDER BY id DESC LIMIT 1"))
+            self.assertEqual(len(rf_dispatcher.jobs), 1)
+            self.assertEqual(rf_dispatcher.jobs[0]["interface_name"], "RF-OUT")
+            self.assertEqual(rf_dispatcher.jobs[0]["flow_id"], flow_id)
+            self.assertEqual(rf_dispatcher.jobs[0]["frame_uid"], str(result["frame_uid"]))
+            self.assertEqual(
+                rf_dispatcher.jobs[0]["line"],
+                "SP8ABC-9>APRS,SQ9MDD-4*:>Transmit me",
+            )
+            latency = runtime.latency_snapshot()
+            self.assertGreaterEqual(latency["metrics_ms"]["rx_to_digiflow_enqueue"]["count"], 1)
+            self.assertGreaterEqual(latency["metrics_ms"]["digiflow_enqueue_to_processing_start"]["count"], 1)
+            self.assertGreaterEqual(latency["metrics_ms"]["digiflow_processing"]["count"], 1)
+            self.assertGreaterEqual(latency["metrics_ms"]["digi_decision_to_rf_tx_enqueue"]["count"], 1)
 
             summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
             self.assertEqual(len(summaries), 1)
@@ -1870,7 +1894,8 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     ],
                 }
             )
-            runtime = DigiFlowRuntimeService()
+            rf_dispatcher = FakeRfTxDispatcher()
+            runtime = DigiFlowRuntimeService(rf_tx_dispatcher=rf_dispatcher)
             await runtime.start()
             try:
                 runtime.enqueue_tnc2_frame(
@@ -1882,10 +1907,9 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await runtime.stop()
 
-            job_row = fetch_one("SELECT payload_json FROM outbound_jobs WHERE kind = 'digi_tx' ORDER BY id DESC LIMIT 1")
-            assert job_row is not None
-            payload = json.loads(job_row["payload_json"])
-            self.assertEqual(payload["digi_max_age_seconds"], 7.0)
+            self.assertEqual(len(rf_dispatcher.jobs), 1)
+            self.assertEqual(rf_dispatcher.jobs[0]["max_age_seconds"], 7.0)
+            self.assertIsNone(fetch_one("SELECT id FROM outbound_jobs WHERE kind = 'digi_tx' LIMIT 1"))
 
     async def test_outbound_service_forwards_local_tx_to_routing_once_per_event_id(self) -> None:
         with temporary_database():
