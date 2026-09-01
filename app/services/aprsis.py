@@ -1171,25 +1171,12 @@ class AprsisClientService:
             is_closing = getattr(writer, "is_closing", None) if writer is not None else None
             if writer is None or (callable(is_closing) and bool(is_closing())):
                 return False, "APRS-IS TX dropped: uplink is not connected."
-            transport = getattr(writer, "transport", None)
-            get_write_buffer_size = getattr(transport, "get_write_buffer_size", None)
-            pending_bytes = int(get_write_buffer_size()) if callable(get_write_buffer_size) else 0
-            if pending_bytes > 0:
-                detail = f"APRS-IS TX dropped: transport still has {pending_bytes} buffered bytes."
-                await self._disconnect_locked(
-                    reason=detail,
-                    status=APRSIS_STATUS_ERROR,
-                    error=detail,
-                    abort=True,
-                )
-                self._retry_not_before = time.monotonic() + self._reconnect_delay
-                return False, detail
             try:
                 writer.write(wire)
                 await asyncio.wait_for(writer.drain(), timeout=APRSIS_TX_DRAIN_TIMEOUT_SECONDS)
-                pending_bytes = int(get_write_buffer_size()) if callable(get_write_buffer_size) else 0
-                if pending_bytes > 0:
-                    raise RuntimeError(f"transport retained {pending_bytes} bytes after drain")
+                is_closing = getattr(writer, "is_closing", None)
+                if callable(is_closing) and bool(is_closing()):
+                    raise RuntimeError("transport closed during drain")
             except (OSError, RuntimeError, TimeoutError) as exc:
                 detail = f"APRS-IS TX dropped: write failed: {exc}"
                 await self._disconnect_locked(

@@ -234,7 +234,7 @@ class AprsisClientRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(detail, "APRS-IS TX sent.")
             self.assertEqual(len(writer.writes), 1)
 
-    async def test_existing_transport_backlog_is_aborted_without_appending_line(self) -> None:
+    async def test_existing_transport_backlog_does_not_block_tx_after_drain(self) -> None:
         class BufferedTransport:
             def __init__(self) -> None:
                 self.aborted = False
@@ -256,6 +256,9 @@ class AprsisClientRuntimeTests(unittest.IsolatedAsyncioTestCase):
             def write(self, _data: bytes) -> None:
                 self.write_called = True
 
+            async def drain(self) -> None:
+                return None
+
         with temporary_database():
             service = AprsisClientService(reconnect_delay=0.1)
             writer = BufferedWriter()
@@ -265,13 +268,13 @@ class AprsisClientRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             success, detail = await service.send_tnc2_line("SQ9MDD-9>APRS:>Do not append")
 
-            self.assertFalse(success)
-            self.assertIn("buffered bytes", detail)
-            self.assertFalse(writer.write_called)
-            self.assertTrue(writer.transport.aborted)
-            self.assertIsNone(service._writer)
+            self.assertTrue(success)
+            self.assertEqual(detail, "APRS-IS TX sent.")
+            self.assertTrue(writer.write_called)
+            self.assertFalse(writer.transport.aborted)
+            self.assertIs(service._writer, writer)
 
-    async def test_transport_bytes_remaining_after_drain_abort_connection(self) -> None:
+    async def test_transport_bytes_remaining_after_drain_are_a_success(self) -> None:
         class RetainingTransport:
             def __init__(self) -> None:
                 self.pending_bytes = 0
@@ -291,7 +294,8 @@ class AprsisClientRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 return False
 
             def write(self, data: bytes) -> None:
-                self.transport.pending_bytes = len(data)
+                _ = data
+                self.transport.pending_bytes = 94
 
             async def drain(self) -> None:
                 return None
@@ -305,10 +309,11 @@ class AprsisClientRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             success, detail = await service.send_tnc2_line("SQ9MDD-9>APRS:>Retained after drain")
 
-            self.assertFalse(success)
-            self.assertIn("transport retained", detail)
-            self.assertTrue(writer.transport.aborted)
-            self.assertIsNone(service._writer)
+            self.assertTrue(success)
+            self.assertEqual(detail, "APRS-IS TX sent.")
+            self.assertEqual(writer.transport.pending_bytes, 94)
+            self.assertFalse(writer.transport.aborted)
+            self.assertIs(service._writer, writer)
 
     async def test_disconnected_line_is_dropped_and_not_replayed_after_reconnect(self) -> None:
         class RecordingWriter:
