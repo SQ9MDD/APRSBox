@@ -25,6 +25,12 @@ from app.db import (
 from app.i18n import get_app_language, get_translator
 from app.services.alarm_groups import is_configured_aprs_alarm_group
 from app.services.content import get_station_settings, get_visible_station_snapshots
+from app.services.rx_side_effect_dispatcher import (
+    collect_rx_radar_stages,
+    current_rx_radar_stage_collector,
+    current_rx_side_effect_stage_collector,
+    rx_radar_stage,
+)
 from app.services.wx import get_wx_config
 
 NOTIFICATION_TRANSPORT_TYPE_WEBHOOK = "webhook"
@@ -407,34 +413,38 @@ def build_radar_station_match_event(
     reference_my_station_id: int = 1,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
-    station_name = str(station or "").strip().upper()
-    rule_pattern = str(matched_rule.get("pattern") or "").strip().upper() or "*"
-    message = _build_radar_message_text(
-        station=station_name or "unknown",
-        distance_m=distance_m,
-        threshold_m=threshold_m,
-    )
-    return {
-        "event_type": "radar_station_match",
-        "timestamp": timestamp or utc_now(),
-        "node": _notification_node_payload(),
-        "message": message,
-        "data": {
-            "station": station_name,
-            "matched_rule": {
-                "id": int(matched_rule["id"]),
-                "pattern": rule_pattern,
+    radar_collector = current_rx_radar_stage_collector()
+    with rx_radar_stage(radar_collector, "event_node_settings_db_read"):
+        node = _notification_node_payload()
+    with rx_radar_stage(radar_collector, "event_payload_build"):
+        station_name = str(station or "").strip().upper()
+        rule_pattern = str(matched_rule.get("pattern") or "").strip().upper() or "*"
+        message = _build_radar_message_text(
+            station=station_name or "unknown",
+            distance_m=distance_m,
+            threshold_m=threshold_m,
+        )
+        return {
+            "event_type": "radar_station_match",
+            "timestamp": timestamp or utc_now(),
+            "node": node,
+            "message": message,
+            "data": {
+                "station": station_name,
+                "matched_rule": {
+                    "id": int(matched_rule["id"]),
+                    "pattern": rule_pattern,
+                },
+                "distance_m": distance_m,
+                "threshold_m": int(threshold_m),
+                "latitude": latitude,
+                "longitude": longitude,
+                "reference_my_station_id": int(reference_my_station_id),
+                "reference_station": reference_station,
+                "reference_latitude": reference_latitude,
+                "reference_longitude": reference_longitude,
             },
-            "distance_m": distance_m,
-            "threshold_m": int(threshold_m),
-            "latitude": latitude,
-            "longitude": longitude,
-            "reference_my_station_id": int(reference_my_station_id),
-            "reference_station": reference_station,
-            "reference_latitude": reference_latitude,
-            "reference_longitude": reference_longitude,
-        },
-    }
+        }
 
 
 def build_test_notification_event(*, timestamp: str | None = None) -> dict[str, Any]:
@@ -474,120 +484,137 @@ def queue_aprs_message_notification(
 
 
 def queue_radar_notifications(*, timestamp: str | None = None) -> None:
-    settings = get_notification_settings()
-    if not settings["radar_enabled"]:
-        return
-    events = evaluate_radar_notifications(timestamp=timestamp)
-    for event in events:
-        _NOTIFICATION_EXECUTOR.submit(_send_notification_event, event)
+    with collect_rx_radar_stages(current_rx_side_effect_stage_collector()) as radar_collector:
+        with rx_radar_stage(radar_collector, "settings_gate_read"):
+            settings = get_notification_settings()
+        if not settings["radar_enabled"]:
+            return
+        events = evaluate_radar_notifications(timestamp=timestamp)
+        with rx_radar_stage(radar_collector, "notification_enqueue"):
+            for event in events:
+                _NOTIFICATION_EXECUTOR.submit(_send_notification_event, event)
 
 
 def evaluate_radar_notifications(*, timestamp: str | None = None) -> list[dict[str, Any]]:
-    ensure_notification_defaults()
-    rules = list_notification_radar_rules()
+    radar_collector = current_rx_radar_stage_collector()
+    with rx_radar_stage(radar_collector, "rules_and_summary_state_read"):
+        ensure_notification_defaults()
+        rules = list_notification_radar_rules()
     if not rules:
         return []
 
-    station_settings = get_station_settings()
-    settings = get_notification_settings()
-    ignored_patterns = _parse_radar_ignored_patterns(settings.get("radar_ignored_patterns"))
-    ignored_station_keys = _notification_radar_ignored_station_keys(
-        station_settings,
-    )
-    reference_latitude = _parse_coordinate(station_settings.get("latitude"))
-    reference_longitude = _parse_coordinate(station_settings.get("longitude"))
-    reference_station = _reference_station_label(station_settings)
-    snapshots = get_visible_station_snapshots(limit=500)
+    with rx_radar_stage(radar_collector, "configuration_db_read"):
+        station_settings = get_station_settings()
+        settings = get_notification_settings()
+    with rx_radar_stage(radar_collector, "ignored_pattern_normalize"):
+        ignored_patterns = _parse_radar_ignored_patterns(settings.get("radar_ignored_patterns"))
+    with rx_radar_stage(radar_collector, "ignored_station_config_read"):
+        ignored_station_keys = _notification_radar_ignored_station_keys(
+            station_settings,
+        )
+    with rx_radar_stage(radar_collector, "reference_normalize"):
+        reference_latitude = _parse_coordinate(station_settings.get("latitude"))
+        reference_longitude = _parse_coordinate(station_settings.get("longitude"))
+        reference_station = _reference_station_label(station_settings)
+    with rx_radar_stage(radar_collector, "station_snapshot_fetch"):
+        snapshots = get_visible_station_snapshots(limit=500)
 
-    state_rows = fetch_all(
-        """
-        SELECT rule_id, station_key, is_inside, last_matched_at
-        FROM notification_radar_state
-        """
-    )
-    state_by_rule: dict[int, dict[str, dict[str, Any]]] = {}
-    for row in state_rows:
-        rule_id = int(row["rule_id"])
-        state_by_rule.setdefault(rule_id, {})[str(row["station_key"]).casefold()] = dict(row)
+    with rx_radar_stage(radar_collector, "state_read"):
+        state_rows = fetch_all(
+            """
+            SELECT rule_id, station_key, is_inside, last_matched_at
+            FROM notification_radar_state
+            """
+        )
+    with rx_radar_stage(radar_collector, "state_index_build"):
+        state_by_rule: dict[int, dict[str, dict[str, Any]]] = {}
+        for row in state_rows:
+            rule_id = int(row["rule_id"])
+            state_by_rule.setdefault(rule_id, {})[str(row["station_key"]).casefold()] = dict(row)
 
     now = timestamp or utc_now()
     events: list[dict[str, Any]] = []
     pending_logs: list[str] = []
-    with get_connection() as connection:
-        for rule in rules:
-            rule_id = int(rule["id"])
-            rule_pattern = str(rule.get("pattern") or "").strip().upper()
-            threshold_m = int(rule.get("distance_m") or 0)
-            current_matches: dict[str, dict[str, Any]] = {}
-            for snapshot in snapshots:
-                station_key = str(snapshot.get("display_callsign") or snapshot.get("callsign") or "").strip().upper()
-                if not station_key or not pattern_matches_callsign(rule_pattern, station_key):
-                    continue
-                if station_key.casefold() in ignored_station_keys:
-                    continue
-                if _station_matches_ignored_patterns(station_key, ignored_patterns):
-                    continue
-                distance_m = _snapshot_distance_m(snapshot, reference_latitude, reference_longitude)
-                if threshold_m > 0 and (distance_m is None or distance_m > threshold_m):
-                    continue
-                current_matches[station_key.casefold()] = {
-                    "snapshot": snapshot,
-                    "distance_m": distance_m,
-                    "station_key": station_key,
-                }
+    with rx_radar_stage(radar_collector, "evaluation_transaction"):
+        with get_connection() as connection:
+            for rule in rules:
+                rule_id = int(rule["id"])
+                rule_pattern = str(rule.get("pattern") or "").strip().upper()
+                threshold_m = int(rule.get("distance_m") or 0)
+                current_matches: dict[str, dict[str, Any]] = {}
+                with rx_radar_stage(radar_collector, "station_filter_geometry"):
+                    for snapshot in snapshots:
+                        station_key = str(snapshot.get("display_callsign") or snapshot.get("callsign") or "").strip().upper()
+                        if not station_key or not pattern_matches_callsign(rule_pattern, station_key):
+                            continue
+                        if station_key.casefold() in ignored_station_keys:
+                            continue
+                        if _station_matches_ignored_patterns(station_key, ignored_patterns):
+                            continue
+                        distance_m = _snapshot_distance_m(snapshot, reference_latitude, reference_longitude)
+                        if threshold_m > 0 and (distance_m is None or distance_m > threshold_m):
+                            continue
+                        current_matches[station_key.casefold()] = {
+                            "snapshot": snapshot,
+                            "distance_m": distance_m,
+                            "station_key": station_key,
+                        }
 
-            previous_states = state_by_rule.get(rule_id, {})
-            current_inside_keys = set(current_matches)
-            previous_inside_keys = {
-                station_key
-                for station_key, row in previous_states.items()
-                if bool(int(row.get("is_inside") or 0))
-            }
+                with rx_radar_stage(radar_collector, "state_diff_event_persistence"):
+                    previous_states = state_by_rule.get(rule_id, {})
+                    current_inside_keys = set(current_matches)
+                    previous_inside_keys = {
+                        station_key
+                        for station_key, row in previous_states.items()
+                        if bool(int(row.get("is_inside") or 0))
+                    }
 
-            for station_key, match in current_matches.items():
-                was_inside = station_key in previous_inside_keys
-                last_matched_at = now if not was_inside else None
-                _upsert_radar_state(
-                    connection,
-                    rule_id=rule_id,
-                    station_key=match["station_key"],
-                    is_inside=1,
-                    last_matched_at=last_matched_at,
-                )
-                if not was_inside and bool(int(rule.get("enabled") or 0)):
-                    snapshot = match["snapshot"]
-                    pending_logs.append(
-                        f"{match['station_key']} {_format_utc_log_timestamp(now)} wyslano powiadomienie; zalozono blokade ponownej wysylki"
-                    )
-                    events.append(
-                        build_radar_station_match_event(
-                            station=match["station_key"],
-                            matched_rule=rule,
-                            distance_m=match["distance_m"],
-                            threshold_m=threshold_m,
-                            latitude=str(snapshot.get("latitude") or "") or None,
-                            longitude=str(snapshot.get("longitude") or "") or None,
-                            reference_latitude=reference_latitude,
-                            reference_longitude=reference_longitude,
-                            reference_station=reference_station,
-                            timestamp=now,
+                    for station_key, match in current_matches.items():
+                        was_inside = station_key in previous_inside_keys
+                        last_matched_at = now if not was_inside else None
+                        _upsert_radar_state(
+                            connection,
+                            rule_id=rule_id,
+                            station_key=match["station_key"],
+                            is_inside=1,
+                            last_matched_at=last_matched_at,
                         )
-                    )
+                        if not was_inside and bool(int(rule.get("enabled") or 0)):
+                            snapshot = match["snapshot"]
+                            pending_logs.append(
+                                f"{match['station_key']} {_format_utc_log_timestamp(now)} wyslano powiadomienie; zalozono blokade ponownej wysylki"
+                            )
+                            with rx_radar_stage(radar_collector, "event_build"):
+                                events.append(
+                                    build_radar_station_match_event(
+                                        station=match["station_key"],
+                                        matched_rule=rule,
+                                        distance_m=match["distance_m"],
+                                        threshold_m=threshold_m,
+                                        latitude=str(snapshot.get("latitude") or "") or None,
+                                        longitude=str(snapshot.get("longitude") or "") or None,
+                                        reference_latitude=reference_latitude,
+                                        reference_longitude=reference_longitude,
+                                        reference_station=reference_station,
+                                        timestamp=now,
+                                    )
+                                )
 
-            for station_key in previous_inside_keys - current_inside_keys:
-                station_label = previous_states[station_key]["station_key"] if station_key in previous_states else station_key
-                pending_logs.append(
-                    f"{station_label} {_format_utc_log_timestamp(now)} wyszedl z zasiegu / wyespirowal czas; zdejmuje blokade"
-                )
-                _upsert_radar_state(
-                    connection,
-                    rule_id=rule_id,
-                    station_key=station_label,
-                    is_inside=0,
-                    last_matched_at=None,
-                )
-    for message in pending_logs:
-        log_event("INFO", NOTIFICATION_RADAR_EVENT_LOG_CATEGORY, message)
+                    for station_key in previous_inside_keys - current_inside_keys:
+                        station_label = previous_states[station_key]["station_key"] if station_key in previous_states else station_key
+                        pending_logs.append(
+                            f"{station_label} {_format_utc_log_timestamp(now)} wyszedl z zasiegu / wyespirowal czas; zdejmuje blokade"
+                        )
+                        _upsert_radar_state(
+                            connection,
+                            rule_id=rule_id,
+                            station_key=station_label,
+                            is_inside=0,
+                            last_matched_at=None,
+                        )
+    with rx_radar_stage(radar_collector, "event_log_persistence"):
+        for message in pending_logs:
+            log_event("INFO", NOTIFICATION_RADAR_EVENT_LOG_CATEGORY, message)
     return events
 
 
@@ -866,21 +893,23 @@ def _parse_coordinate(value: Any) -> float | None:
 
 
 def _snapshot_distance_m(snapshot: dict[str, Any], reference_latitude: float | None, reference_longitude: float | None) -> int | None:
-    latitude = _parse_coordinate(snapshot.get("latitude"))
-    longitude = _parse_coordinate(snapshot.get("longitude"))
-    if None in {reference_latitude, reference_longitude, latitude, longitude}:
-        return None
-    earth_radius_m = 6_371_000.0
-    phi_1 = math.radians(float(reference_latitude))
-    phi_2 = math.radians(float(latitude))
-    delta_phi = math.radians(float(latitude) - float(reference_latitude))
-    delta_lambda = math.radians(float(longitude) - float(reference_longitude))
-    haversine = (
-        math.sin(delta_phi / 2.0) ** 2
-        + math.cos(phi_1) * math.cos(phi_2) * math.sin(delta_lambda / 2.0) ** 2
-    )
-    arc = 2.0 * math.atan2(math.sqrt(haversine), math.sqrt(1.0 - haversine))
-    return int(round(earth_radius_m * arc))
+    radar_collector = current_rx_radar_stage_collector()
+    with rx_radar_stage(radar_collector, "distance_geometry"):
+        latitude = _parse_coordinate(snapshot.get("latitude"))
+        longitude = _parse_coordinate(snapshot.get("longitude"))
+        if None in {reference_latitude, reference_longitude, latitude, longitude}:
+            return None
+        earth_radius_m = 6_371_000.0
+        phi_1 = math.radians(float(reference_latitude))
+        phi_2 = math.radians(float(latitude))
+        delta_phi = math.radians(float(latitude) - float(reference_latitude))
+        delta_lambda = math.radians(float(longitude) - float(reference_longitude))
+        haversine = (
+            math.sin(delta_phi / 2.0) ** 2
+            + math.cos(phi_1) * math.cos(phi_2) * math.sin(delta_lambda / 2.0) ** 2
+        )
+        arc = 2.0 * math.atan2(math.sqrt(haversine), math.sqrt(1.0 - haversine))
+        return int(round(earth_radius_m * arc))
 
 
 def _reference_station_label(station_settings: dict[str, Any]) -> str:
@@ -983,14 +1012,16 @@ def _upsert_radar_state(
     is_inside: int,
     last_matched_at: str | None,
 ) -> None:
-    connection.execute(
-        """
-        INSERT INTO notification_radar_state(rule_id, station_key, is_inside, last_matched_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(rule_id, station_key) DO UPDATE SET
-            is_inside = excluded.is_inside,
-            last_matched_at = COALESCE(excluded.last_matched_at, notification_radar_state.last_matched_at),
-            updated_at = excluded.updated_at
-        """,
-        (rule_id, station_key, int(is_inside), last_matched_at, utc_now()),
-    )
+    radar_collector = current_rx_radar_stage_collector()
+    with rx_radar_stage(radar_collector, "state_persistence_write"):
+        connection.execute(
+            """
+            INSERT INTO notification_radar_state(rule_id, station_key, is_inside, last_matched_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(rule_id, station_key) DO UPDATE SET
+                is_inside = excluded.is_inside,
+                last_matched_at = COALESCE(excluded.last_matched_at, notification_radar_state.last_matched_at),
+                updated_at = excluded.updated_at
+            """,
+            (rule_id, station_key, int(is_inside), last_matched_at, utc_now()),
+        )

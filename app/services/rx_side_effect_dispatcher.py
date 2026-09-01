@@ -23,6 +23,7 @@ class RxSideEffectStageCollector:
     def __init__(self) -> None:
         self.samples: list[RxSideEffectStageSample] = []
         self.stage_order: list[str] = []
+        self.radar_metrics: dict[str, dict[str, float | int | None]] = {}
 
     @contextmanager
     def measure(self, name: str) -> Iterator[None]:
@@ -39,9 +40,35 @@ class RxSideEffectStageCollector:
                 )
             )
 
+    @contextmanager
+    def measure_radar(self, name: str) -> Iterator[None]:
+        normalized_name = str(name or "unknown").strip() or "unknown"
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            self._update_local_metric(
+                normalized_name,
+                max(0.0, (time.monotonic() - started) * 1000.0),
+            )
+
+    def _update_local_metric(self, name: str, value_ms: float) -> None:
+        metric = self.radar_metrics.setdefault(
+            name,
+            {"count": 0, "total_ms": 0.0, "last_ms": None, "max_ms": 0.0},
+        )
+        metric["count"] = int(metric["count"] or 0) + 1
+        metric["total_ms"] = float(metric["total_ms"] or 0.0) + value_ms
+        metric["last_ms"] = value_ms
+        metric["max_ms"] = max(float(metric["max_ms"] or 0.0), value_ms)
+
 
 _active_stage_collector: ContextVar[RxSideEffectStageCollector | None] = ContextVar(
     "rx_side_effect_stage_collector",
+    default=None,
+)
+_active_radar_stage_collector: ContextVar[RxSideEffectStageCollector | None] = ContextVar(
+    "rx_radar_stage_collector",
     default=None,
 )
 _noop_rx_side_effect_stage = nullcontext()
@@ -51,6 +78,21 @@ def current_rx_side_effect_stage_collector() -> RxSideEffectStageCollector | Non
     return _active_stage_collector.get()
 
 
+def current_rx_radar_stage_collector() -> RxSideEffectStageCollector | None:
+    return _active_radar_stage_collector.get()
+
+
+@contextmanager
+def collect_rx_radar_stages(
+    collector: RxSideEffectStageCollector | None,
+) -> Iterator[RxSideEffectStageCollector | None]:
+    token = _active_radar_stage_collector.set(collector)
+    try:
+        yield collector
+    finally:
+        _active_radar_stage_collector.reset(token)
+
+
 def rx_side_effect_stage(
     collector: RxSideEffectStageCollector | None,
     name: str,
@@ -58,6 +100,15 @@ def rx_side_effect_stage(
     if collector is None:
         return _noop_rx_side_effect_stage
     return collector.measure(name)
+
+
+def rx_radar_stage(
+    collector: RxSideEffectStageCollector | None,
+    name: str,
+):
+    if collector is None:
+        return _noop_rx_side_effect_stage
+    return collector.measure_radar(name)
 
 
 @dataclass(frozen=True)
@@ -92,6 +143,7 @@ class RxSideEffectDispatcher:
         self._metrics_ms: dict[str, dict[str, float | int | None]] = {}
         self._stage_breakdown_ms: dict[str, dict[str, float | int | None]] = {}
         self._last_stage_order: list[str] = []
+        self._radar_breakdown_ms: dict[str, dict[str, float | int | None]] = {}
 
     async def start(self) -> None:
         if self._task is not None:
@@ -176,6 +228,9 @@ class RxSideEffectDispatcher:
                 name: dict(values) for name, values in self._stage_breakdown_ms.items()
             },
             "last_stage_order": list(self._last_stage_order),
+            "radar_breakdown_ms": {
+                name: dict(values) for name, values in self._radar_breakdown_ms.items()
+            },
         }
 
     async def _run(self) -> None:
@@ -235,6 +290,8 @@ class RxSideEffectDispatcher:
                 sample.name,
                 sample.elapsed_ms,
             )
+        for name, metric in collector.radar_metrics.items():
+            self._merge_metric(self._radar_breakdown_ms, name, metric)
 
     def _record_metric(self, name: str, value_ms: float) -> None:
         self._update_metric(self._metrics_ms, name, value_ms)
@@ -253,4 +310,23 @@ class RxSideEffectDispatcher:
         metric["total_ms"] = float(metric["total_ms"] or 0.0) + value_ms
         metric["last_ms"] = value_ms
         metric["max_ms"] = max(float(metric["max_ms"] or 0.0), value_ms)
+        metric["avg_ms"] = float(metric["total_ms"] or 0.0) / int(metric["count"] or 1)
+
+    @staticmethod
+    def _merge_metric(
+        metrics: dict[str, dict[str, float | int | None]],
+        name: str,
+        sample: dict[str, float | int | None],
+    ) -> None:
+        metric = metrics.setdefault(
+            name,
+            {"count": 0, "total_ms": 0.0, "last_ms": None, "max_ms": 0.0},
+        )
+        metric["count"] = int(metric["count"] or 0) + int(sample["count"] or 0)
+        metric["total_ms"] = float(metric["total_ms"] or 0.0) + float(sample["total_ms"] or 0.0)
+        metric["last_ms"] = sample["last_ms"]
+        metric["max_ms"] = max(
+            float(metric["max_ms"] or 0.0),
+            float(sample["max_ms"] or 0.0),
+        )
         metric["avg_ms"] = float(metric["total_ms"] or 0.0) / int(metric["count"] or 1)

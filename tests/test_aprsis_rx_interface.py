@@ -35,6 +35,7 @@ from app.services.radio_activity import run_radio_activity_aggregation
 from app.services.rx_side_effect_dispatcher import (
     RxSideEffectDispatcher,
     current_rx_side_effect_stage_collector,
+    rx_radar_stage,
     rx_side_effect_stage,
 )
 from app.services.traffic import process_normalized_tnc2_rx
@@ -734,6 +735,10 @@ class AprsisAsyncSideEffectTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("statistics", metrics["stage_breakdown_ms"])
                 for stage_name in metrics["last_stage_order"]:
                     self.assertEqual(metrics["stage_breakdown_ms"][stage_name]["count"], 1)
+                self.assertEqual(
+                    metrics["radar_breakdown_ms"]["settings_gate_read"]["count"],
+                    1,
+                )
             finally:
                 await service._rx_side_effect_dispatcher.stop()
 
@@ -805,6 +810,109 @@ class AprsisAsyncSideEffectTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreaterEqual(stage["total_ms"], stage["max_ms"])
         finally:
             await service._rx_side_effect_dispatcher.stop()
+
+    async def test_radar_breakdown_metrics_are_aggregated(self) -> None:
+        def instrumented_observer(_line: str, **_kwargs: object) -> bool:
+            collector = current_rx_side_effect_stage_collector()
+            with rx_radar_stage(collector, "synthetic_radar_parent"):
+                for _ in range(2):
+                    with rx_radar_stage(collector, "synthetic_radar_leaf"):
+                        time.sleep(0.001)
+            return True
+
+        service = self._service(
+            rx_processor=instrumented_observer,
+            frame_consumer=lambda *_args, **_kwargs: None,
+        )
+        await service._rx_side_effect_dispatcher.start()
+        try:
+            self.assertTrue(service._process_server_line(POSITION_LINE))
+            self.assertTrue(service._process_server_line(POSITION_LINE.replace("test", "again")))
+            await service.wait_until_rx_side_effects_idle()
+
+            breakdown = service.rx_side_effect_snapshot()["radar_breakdown_ms"]
+            parent = breakdown["synthetic_radar_parent"]
+            leaf = breakdown["synthetic_radar_leaf"]
+            self.assertEqual(
+                set(parent),
+                {"count", "total_ms", "avg_ms", "max_ms", "last_ms"},
+            )
+            self.assertEqual(parent["count"], 2)
+            self.assertEqual(leaf["count"], 4)
+            self.assertAlmostEqual(parent["avg_ms"], parent["total_ms"] / 2.0, places=9)
+            self.assertAlmostEqual(leaf["avg_ms"], leaf["total_ms"] / 4.0, places=9)
+            self.assertGreaterEqual(parent["max_ms"], parent["last_ms"])
+            self.assertGreaterEqual(leaf["total_ms"], leaf["max_ms"])
+        finally:
+            await service._rx_side_effect_dispatcher.stop()
+
+    async def test_enabled_radar_records_real_substages(self) -> None:
+        from app.services.notifications import (
+            queue_radar_notifications,
+            safe_save_notification_radar_rule,
+        )
+
+        with temporary_database():
+            ok, error, _rule_id = safe_save_notification_radar_rule(
+                {"enabled": True, "pattern": "*", "distance_m": 0}
+            )
+            self.assertTrue(ok, error)
+            set_app_setting("radar_enabled", "1")
+            dispatcher = RxSideEffectDispatcher(
+                queue_max_frames=2,
+                worker_name="test-radar-breakdown",
+            )
+            await dispatcher.start()
+            try:
+                with patch(
+                    "app.services.notifications.get_station_settings",
+                    return_value={
+                        "callsign": "SQ0BOX",
+                        "ssid": "1",
+                        "latitude": "50.0",
+                        "longitude": "19.0",
+                    },
+                ), patch(
+                    "app.services.notifications.get_visible_station_snapshots",
+                    return_value=[
+                        {
+                            "origin": "heard",
+                            "display_callsign": "SQ6ODL-9",
+                            "latitude": "50.01",
+                            "longitude": "19.01",
+                        }
+                    ],
+                ), patch("app.services.notifications._NOTIFICATION_EXECUTOR.submit"):
+                    self.assertTrue(
+                        dispatcher.enqueue(
+                            queue_radar_notifications,
+                            timestamp="2026-01-01T00:00:00+00:00",
+                        )
+                    )
+                    await dispatcher.wait_until_idle()
+
+                breakdown = dispatcher.snapshot()["radar_breakdown_ms"]
+                self.assertTrue(
+                    {
+                        "settings_gate_read",
+                        "rules_and_summary_state_read",
+                        "configuration_db_read",
+                        "station_snapshot_fetch",
+                        "state_read",
+                        "state_index_build",
+                        "station_filter_geometry",
+                        "distance_geometry",
+                        "state_persistence_write",
+                        "event_node_settings_db_read",
+                        "event_payload_build",
+                        "event_log_persistence",
+                        "notification_enqueue",
+                    }.issubset(breakdown)
+                )
+                self.assertEqual(breakdown["distance_geometry"]["count"], 1)
+                self.assertEqual(breakdown["state_persistence_write"]["count"], 1)
+            finally:
+                await dispatcher.stop()
 
 
 class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):
