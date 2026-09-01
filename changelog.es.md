@@ -1,9 +1,10 @@
 # Changelog
 
-## 1.12.15 - 2026-09-01
+## 1.12.15.dev - 2026-09-01
 - `Versión estable`: los cambios de rendimiento de RX, DigiFlow y radar del ciclo de desarrollo actual se han trasladado al canal estable.
 - `RX / rendimiento`: las operaciones pesadas de persistencia y proyección se separaron del camino realtime de DigiFlow y se trasladaron a una cola limitada y ordenada de efectos secundarios, con cierre controlado y métricas de latencia, desbordamiento y tiempos por etapa.
 - `Radar / rendimiento`: el radar procesa ahora una única trama de posición ya analizada en un worker dedicado, en vez de reconstruir la lista completa de estaciones y volver a analizar el historial TNC2. Se conservan las reglas exact/wildcard, el cálculo de distancia, el estado de bloqueo de repeticiones y las notificaciones; también se añadieron métricas de la cola limitada y tiempos detallados por etapa.
+- `Docker / multiarch`: `uvloop` y `httptools` siguen activados para las imágenes Linux `amd64` y `arm64`, pero son opcionales en el antiguo `arm/v7`; allí Uvicorn usa `asyncio` y `h11` estándar sin compilar esos paquetes desde código fuente. También se actualizaron las acciones de QEMU y Docker Build & Push.
 
 ## 1.12.13.dev - 2026-09-01
 - `Packet Routing / diagnóstico`: las métricas de DigiFlow se separan por fuente e interfaz, cubren fases del worker y lag del event loop, y el routing usa configuración, rutas e identidades en caché en vez de lecturas SQLite por trama.

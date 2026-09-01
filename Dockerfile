@@ -17,10 +17,7 @@ RUN apk add --no-cache \
     curl \
     sqlite \
     sqlite-dev \
-    ca-certificates \
-    gcc \
-    musl-dev \
-    linux-headers
+    ca-certificates
 
 WORKDIR /opt/aprsbox/app
 
