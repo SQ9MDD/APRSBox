@@ -1760,6 +1760,23 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreaterEqual(latency["metrics_ms"]["digiflow_enqueue_to_worker_start"]["count"], 1)
             self.assertGreaterEqual(latency["metrics_ms"]["digiflow_worker_processing"]["count"], 1)
             self.assertGreaterEqual(latency["metrics_ms"]["digi_decision_to_rf_tx_enqueue"]["count"], 1)
+            breakdown_rows = latency["latency_by_source_interface"]
+            breakdown = next(
+                row["digiflow_processing_breakdown_ms"]
+                for row in breakdown_rows
+                if row["source_kind"] == "receiver_rf" and row["interface_name"] == "TNC-1"
+            )
+            self.assertTrue(
+                {
+                    "matching_select_flow",
+                    "frame_context_build_parse",
+                    "flow_execution",
+                    "trace_log_enqueue",
+                    "rf_tx_decision_enqueue",
+                    "remaining_worker_time",
+                }.issubset(breakdown["phases"])
+            )
+            self.assertTrue({"receiver_rf", "filter_callsign", "filter_path", "tx_rf"}.issubset(breakdown["step_types"]))
 
             summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
             self.assertEqual(len(summaries), 1)
@@ -1815,6 +1832,19 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     "digiflow_worker_processing",
                 },
             )
+
+    async def test_event_loop_lag_is_aggregated_in_memory(self) -> None:
+        with temporary_database():
+            runtime = DigiFlowRuntimeService(event_loop_lag_sample_interval=0.01)
+            await runtime.start()
+            try:
+                await asyncio.sleep(0.035)
+                lag = runtime.latency_snapshot()["event_loop_lag_ms"]
+            finally:
+                await runtime.stop()
+
+            self.assertGreaterEqual(int(lag["count"]), 1)
+            self.assertGreaterEqual(float(lag["max_ms"]), 0.0)
 
     async def test_runtime_routing_snapshot_avoids_sqlite_reads_per_frame(self) -> None:
         with temporary_database():

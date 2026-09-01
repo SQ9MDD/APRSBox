@@ -7,6 +7,7 @@ import re
 import time
 import uuid
 from collections import OrderedDict
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -77,6 +78,7 @@ DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL = "DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL"
 _LOCAL_IDENTITY_MY = "my_station"
 _LOCAL_IDENTITY_WX = "wx_station"
 DIGI_FLOW_QUEUE_MAX_FRAMES = 256
+EVENT_LOOP_LAG_SAMPLE_INTERVAL_SECONDS = 0.1
 
 
 def _monotonic_delta_ms(start: Any, end: Any) -> float | None:
@@ -139,6 +141,34 @@ class _TokenBucket:
     updated_at: float
 
 
+@dataclass
+class _WorkerTimingCollector:
+    source_kind: str
+    interface_id: int | None
+    interface_name: str
+    phase_samples: list[tuple[str, float]]
+    step_samples: list[tuple[str, float]]
+    active: bool = True
+
+    def record_phase(self, name: str, started_monotonic: float) -> None:
+        if self.active:
+            self.phase_samples.append((name, max(0.0, (time.monotonic() - started_monotonic) * 1000.0)))
+
+    def record_step(self, step_type: str, started_monotonic: float) -> None:
+        if self.active:
+            self.step_samples.append((step_type, max(0.0, (time.monotonic() - started_monotonic) * 1000.0)))
+
+    def record_elapsed(self, name: str, value_ms: float) -> None:
+        if self.active:
+            self.phase_samples.append((name, max(0.0, value_ms)))
+
+
+_active_worker_timing: ContextVar[_WorkerTimingCollector | None] = ContextVar(
+    "aprsbox_active_worker_timing",
+    default=None,
+)
+
+
 class DigiFlowRuntimeService:
     def __init__(
         self,
@@ -151,6 +181,7 @@ class DigiFlowRuntimeService:
         aprsis_rf_delay_override: float | None = None,
         queue_max_frames: int = DIGI_FLOW_QUEUE_MAX_FRAMES,
         aprsis_tx_max_frame_age_seconds: float = APRSIS_TX_MAX_FRAME_AGE_SECONDS,
+        event_loop_lag_sample_interval: float = EVENT_LOOP_LAG_SAMPLE_INTERVAL_SECONDS,
     ) -> None:
         self._poll_interval = poll_interval
         self._aprsis_client = aprsis_client
@@ -164,6 +195,8 @@ class DigiFlowRuntimeService:
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=max(1, int(queue_max_frames)))
         self._aprsis_tx_max_frame_age_seconds = max(0.1, float(aprsis_tx_max_frame_age_seconds))
         self._task: asyncio.Task[None] | None = None
+        self._event_loop_lag_task: asyncio.Task[None] | None = None
+        self._event_loop_lag_sample_interval = max(0.01, float(event_loop_lag_sample_interval))
         self._stop_event = asyncio.Event()
         self._viscous_delay_lock = asyncio.Lock()
         self._viscous_delay_entries: dict[tuple[int, int, str, str], _ViscousDelayEntry] = {}
@@ -178,6 +211,9 @@ class DigiFlowRuntimeService:
         self._latency_metrics: dict[str, dict[str, float | int | None]] = {}
         self._latency_by_source_interface: dict[
             tuple[str, int | None, str], dict[str, dict[str, float | int | None]]
+        ] = {}
+        self._processing_breakdown_by_source_interface: dict[
+            tuple[str, int | None, str], dict[str, dict[str, dict[str, float | int | None]]]
         ] = {}
         self._max_queue_depth = 0
         reload_digi_flow_routing_snapshot()
@@ -201,13 +237,25 @@ class DigiFlowRuntimeService:
                     "source_kind": source_kind,
                     "interface_id": interface_id,
                     "interface_name": interface_name,
-                    "metrics_ms": {name: dict(values) for name, values in metrics.items()},
+                    "metrics_ms": {
+                        name: dict(values)
+                        for name, values in self._latency_by_source_interface
+                        .get((source_kind, interface_id, interface_name), {})
+                        .items()
+                    },
+                    "digiflow_processing_breakdown_ms": {
+                        section: {name: dict(values) for name, values in section_metrics.items()}
+                        for section, section_metrics in self._processing_breakdown_by_source_interface
+                        .get((source_kind, interface_id, interface_name), {})
+                        .items()
+                    },
                 }
-                for (source_kind, interface_id, interface_name), metrics in sorted(
-                    self._latency_by_source_interface.items(),
-                    key=lambda item: (item[0][0], item[0][2], item[0][1] or 0),
+                for source_kind, interface_id, interface_name in sorted(
+                    set(self._latency_by_source_interface) | set(self._processing_breakdown_by_source_interface),
+                    key=lambda key: (key[0], key[2], key[1] or 0),
                 )
             ],
+            "event_loop_lag_ms": dict(self._latency_metrics.get("event_loop_lag", {})),
             "digiflow_config_cache": {
                 "revision": routing_snapshot.revision,
                 "enabled_flow_count": len(routing_snapshot.flows),
@@ -252,13 +300,36 @@ class DigiFlowRuntimeService:
     ) -> None:
         if value_ms is None:
             return
-        key = (
+        key = self._source_metric_key(source_kind, interface_id, interface_name)
+        metrics = self._latency_by_source_interface.setdefault(key, {})
+        self._update_latency_metric(metrics, name, value_ms)
+
+    @staticmethod
+    def _source_metric_key(
+        source_kind: str,
+        interface_id: int | None,
+        interface_name: str,
+    ) -> tuple[str, int | None, str]:
+        return (
             str(source_kind or "unknown").strip() or "unknown",
             int(interface_id) if interface_id is not None else None,
             str(interface_name or "").strip(),
         )
-        metrics = self._latency_by_source_interface.setdefault(key, {})
-        self._update_latency_metric(metrics, name, value_ms)
+
+    def _record_processing_breakdown(self, collector: _WorkerTimingCollector) -> None:
+        key = self._source_metric_key(
+            collector.source_kind,
+            collector.interface_id,
+            collector.interface_name,
+        )
+        breakdown = self._processing_breakdown_by_source_interface.setdefault(
+            key,
+            {"phases": {}, "step_types": {}},
+        )
+        for name, value_ms in collector.phase_samples:
+            self._update_latency_metric(breakdown["phases"], name, value_ms)
+        for step_type, value_ms in collector.step_samples:
+            self._update_latency_metric(breakdown["step_types"], step_type, value_ms)
 
     @staticmethod
     def _update_latency_metric(
@@ -285,9 +356,19 @@ class DigiFlowRuntimeService:
             await self._aprsis_tx_dispatcher.start()
         self._stop_event.clear()
         self._task = asyncio.create_task(self._run(), name="aprsbox-digi-flow-runtime")
+        self._event_loop_lag_task = asyncio.create_task(
+            self._measure_event_loop_lag(),
+            name="aprsbox-digi-flow-event-loop-lag",
+        )
 
     async def stop(self) -> None:
         self._stop_event.set()
+        lag_task = self._event_loop_lag_task
+        self._event_loop_lag_task = None
+        if lag_task is not None:
+            lag_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await lag_task
         cleanup_tasks: list[asyncio.Task[None]] = []
         async with self._viscous_delay_lock:
             cleanup_tasks = [
@@ -331,6 +412,16 @@ class DigiFlowRuntimeService:
         if self._owns_trace_writer:
             await self._trace_writer.stop()
 
+    async def _measure_event_loop_lag(self) -> None:
+        expected = time.monotonic() + self._event_loop_lag_sample_interval
+        while not self._stop_event.is_set():
+            await asyncio.sleep(max(0.0, expected - time.monotonic()))
+            observed = time.monotonic()
+            self._record_latency("event_loop_lag", max(0.0, (observed - expected) * 1000.0))
+            expected += self._event_loop_lag_sample_interval
+            if expected < observed:
+                expected = observed + self._event_loop_lag_sample_interval
+
     async def wait_until_idle(self) -> None:
         await self._queue.join()
         while True:
@@ -344,10 +435,14 @@ class DigiFlowRuntimeService:
         await self._trace_writer.wait_until_idle()
 
     def _log_digi_flow_event(self, **event: Any) -> None:
+        collector = _active_worker_timing.get()
+        started_monotonic = time.monotonic() if collector is not None else 0.0
         if self._trace_writer.is_running():
             self._trace_writer.enqueue(**event)
         else:
             log_digi_flow_event(**event)
+        if collector is not None:
+            collector.record_phase("trace_log_enqueue", started_monotonic)
 
     def enqueue_tnc2_frame(
         self,
@@ -651,52 +746,71 @@ class DigiFlowRuntimeService:
                 self._queue.task_done()
 
     async def _process_frame(self, frame: dict[str, Any]) -> None:
-        flows = self._matching_flows(
-            source_kind=str(frame["source_kind"]),
-            source_ref=str(frame["source_ref"]),
+        worker_started = time.monotonic()
+        collector = _WorkerTimingCollector(
+            source_kind=str(frame.get("latency_source_kind") or frame.get("source_kind") or "unknown"),
+            interface_id=frame.get("latency_interface_id"),
+            interface_name=str(frame.get("latency_interface_name") or frame.get("source_ref") or ""),
+            phase_samples=[],
+            step_samples=[],
         )
-        if not flows:
-            return
+        token = _active_worker_timing.set(collector)
+        try:
+            matching_started = time.monotonic()
+            flows = self._matching_flows(
+                source_kind=str(frame["source_kind"]),
+                source_ref=str(frame["source_ref"]),
+            )
+            collector.record_phase("matching_select_flow", matching_started)
+            if not flows:
+                return
 
-        for flow in flows:
-            flow_id = int(flow["id"])
-            if str(frame.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND:
-                record_aprsis_rf_stat(flow_id, "received_from_aprsis")
-            flow_name = str(flow.get("name") or f"flow-{flow_id}")
-            source_label = f"{frame['source_kind']}:{frame['source_ref']}"
-            self._log_digi_flow_event(
-                frame_uid=str(frame["frame_uid"]),
-                flow_id=flow_id,
-                step_id=None,
-                event_type="frame_received",
-                decision="queued",
-                message=f"Frame accepted from {source_label} | line={frame['raw_payload']}",
-                created_at=str(frame["created_at"]),
+            for flow in flows:
+                flow_id = int(flow["id"])
+                if str(frame.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND:
+                    record_aprsis_rf_stat(flow_id, "received_from_aprsis")
+                flow_name = str(flow.get("name") or f"flow-{flow_id}")
+                source_label = f"{frame['source_kind']}:{frame['source_ref']}"
+                self._log_digi_flow_event(
+                    frame_uid=str(frame["frame_uid"]), flow_id=flow_id, step_id=None,
+                    event_type="frame_received", decision="queued",
+                    message=f"Frame accepted from {source_label} | line={frame['raw_payload']}",
+                    created_at=str(frame["created_at"]),
+                )
+                self._log_digi_flow_event(
+                    frame_uid=str(frame["frame_uid"]), flow_id=flow_id, step_id=None,
+                    event_type="flow_matched", decision="matched", message=f"Matched flow {flow_name}.",
+                    created_at=str(frame["created_at"]),
+                )
+                context_started = time.monotonic()
+                context = {
+                    "flow": flow, "frame_uid": str(frame["frame_uid"]), "created_at": str(frame["created_at"]),
+                    "enqueue_monotonic": frame.get("enqueue_monotonic"),
+                    "rx_received_monotonic": frame.get("rx_received_monotonic"),
+                    "source_kind": str(frame["source_kind"]), "source_ref": str(frame["source_ref"]),
+                    "raw_payload": str(frame["raw_payload"]), "current_line": str(frame["raw_payload"]),
+                    "parsed": dict(frame["parsed"]) if frame["parsed"] else None,
+                    "original_parsed": dict(frame["parsed"]) if frame["parsed"] else None,
+                    "metadata": dict(frame.get("metadata") or {}),
+                }
+                collector.record_phase("frame_context_build_parse", context_started)
+                execution_started = time.monotonic()
+                await self._execute_flow(context)
+                collector.record_phase("flow_execution", execution_started)
+        finally:
+            worker_elapsed_ms = max(0.0, (time.monotonic() - worker_started) * 1000.0)
+            exclusive_phase_total_ms = sum(
+                value_ms
+                for name, value_ms in collector.phase_samples
+                if name in {"matching_select_flow", "frame_context_build_parse", "flow_execution"}
             )
-            self._log_digi_flow_event(
-                frame_uid=str(frame["frame_uid"]),
-                flow_id=flow_id,
-                step_id=None,
-                event_type="flow_matched",
-                decision="matched",
-                message=f"Matched flow {flow_name}.",
-                created_at=str(frame["created_at"]),
+            collector.record_elapsed(
+                "remaining_worker_time",
+                worker_elapsed_ms - exclusive_phase_total_ms,
             )
-            context = {
-                "flow": flow,
-                "frame_uid": str(frame["frame_uid"]),
-                "created_at": str(frame["created_at"]),
-                "enqueue_monotonic": frame.get("enqueue_monotonic"),
-                "rx_received_monotonic": frame.get("rx_received_monotonic"),
-                "source_kind": str(frame["source_kind"]),
-                "source_ref": str(frame["source_ref"]),
-                "raw_payload": str(frame["raw_payload"]),
-                "current_line": str(frame["raw_payload"]),
-                "parsed": dict(frame["parsed"]) if frame["parsed"] else None,
-                "original_parsed": dict(frame["parsed"]) if frame["parsed"] else None,
-                "metadata": dict(frame.get("metadata") or {}),
-            }
-            await self._execute_flow(context)
+            collector.active = False
+            _active_worker_timing.reset(token)
+            self._record_processing_breakdown(collector)
 
     def _matching_flows(self, *, source_kind: str, source_ref: str) -> list[dict[str, Any]]:
         normalized_kind = str(source_kind or "").strip()
@@ -740,7 +854,26 @@ class DigiFlowRuntimeService:
                 decision="continue",
                 message=f"Entering step {step_title}.",
             )
+            step_started = time.monotonic()
             result = await self._execute_step(context, step, step_index=step_index)
+            collector = _active_worker_timing.get()
+            if collector is not None:
+                collector.record_step(step_type, step_started)
+                if step_type == "filter_dupe":
+                    collector.record_phase("dupe_handling", step_started)
+                    if str(result.get("decision") or "") == "defer":
+                        collector.record_phase("viscous_handling_scheduling", step_started)
+                elif step_type == RF_TX_GUARD_STEP_TYPE and str(context.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND:
+                    collector.record_phase("aprsis_rf_viscous_scheduling", step_started)
+                elif step_type == "tx_rf":
+                    collector.record_phase(
+                        "aprsis_rf_viscous_scheduling"
+                        if str(context.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND
+                        else "rf_tx_decision_enqueue",
+                        step_started,
+                    )
+                elif step_type == "tx_aprsis":
+                    collector.record_phase("aprsis_tx_decision_enqueue", step_started)
             last_decision = str(result["decision"])
             self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
