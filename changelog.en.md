@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.12.15 - 2026-09-01
+- `Stable release`: the RX, DigiFlow, and radar performance changes from the current development cycle have been promoted to the stable channel.
+- `RX / performance`: heavy persistence and projection work was detached from the realtime DigiFlow path and moved to a bounded, ordered side-effect queue with controlled shutdown and metrics for latency, overflow, and individual processing stages.
+- `Radar / performance`: radar now processes one already parsed position frame in a dedicated worker instead of rebuilding the full station list and reparsing TNC2 history. Exact/wildcard rules, distance checks, repeat-block state, and notifications are preserved, with bounded-queue and per-stage timing metrics added.
+
+## 1.12.13.dev - 2026-09-01
+- `Packet Routing / diagnostics`: DigiFlow metrics are split by source and interface, cover worker phases and event-loop lag, and routing uses cached configuration, paths, and identities instead of per-frame SQLite reads.
+- `APRS-IS / uvloop`: pending transport bytes after a successful `drain()` no longer fail TX; closed transports and genuine write/drain failures remain handled. Thanks to SQ5BUJ for the feedback.
+- `Installer and updater`: `/opt/aprsbox/venv` installs `uvloop` and `httptools` from `requirements.txt` and verifies their imports; after a successful backup, the updater retains the newest four database backups by default.
+- `Packet Routing / latency`: added lightweight in-memory timing and queue-depth aggregates. Regular RF DIGI now bypasses persistent `outbound_jobs` and uses ephemeral per-interface queues and workers, so one TNC's TX gap or slow transport cannot block another TNC.
+- `APRS-IS / TX`: routing now hands frames to a bounded in-memory queue without blocking; a dedicated worker retains the existing socket, `drain()`, and reconnect behavior. Queue overflow immediately drops the frame with a warning and counter.
+- `DigiFlow / trace`: per-step diagnostics are persisted outside the realtime path in batches of up to 50 events or every 75 ms using one transaction. History pruning was also moved out of frame processing.
+
 ## 1.12.11 - 2026-08-31
 - `Stable release`: improved Packet Routing performance and rule handling, refined the Settings interface and color palettes, and now drops expired DIGI and APRS-IS frames instead of releasing them after a delay. The log records the age and limit of a dropped frame to help identify backend or TNC overload.
 

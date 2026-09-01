@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
+from datetime import datetime, timezone
 import time
 from threading import Lock
 from typing import Callable
@@ -78,6 +80,7 @@ class SerialKissTcpBroker:
         self._serial_fd: int | None = None
         self._serial_to_tcp_bytes = 0
         self._tcp_to_serial_bytes = 0
+        self._serial_rx_segments: deque[list[object]] = deque()
 
     @property
     def host(self) -> str:
@@ -88,6 +91,32 @@ class SerialKissTcpBroker:
         if self._listen_port is None:
             raise RuntimeError("Serial broker is not listening.")
         return self._listen_port
+
+    def consume_serial_rx_timestamp(self, byte_count: int) -> tuple[float, str] | None:
+        """Return the oldest device-read timestamp contributing to TCP bytes.
+
+        TCP may merge or split serial reads.  Keeping byte-counted segments lets
+        the traffic runtime preserve the actual device ingress time without
+        changing the KISS byte stream exposed to other clients.
+        """
+        remaining = max(0, int(byte_count))
+        if remaining <= 0:
+            return None
+        oldest: tuple[float, str] | None = None
+        with self._lock:
+            while remaining > 0 and self._serial_rx_segments:
+                segment = self._serial_rx_segments[0]
+                segment_bytes = int(segment[0])
+                if oldest is None:
+                    oldest = (float(segment[1]), str(segment[2]))
+                consumed = min(remaining, segment_bytes)
+                remaining -= consumed
+                segment_bytes -= consumed
+                if segment_bytes <= 0:
+                    self._serial_rx_segments.popleft()
+                else:
+                    segment[0] = segment_bytes
+        return oldest
 
     async def start(self) -> None:
         if self._task is not None:
@@ -252,7 +281,12 @@ class SerialKissTcpBroker:
         silence_watchdog = RxSilenceReconnectWatchdog(self._rx_silence_reconnect_seconds)
         while not self._stop_event.is_set():
             try:
-                chunk = await asyncio.to_thread(read_serial_chunk, serial_fd, max_bytes=1024, timeout=1.0)
+                chunk, received_monotonic, received_at = await asyncio.to_thread(
+                    _read_serial_chunk_timestamped,
+                    serial_fd,
+                    max_bytes=1024,
+                    timeout=1.0,
+                )
             except OSError as exc:
                 log_event(
                     "WARNING",
@@ -277,6 +311,10 @@ class SerialKissTcpBroker:
                 continue
             silence_watchdog.record_rx()
             try:
+                with self._lock:
+                    self._serial_rx_segments.append(
+                        [len(chunk), received_monotonic, received_at]
+                    )
                 writer.write(chunk)
                 await writer.drain()
             except OSError as exc:
@@ -332,6 +370,8 @@ class SerialKissTcpBroker:
         self._client_reader = None
         self._client_writer = None
         self._client_ready.clear()
+        with self._lock:
+            self._serial_rx_segments.clear()
         if writer is not None:
             await self._close_writer(writer)
             if log_disconnect:
@@ -381,3 +421,17 @@ class SerialKissTcpBroker:
             await writer.wait_closed()
         except OSError:
             pass
+
+
+def _read_serial_chunk_timestamped(
+    serial_fd: int,
+    *,
+    max_bytes: int,
+    timeout: float,
+) -> tuple[bytes, float, str]:
+    chunk = read_serial_chunk(serial_fd, max_bytes=max_bytes, timeout=timeout)
+    return (
+        chunk,
+        time.monotonic(),
+        datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+    )

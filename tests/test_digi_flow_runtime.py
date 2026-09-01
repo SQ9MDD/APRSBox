@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 import app.services.digi_flows as digi_flows
 from app.db import execute, fetch_all, fetch_one, init_db
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
-from app.services.digi_flows import create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries, update_digi_flow
+from app.services.digi_flows import DigiFlowTraceWriter, create_digi_flow, get_digi_flow_event_log, get_digi_flow_execution_summaries, update_digi_flow
 from app.services.outbound import (
     claim_next_outbound_job,
     enqueue_digi_tx_job,
@@ -113,6 +113,23 @@ def event_rows_for_frame(frame_uid: str) -> list[dict]:
         (frame_uid,),
     )
     return [dict(row) for row in rows]
+
+
+class FakeRfTxDispatcher:
+    def __init__(self) -> None:
+        self.jobs: list[dict] = []
+
+    def enqueue_digi_tx(self, **job) -> tuple[bool, str]:
+        self.jobs.append(dict(job))
+        return True, "DIGI TX queued in RAM."
+
+    def latency_snapshot(self) -> dict:
+        return {
+            "queue_depth_by_interface": {},
+            "current_queue_depth": 0,
+            "max_queue_depth": len(self.jobs),
+            "worker_count": 1,
+        }
 
 
 class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
@@ -1193,6 +1210,27 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             assert diagnostics_row is not None
             self.assertEqual(int(diagnostics_row["drop_total"]), 1)
 
+    async def test_full_routing_queue_keeps_latest_position_for_same_source(self) -> None:
+        with temporary_database():
+            runtime = DigiFlowRuntimeService(queue_max_frames=1)
+            first = runtime.enqueue_tnc2_frame(
+                source_kind="receiver_rf",
+                source_ref="TNC-1",
+                raw_payload="SP8ABC-9>APRS:!5210.00N/02100.00E>Old position",
+            )
+            latest = runtime.enqueue_tnc2_frame(
+                source_kind="receiver_rf",
+                source_ref="TNC-1",
+                raw_payload="SP8ABC-9>APRS:!5211.00N/02101.00E>Latest position",
+            )
+
+            self.assertTrue(first["accepted"])
+            self.assertTrue(latest["accepted"])
+            self.assertEqual(latest["superseded_frame_uid"], first["frame_uid"])
+            queued = runtime._queue.get_nowait()
+            runtime._queue.task_done()
+            self.assertIn("Latest position", queued["raw_payload"])
+
     async def test_local_tx_strict_filter_enforces_local_metadata_and_blocks_disallowed_paths(self) -> None:
         with temporary_database():
             set_local_station_identity()
@@ -1309,6 +1347,68 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "NOGATE" in row["message"] for row in nogate_rows))
             self.assertTrue(any(row["event_type"] == "strict_filter" and row["decision"] == "rejected" and "RFONLY" in row["message"] for row in rfonly_rows))
             self.assertEqual(len(fake_client.lines), 1)
+
+    async def test_local_tx_position_older_than_its_aprsis_limit_is_dropped(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            insert_aprsis_interface()
+            create_flow(
+                {
+                    "name": "Fresh local positions only",
+                    "description": "",
+                    "source_kind": "receiver_local_tx",
+                    "source_ref": "local_tx",
+                    "target_kind": "tx_aprsis",
+                    "target_ref": "aprsis",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_local_tx", "title": "Local TX", "enabled": 1, "config": {"local_tx_source": "local_tx"}},
+                        {"step_type": "filter_strict", "title": "Strict Filter", "enabled": 1, "config": {}},
+                        {"step_type": "tx_aprsis", "title": "TX APRS-IS", "enabled": 1, "config": {"aprsis_target": "aprsis"}},
+                    ],
+                }
+            )
+
+            class FakeAprsisClient:
+                def __init__(self) -> None:
+                    self.lines: list[str] = []
+
+                async def send_tnc2_line(self, line: str) -> tuple[bool, str]:
+                    self.lines.append(line)
+                    return True, "APRS-IS TX sent."
+
+            fake_client = FakeAprsisClient()
+            runtime = DigiFlowRuntimeService(aprsis_client=fake_client)
+            await runtime.start()
+            try:
+                frame = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_local_tx",
+                    source_ref="local_tx",
+                    raw_payload="SQ9MDD-4>APRS:=5215.02N/02055.60E>Old local position",
+                    metadata={
+                        "origin": "local_generated",
+                        "local_generated": True,
+                        "frame_purpose": "beacon",
+                        "local_tx_created_at": (
+                            datetime.now(timezone.utc) - timedelta(seconds=30)
+                        ).isoformat(),
+                        "aprsis_position_max_age_seconds": 15.0,
+                    },
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            self.assertEqual(fake_client.lines, [])
+            rows = event_rows_for_frame(str(frame["frame_uid"]))
+            self.assertTrue(
+                any(
+                    row["event_type"] == "output_action"
+                    and row["decision"] == "drop"
+                    and "stale locally generated position" in row["message"]
+                    for row in rows
+                )
+            )
 
     async def test_receiver_rf_frames_do_not_match_local_tx_source_flow(self) -> None:
         with temporary_database():
@@ -1625,13 +1725,15 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     ],
                 }
             )
-            runtime = DigiFlowRuntimeService()
+            rf_dispatcher = FakeRfTxDispatcher()
+            runtime = DigiFlowRuntimeService(rf_tx_dispatcher=rf_dispatcher)
             await runtime.start()
             try:
                 result = runtime.enqueue_tnc2_frame(
                     source_kind="receiver_rf",
                     source_ref="TNC-1",
                     raw_payload="SP8ABC-9>APRS,WIDE1-1:>Transmit me",
+                    rx_received_monotonic=time.monotonic(),
                 )
                 await runtime.wait_until_idle()
             finally:
@@ -1645,15 +1747,36 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(sum(1 for row in rows if row["event_type"] == "pipeline_finished"), 1)
             self.assertEqual(sum(1 for row in rows if row["event_type"] == "output_action"), 1)
 
-            job_row = fetch_one("SELECT kind, status, payload_json FROM outbound_jobs ORDER BY id DESC LIMIT 1")
-            assert job_row is not None
-            self.assertEqual(job_row["kind"], "digi_tx")
-            self.assertEqual(job_row["status"], "queued")
-            payload = json.loads(job_row["payload_json"])
-            self.assertEqual(payload["frame_uid"], str(result["frame_uid"]))
-            self.assertEqual(payload["flow_id"], flow_id)
-            self.assertEqual(payload["digi_max_age_seconds"], 5.0)
-            self.assertTrue(payload["digi_received_at"])
+            self.assertIsNone(fetch_one("SELECT id FROM outbound_jobs ORDER BY id DESC LIMIT 1"))
+            self.assertEqual(len(rf_dispatcher.jobs), 1)
+            self.assertEqual(rf_dispatcher.jobs[0]["interface_name"], "RF-OUT")
+            self.assertEqual(rf_dispatcher.jobs[0]["flow_id"], flow_id)
+            self.assertEqual(rf_dispatcher.jobs[0]["frame_uid"], str(result["frame_uid"]))
+            self.assertEqual(
+                rf_dispatcher.jobs[0]["line"],
+                "SP8ABC-9>APRS,SQ9MDD-4*:>Transmit me",
+            )
+            latency = runtime.latency_snapshot()
+            self.assertGreaterEqual(latency["metrics_ms"]["digiflow_enqueue_to_worker_start"]["count"], 1)
+            self.assertGreaterEqual(latency["metrics_ms"]["digiflow_worker_processing"]["count"], 1)
+            self.assertGreaterEqual(latency["metrics_ms"]["digi_decision_to_rf_tx_enqueue"]["count"], 1)
+            breakdown_rows = latency["latency_by_source_interface"]
+            breakdown = next(
+                row["digiflow_processing_breakdown_ms"]
+                for row in breakdown_rows
+                if row["source_kind"] == "receiver_rf" and row["interface_name"] == "TNC-1"
+            )
+            self.assertTrue(
+                {
+                    "matching_select_flow",
+                    "frame_context_build_parse",
+                    "flow_execution",
+                    "trace_log_enqueue",
+                    "rf_tx_decision_enqueue",
+                    "remaining_worker_time",
+                }.issubset(breakdown["phases"])
+            )
+            self.assertTrue({"receiver_rf", "filter_callsign", "filter_path", "tx_rf"}.issubset(breakdown["step_types"]))
 
             summaries = get_digi_flow_execution_summaries(flow_id, execution_limit=5)
             self.assertEqual(len(summaries), 1)
@@ -1662,6 +1785,130 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(summaries[0]["steps"][1]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][2]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][3]["status"], "executed")
+
+    async def test_latency_is_split_by_source_and_interface(self) -> None:
+        with temporary_database():
+            create_flow(
+                {
+                    "name": "TCP latency diagnostics",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only"}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                now = time.monotonic()
+                runtime.enqueue_rx_tnc2_frame(
+                    "SP8ABC-9>APRS:>Latency",
+                    source_ref="TNC-1",
+                    source_interface_id=17,
+                    rx_received_monotonic=now - 0.2,
+                    rx_processing_started_monotonic=now - 0.1,
+                    latency_source_kind="tcp_kiss",
+                )
+                await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
+            rows = runtime.latency_snapshot()["latency_by_source_interface"]
+            tcp = next(row for row in rows if row["source_kind"] == "tcp_kiss")
+            self.assertEqual(tcp["interface_id"], 17)
+            self.assertEqual(tcp["interface_name"], "TNC-1")
+            self.assertEqual(
+                set(tcp["metrics_ms"]),
+                {
+                    "source_receive_to_rx_processing_start",
+                    "rx_processing_start_to_digiflow_enqueue_request",
+                    "digiflow_enqueue_to_worker_start",
+                    "digiflow_worker_processing",
+                },
+            )
+
+    async def test_event_loop_lag_is_aggregated_in_memory(self) -> None:
+        with temporary_database():
+            runtime = DigiFlowRuntimeService(event_loop_lag_sample_interval=0.01)
+            await runtime.start()
+            try:
+                await asyncio.sleep(0.035)
+                lag = runtime.latency_snapshot()["event_loop_lag_ms"]
+            finally:
+                await runtime.stop()
+
+            self.assertGreaterEqual(int(lag["count"]), 1)
+            self.assertGreaterEqual(float(lag["max_ms"]), 0.0)
+
+    async def test_runtime_routing_snapshot_avoids_sqlite_reads_per_frame(self) -> None:
+        with temporary_database():
+            create_flow(
+                {
+                    "name": "Cached routing",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only"}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                with patch("app.services.digi_flows.list_enabled_digi_flows") as sqlite_loader:
+                    for index in range(12):
+                        runtime.enqueue_rx_tnc2_frame(
+                            f"SP8ABC-{index % 10}>APRS:>Cached {index}",
+                            source_ref="TNC-1",
+                        )
+                    await runtime.wait_until_idle()
+                    sqlite_loader.assert_not_called()
+            finally:
+                await runtime.stop()
+
+    async def test_path_rule_uses_cached_identities_and_prepared_path_specs(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            create_flow(
+                {
+                    "name": "Cached path rule",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "filter_path", "title": "Path Rule", "enabled": 1, "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []}},
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only"}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                with patch("app.services.digi_flow_runtime.fetch_one", side_effect=AssertionError("unexpected SQLite read")):
+                    for index in range(4):
+                        runtime.enqueue_tnc2_frame(
+                            source_kind="receiver_rf",
+                            source_ref="TNC-1",
+                            raw_payload=f"SP8ABC-{index}>APRS,WIDE1-1:>Cached path",
+                        )
+                    await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
 
     async def test_outbound_service_sends_digi_tx_job(self) -> None:
         with temporary_database():
@@ -1787,7 +2034,8 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     ],
                 }
             )
-            runtime = DigiFlowRuntimeService()
+            rf_dispatcher = FakeRfTxDispatcher()
+            runtime = DigiFlowRuntimeService(rf_tx_dispatcher=rf_dispatcher)
             await runtime.start()
             try:
                 runtime.enqueue_tnc2_frame(
@@ -1799,10 +2047,9 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await runtime.stop()
 
-            job_row = fetch_one("SELECT payload_json FROM outbound_jobs WHERE kind = 'digi_tx' ORDER BY id DESC LIMIT 1")
-            assert job_row is not None
-            payload = json.loads(job_row["payload_json"])
-            self.assertEqual(payload["digi_max_age_seconds"], 7.0)
+            self.assertEqual(len(rf_dispatcher.jobs), 1)
+            self.assertEqual(rf_dispatcher.jobs[0]["max_age_seconds"], 7.0)
+            self.assertIsNone(fetch_one("SELECT id FROM outbound_jobs WHERE kind = 'digi_tx' LIMIT 1"))
 
     async def test_outbound_service_forwards_local_tx_to_routing_once_per_event_id(self) -> None:
         with temporary_database():
@@ -2469,6 +2716,101 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(summaries[0]["steps"][2]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][3]["status"], "passed")
             self.assertEqual(summaries[0]["steps"][4]["status"], "executed")
+
+    async def test_slow_aprsis_send_does_not_block_following_routing_frames(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            insert_aprsis_interface()
+            create_flow(
+                {
+                    "name": "Non-blocking APRSIS",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "tx_aprsis",
+                    "target_ref": "aprsis",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "tx_aprsis", "title": "TX APRS-IS", "enabled": 1, "config": {"aprsis_target": "aprsis"}},
+                    ],
+                }
+            )
+
+            class SlowAprsisClient:
+                def __init__(self) -> None:
+                    self.started = asyncio.Event()
+                    self.release = asyncio.Event()
+                    self.lines: list[str] = []
+
+                async def send_tnc2_line(self, line: str) -> tuple[bool, str]:
+                    self.lines.append(line)
+                    if len(self.lines) == 1:
+                        self.started.set()
+                        await self.release.wait()
+                    return True, "sent"
+
+            client = SlowAprsisClient()
+            runtime = DigiFlowRuntimeService(aprsis_client=client)
+            await runtime.start()
+            try:
+                for index in range(3):
+                    runtime.enqueue_tnc2_frame(
+                        source_kind="receiver_rf",
+                        source_ref="TNC-1",
+                        raw_payload=f"SP8ABC-{index + 1}>APRS:>Frame {index + 1}",
+                    )
+                await asyncio.wait_for(client.started.wait(), timeout=1.0)
+                await asyncio.wait_for(runtime._queue.join(), timeout=0.25)
+                snapshot = runtime.latency_snapshot()["aprsis_tx_dispatcher"]
+                self.assertEqual(snapshot["current_queue_depth"], 2)
+                client.release.set()
+                await runtime.wait_until_idle()
+            finally:
+                client.release.set()
+                await runtime.stop()
+
+            self.assertEqual(len(client.lines), 3)
+
+    async def test_trace_writer_batches_events_and_preserves_rows(self) -> None:
+        with temporary_database():
+            flow_id = create_flow(
+                {
+                    "name": "Trace batch",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "action_log", "title": "Log", "enabled": 1, "config": {"log_tag": "log-only"}},
+                    ],
+                }
+            )
+            writer = DigiFlowTraceWriter(batch_size=50, flush_interval=0.05)
+            original_write = digi_flows._write_digi_flow_event_batch
+            with patch("app.services.digi_flows._write_digi_flow_event_batch", wraps=original_write) as batch_write:
+                await writer.start()
+                try:
+                    for index in range(3):
+                        writer.enqueue(
+                            frame_uid="batch-frame",
+                            flow_id=flow_id,
+                            step_id=None,
+                            event_type="pipeline_finished" if index == 2 else "step_decision",
+                            decision="continue",
+                            message=f"event-{index}",
+                        )
+                    await writer.wait_until_idle()
+                finally:
+                    await writer.stop()
+
+            self.assertEqual(batch_write.call_count, 1)
+            self.assertEqual(len(batch_write.call_args.args[0]), 3)
+            rows = fetch_all("SELECT message FROM digi_flow_event_log WHERE frame_uid = ? ORDER BY id", ("batch-frame",))
+            self.assertEqual([row["message"] for row in rows], ["event-0", "event-1", "event-2"])
 
 
 if __name__ == "__main__":

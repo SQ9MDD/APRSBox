@@ -74,6 +74,10 @@ from app.services.tx_scope import (
     TX_SCOPE_SINGLE,
     normalize_tx_scope,
 )
+from app.services.rx_side_effect_dispatcher import (
+    current_rx_radar_stage_collector,
+    rx_radar_stage,
+)
 from app.sections import SECTION_DEFINITIONS
 
 
@@ -399,6 +403,10 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
             f"INSERT INTO {definition.table_name} ({column_list}) VALUES ({placeholders})",
             tuple(params),
         )
+    if slug == "modems":
+        from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+        reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Created record in {definition.table_name}")
 
 
@@ -451,6 +459,10 @@ def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
                     previous_name=previous_name,
                     current_name=current_name,
                 )
+    if slug == "modems":
+        from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+        reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Updated record {row_id} in {definition.table_name}")
 
 
@@ -517,6 +529,10 @@ def delete_section_row(slug: str, row_id: int) -> None:
     definition = SECTION_DEFINITIONS[slug]
     with get_connection() as connection:
         connection.execute(f"DELETE FROM {definition.table_name} WHERE id = ?", (row_id,))
+    if slug == "modems":
+        from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+        reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Deleted record {row_id} from {definition.table_name}")
 
 
@@ -529,6 +545,9 @@ def set_modem_enabled(row_id: int, enabled: bool) -> None:
         )
         if cursor.rowcount == 0:
             raise ValueError("Interface not found.")
+    from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+    reload_digi_flow_routing_snapshot()
     state = "enabled" if enabled else "disabled"
     log_event("INFO", "config", f"Interface {row_id} {state}")
 
@@ -628,6 +647,9 @@ def update_station_settings(payload: dict[str, Any]) -> None:
             values,
         )
     set_app_setting(STATION_TX_INTERNAL_MODE_SETTING_KEY, "1" if internal_tx_enabled else "0")
+    from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+    reload_digi_flow_routing_snapshot()
     log_event(
         "INFO",
         "config",
@@ -2988,28 +3010,34 @@ def _find_station_snapshot(
 
 
 def get_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
+    radar_collector = current_rx_radar_stage_collector()
     row_limit = _station_snapshot_row_limit(limit)
     # APRS-IS can be much busier than the local RF channel. Query both source
     # groups independently so an APRS-IS burst cannot push locally heard RF
     # frames outside the scan window, then use RF as the primary snapshot and
     # APRS-IS only to fill fields that RF did not provide.
-    rf_rows = _station_snapshot_rows(
-        ("TNC2",),
-        row_limit=row_limit,
-        statistics_only=True,
-    )
-    aprsis_rows = _station_snapshot_rows(
-        ("TNC2",),
-        row_limit=row_limit,
-        source_kind=APRSIS_SOURCE_KIND,
-    )
-    rf_snapshots = _build_station_snapshots_from_rows(rf_rows, origin="heard", limit=limit)
-    aprsis_snapshots = _build_station_snapshots_from_rows(aprsis_rows, origin="heard", limit=limit)
-    return _merge_rf_primary_station_snapshots(
-        rf_snapshots,
-        aprsis_snapshots,
-        limit=limit,
-    )
+    with rx_radar_stage(radar_collector, "station_rows_rf_db_read"):
+        rf_rows = _station_snapshot_rows(
+            ("TNC2",),
+            row_limit=row_limit,
+            statistics_only=True,
+        )
+    with rx_radar_stage(radar_collector, "station_rows_aprsis_db_read"):
+        aprsis_rows = _station_snapshot_rows(
+            ("TNC2",),
+            row_limit=row_limit,
+            source_kind=APRSIS_SOURCE_KIND,
+        )
+    with rx_radar_stage(radar_collector, "station_rows_rf_parse_build"):
+        rf_snapshots = _build_station_snapshots_from_rows(rf_rows, origin="heard", limit=limit)
+    with rx_radar_stage(radar_collector, "station_rows_aprsis_parse_build"):
+        aprsis_snapshots = _build_station_snapshots_from_rows(aprsis_rows, origin="heard", limit=limit)
+    with rx_radar_stage(radar_collector, "station_rows_rf_aprsis_merge"):
+        return _merge_rf_primary_station_snapshots(
+            rf_snapshots,
+            aprsis_snapshots,
+            limit=limit,
+        )
 
 
 def get_rf_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
@@ -3022,57 +3050,71 @@ def get_rf_heard_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
 
 
 def get_local_tx_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
-    rows = _station_snapshot_rows(("TNC2-TX",), row_limit=_station_snapshot_row_limit(limit))
-    return _build_station_snapshots_from_rows(rows, origin="local_tx", limit=limit)
+    radar_collector = current_rx_radar_stage_collector()
+    with rx_radar_stage(radar_collector, "station_rows_local_tx_db_read"):
+        rows = _station_snapshot_rows(("TNC2-TX",), row_limit=_station_snapshot_row_limit(limit))
+    with rx_radar_stage(radar_collector, "station_rows_local_tx_parse_build"):
+        return _build_station_snapshots_from_rows(rows, origin="local_tx", limit=limit)
 
 
 def get_visible_station_snapshots(limit: int = 500) -> list[dict[str, Any]]:
+    radar_collector = current_rx_radar_stage_collector()
     normalized_limit = max(1, int(limit or 0))
-    station_settings = get_station_settings()
-    station_latitude = str(station_settings.get("latitude") or "")
-    station_longitude = str(station_settings.get("longitude") or "")
-    ttl_cache_key = (
-        str(settings.database_path),
-        normalized_limit,
-        station_latitude,
-        station_longitude,
-    )
-    cached_visible = _VISIBLE_STATION_SNAPSHOT_TTL_CACHE.get(ttl_cache_key)
-    current_time = time.monotonic()
-    if cached_visible is not None and current_time - cached_visible[0] < _VISIBLE_STATION_SNAPSHOT_TTL_SECONDS:
-        return [dict(item) for item in cached_visible[1]]
+    with rx_radar_stage(radar_collector, "station_list_settings_read"):
+        station_settings = get_station_settings()
+        station_latitude = str(station_settings.get("latitude") or "")
+        station_longitude = str(station_settings.get("longitude") or "")
+        ttl_cache_key = (
+            str(settings.database_path),
+            normalized_limit,
+            station_latitude,
+            station_longitude,
+        )
+    with rx_radar_stage(radar_collector, "station_list_ttl_cache_lookup"):
+        cached_visible = _VISIBLE_STATION_SNAPSHOT_TTL_CACHE.get(ttl_cache_key)
+        current_time = time.monotonic()
+        if cached_visible is not None and current_time - cached_visible[0] < _VISIBLE_STATION_SNAPSHOT_TTL_SECONDS:
+            return [dict(item) for item in cached_visible[1]]
+    with rx_radar_stage(radar_collector, "station_list_revision_db_read"):
+        latest_frame_id = _latest_station_snapshot_frame_id()
     cache_key = (
         str(settings.database_path),
         normalized_limit,
-        _latest_station_snapshot_frame_id(),
+        latest_frame_id,
         station_latitude,
         station_longitude,
     )
-    cached = _STATION_SNAPSHOT_CACHE.get(cache_key)
-    if cached is not None:
-        return [dict(item) for item in cached]
+    with rx_radar_stage(radar_collector, "station_list_revision_cache_lookup"):
+        cached = _STATION_SNAPSHOT_CACHE.get(cache_key)
+        if cached is not None:
+            return [dict(item) for item in cached]
 
     snapshots_by_key: dict[str, dict[str, Any]] = {}
 
-    for snapshot in get_heard_station_snapshots(limit=max(normalized_limit, 500)):
-        snapshots_by_key[snapshot["display_callsign"].casefold()] = dict(snapshot)
+    with rx_radar_stage(radar_collector, "station_list_heard_build"):
+        for snapshot in get_heard_station_snapshots(limit=max(normalized_limit, 500)):
+            snapshots_by_key[snapshot["display_callsign"].casefold()] = dict(snapshot)
 
-    for snapshot in get_local_tx_station_snapshots(limit=max(normalized_limit, 500)):
-        key = snapshot["display_callsign"].casefold()
-        existing = snapshots_by_key.get(key)
-        if existing is None:
-            snapshots_by_key[key] = dict(snapshot)
-            continue
-        snapshots_by_key[key] = _merge_station_snapshots(existing, snapshot)
+    with rx_radar_stage(radar_collector, "station_list_local_tx_merge"):
+        for snapshot in get_local_tx_station_snapshots(limit=max(normalized_limit, 500)):
+            key = snapshot["display_callsign"].casefold()
+            existing = snapshots_by_key.get(key)
+            if existing is None:
+                snapshots_by_key[key] = dict(snapshot)
+                continue
+            snapshots_by_key[key] = _merge_station_snapshots(existing, snapshot)
 
     snapshots = list(snapshots_by_key.values())
-    _apply_station_reference_distances(snapshots)
-    snapshots.sort(key=lambda item: (str(item.get("last_heard_at") or ""), str(item.get("display_callsign") or "")), reverse=True)
-    result = snapshots[:normalized_limit]
-    _STATION_SNAPSHOT_CACHE.clear()
-    _STATION_SNAPSHOT_CACHE[cache_key] = [dict(item) for item in result]
-    _VISIBLE_STATION_SNAPSHOT_TTL_CACHE[ttl_cache_key] = (time.monotonic(), [dict(item) for item in result])
-    return [dict(item) for item in result]
+    with rx_radar_stage(radar_collector, "station_list_reference_distance"):
+        _apply_station_reference_distances(snapshots)
+    with rx_radar_stage(radar_collector, "station_list_sort_limit"):
+        snapshots.sort(key=lambda item: (str(item.get("last_heard_at") or ""), str(item.get("display_callsign") or "")), reverse=True)
+        result = snapshots[:normalized_limit]
+    with rx_radar_stage(radar_collector, "station_list_cache_store_copy"):
+        _STATION_SNAPSHOT_CACHE.clear()
+        _STATION_SNAPSHOT_CACHE[cache_key] = [dict(item) for item in result]
+        _VISIBLE_STATION_SNAPSHOT_TTL_CACHE[ttl_cache_key] = (time.monotonic(), [dict(item) for item in result])
+        return [dict(item) for item in result]
 
 
 def _station_snapshot_row_limit(limit: int) -> int:
@@ -3724,18 +3766,21 @@ def _parse_coordinate(value: Any) -> float | None:
 
 
 def _apply_station_reference_distances(snapshots: list[dict[str, Any]]) -> None:
-    station_settings = get_station_settings()
-    reference_latitude = _parse_coordinate(station_settings.get("latitude"))
-    reference_longitude = _parse_coordinate(station_settings.get("longitude"))
-    for snapshot in snapshots:
-        latitude = _parse_coordinate(snapshot.get("latitude"))
-        longitude = _parse_coordinate(snapshot.get("longitude"))
-        snapshot["distance_km"] = _distance_km_between_points(
-            reference_latitude,
-            reference_longitude,
-            latitude,
-            longitude,
-        )
+    radar_collector = current_rx_radar_stage_collector()
+    with rx_radar_stage(radar_collector, "station_reference_settings_db_read"):
+        station_settings = get_station_settings()
+        reference_latitude = _parse_coordinate(station_settings.get("latitude"))
+        reference_longitude = _parse_coordinate(station_settings.get("longitude"))
+    with rx_radar_stage(radar_collector, "station_reference_geometry"):
+        for snapshot in snapshots:
+            latitude = _parse_coordinate(snapshot.get("latitude"))
+            longitude = _parse_coordinate(snapshot.get("longitude"))
+            snapshot["distance_km"] = _distance_km_between_points(
+                reference_latitude,
+                reference_longitude,
+                latitude,
+                longitude,
+            )
 
 
 def _distance_km_between_points(

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.12.15 - 2026-09-01
+- `Stabile Version`: Die Leistungsverbesserungen für RX, DigiFlow und Radar aus dem aktuellen Entwicklungszyklus wurden in den stabilen Kanal übernommen.
+- `RX / Leistung`: aufwendige Persistenz- und Projektionsarbeiten wurden vom Echtzeitpfad von DigiFlow getrennt und in eine begrenzte, geordnete Side-Effect-Warteschlange mit kontrolliertem Herunterfahren sowie Metriken für Latenz, Überlauf und einzelne Verarbeitungsschritte verschoben.
+- `Radar / Leistung`: Das Radar verarbeitet jetzt einen einzelnen, bereits geparsten Positionsrahmen in einem dedizierten Worker, statt die vollständige Stationsliste neu aufzubauen und die TNC2-Historie erneut zu parsen. Exact-/Wildcard-Regeln, Entfernungsprüfung, Wiederholungssperre und Benachrichtigungen bleiben erhalten; ergänzt wurden Metriken für die begrenzte Warteschlange und die einzelnen Zeitphasen.
+
+## 1.12.13.dev - 2026-09-01
+- `Packet Routing / Diagnose`: DigiFlow-Metriken sind nach Quelle und Schnittstelle getrennt, erfassen Worker-Phasen sowie Event-Loop-Lag und verwenden gecachte Konfiguration, Pfade und Identitäten statt SQLite-Lesezugriffen pro Frame.
+- `APRS-IS / uvloop`: Verbleibende Transportbytes nach erfolgreichem `drain()` gelten nicht mehr als TX-Fehler; geschlossene Transporte und echte Schreib-/Drain-Fehler bleiben behandelt. Danke an SQ5BUJ für die Hinweise.
+- `Installer und Updater`: `/opt/aprsbox/venv` installiert `uvloop` und `httptools` aus `requirements.txt` und prüft ihre Imports; nach erfolgreichem Backup behält der Updater standardmäßig die vier neuesten Datenbanksicherungen.
+- `Packet Routing / Latenz`: leichte Zeit- und Queue-Tiefen-Aggregate im RAM wurden ergänzt. Reguläres RF-DIGI umgeht nun persistente `outbound_jobs` und nutzt flüchtige Queues sowie eigene Worker pro Schnittstelle, sodass TX-Gap oder ein langsames TNC andere TNCs nicht blockieren.
+- `APRS-IS / TX`: Das Routing übergibt Frames blockierungsfrei an eine begrenzte RAM-Queue; ein eigener Worker behält die bestehende Socket-, `drain()`- und Reconnect-Logik bei. Bei Überlauf wird der Frame sofort mit Warnung und Zähler verworfen.
+- `DigiFlow / Trace`: Die Diagnose der einzelnen Schritte wird außerhalb des Echtzeitpfads in Batches mit bis zu 50 Ereignissen oder alle 75 ms in einer Transaktion gespeichert. Auch das Bereinigen der Historie wurde aus der Frame-Verarbeitung entfernt.
+
 ## 1.12.11 - 2026-08-31
 - `Stabile Version`: Leistung und Regelverarbeitung von Packet Routing wurden verbessert, die Einstellungen und Farbpaletten wurden verfeinert, und abgelaufene DIGI- sowie APRS-IS-Frames werden jetzt verworfen, statt nach einer Verzögerung gesendet zu werden. Das Protokoll enthält Alter und Limit eines verworfenen Frames und erleichtert damit die Diagnose einer Überlastung von Backend oder TNC.
 

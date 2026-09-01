@@ -8,6 +8,8 @@ VENV_DIR="$INSTALL_ROOT/venv"
 DB_PATH="${APRSBOX_DB_PATH:-$INSTALL_ROOT/data/aprsbox.db}"
 LOG_DIR="${APRSBOX_LOG_DIR:-$INSTALL_ROOT/logs}"
 SSL_DIR="$INSTALL_ROOT/data/ssl"
+BACKUP_DIR="$INSTALL_ROOT/backups"
+BACKUP_RETENTION_COUNT="${APRSBOX_BACKUP_RETENTION_COUNT:-4}"
 GIT_URL="${APRSBOX_GIT_URL:-https://github.com/SQ9MDD/APRSBox.git}"
 GIT_BRANCH="${APRSBOX_GIT_BRANCH:-}"
 GIT_BRANCH_CLI=""
@@ -190,13 +192,14 @@ backup_database() {
     fi
 
     timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
-    backup_path="$INSTALL_ROOT/backups/aprsbox-db-$timestamp.sqlite3"
+    backup_path="$BACKUP_DIR/aprsbox-db-$timestamp.sqlite3"
     rm -f "$backup_path" "$backup_path-wal" "$backup_path-shm"
 
     if command -v sqlite3 >/dev/null 2>&1; then
         if sqlite3 "$DB_PATH" ".timeout 5000" ".backup '$backup_path'" >/dev/null 2>&1; then
             chown "$APP_USER":"$APP_USER" "$backup_path" 2>/dev/null || true
             log "Database backup created: $backup_path"
+            prune_database_backups "$backup_path"
             return
         fi
         log "WARNING: sqlite3 backup failed for $DB_PATH, falling back to file copy."
@@ -212,10 +215,44 @@ backup_database() {
         fi
         chown "$APP_USER":"$APP_USER" "$backup_path" "$backup_path-wal" "$backup_path-shm" 2>/dev/null || true
         log "Database backup created: $backup_path"
+        prune_database_backups "$backup_path"
         return
     fi
 
     log "WARNING: database backup could not be created for $DB_PATH. Continuing without a backup."
+}
+
+prune_database_backups() {
+    current_backup="$1"
+    case "$BACKUP_RETENTION_COUNT" in
+        "" | *[!0-9]*) retention_count=4 ;;
+        *) retention_count="$BACKUP_RETENTION_COUNT" ;;
+    esac
+    if [ "$retention_count" -lt 1 ]; then
+        retention_count=1
+    fi
+    if [ ! -f "$current_backup" ]; then
+        return
+    fi
+
+    retained=0
+    find "$BACKUP_DIR" -maxdepth 1 -type f -name 'aprsbox-db-*.sqlite3' -print 2>/dev/null \
+        | sort -r \
+        | while IFS= read -r backup_file; do
+            retained=$((retained + 1))
+            if [ "$retained" -le "$retention_count" ] || [ "$backup_file" = "$current_backup" ]; then
+                continue
+            fi
+            rm -f "$backup_file" "$backup_file-wal" "$backup_file-shm"
+            log "Pruned old database backup: $backup_file"
+        done
+}
+
+verify_runtime_dependencies() {
+    if [ ! -x "$VENV_DIR/bin/python" ]; then
+        fail "Python virtual environment is missing at $VENV_DIR"
+    fi
+    "$VENV_DIR/bin/python" -c "import uvloop, httptools"
 }
 
 resolve_update_channel() {
@@ -286,7 +323,7 @@ resolve_update_channel
 log "Starting application update from $GIT_URL ($GIT_BRANCH)"
 job_update "running" "Starting application update." "" "2" "starting"
 mkdir -p "$LOG_DIR"
-mkdir -p "$INSTALL_ROOT/backups"
+mkdir -p "$BACKUP_DIR"
 mkdir -p "$SSL_DIR"
 chown "$APP_USER":"$APP_USER" "$SSL_DIR" 2>/dev/null || true
 chmod 0750 "$SSL_DIR"
@@ -388,6 +425,8 @@ if [ "$REQUIREMENTS_CHANGED" = "1" ]; then
 fi
 
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR" "$VENV_DIR" 2>/dev/null || true
+job_update "running" "Verifying Python runtime dependencies." "" "82" "preparing-dependencies"
+verify_runtime_dependencies
 
 case "$SERVICE_MANAGER" in
     systemd)

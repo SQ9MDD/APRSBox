@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import re
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
@@ -97,6 +100,25 @@ RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "action_log",
 }
 RUNTIME_STUB_STEP_TYPES: set[str] = set()
+
+
+@dataclass(frozen=True)
+class DigiFlowRoutingSnapshot:
+    revision: int
+    flows: tuple[dict[str, Any], ...]
+    by_id: dict[int, dict[str, Any]]
+    by_source_kind: dict[str, tuple[dict[str, Any], ...]]
+    by_source_endpoint: dict[tuple[str, str], tuple[dict[str, Any], ...]]
+    by_target_endpoint: dict[tuple[str, str], tuple[dict[str, Any], ...]]
+    modems_by_name: dict[str, dict[str, Any]]
+    local_station_identity: str
+    local_station_identities: dict[str, str]
+
+
+_routing_snapshot_lock = Lock()
+_routing_snapshot_reload_lock = Lock()
+_routing_snapshot: DigiFlowRoutingSnapshot | None = None
+_routing_snapshot_revision = 0
 
 STEP_TYPE_META: dict[str, dict[str, Any]] = {
     "receiver_rf": {
@@ -1443,6 +1465,132 @@ def list_enabled_digi_flows(*, source_kind: str | None = None, source_ref: str |
     ]
 
 
+def _compile_callsign_pattern(pattern: Any) -> tuple[str, re.Pattern[str] | None] | None:
+    normalized = str(pattern or "").strip().upper()
+    if not normalized:
+        return None
+    if "*" not in normalized:
+        return normalized, None
+    expression = "^" + re.escape(normalized).replace(r"\*", ".*") + "$"
+    return normalized, re.compile(expression)
+
+
+def _prepare_runtime_flow(flow: dict[str, Any]) -> dict[str, Any]:
+    prepared = dict(flow)
+    prepared_steps: list[dict[str, Any]] = []
+    for raw_step in list(flow.get("steps") or []):
+        step = dict(raw_step)
+        config = dict(step.get("config") or {})
+        step["config"] = config
+        step_type = str(step.get("step_type") or "")
+        if step_type == "filter_callsign":
+            step["_compiled_callsign_patterns"] = tuple(
+                compiled
+                for value in config.get("callsigns") or []
+                if (compiled := _compile_callsign_pattern(value)) is not None
+            )
+        elif step_type == "filter_path":
+            step["_trace_path_specs"] = tuple(
+                str(value).strip().upper().rstrip("*")
+                for value in config.get("trace_paths") or []
+                if str(value).strip()
+            )
+            step["_no_trace_path_specs"] = tuple(
+                str(value).strip().upper().rstrip("*")
+                for value in config.get("no_trace_paths") or []
+                if str(value).strip()
+            )
+        elif step_type == "filter_digi":
+            step["_compiled_callsign_patterns"] = tuple(
+                compiled
+                for value in config.get("digis") or []
+                if (compiled := _compile_callsign_pattern(value)) is not None
+            )
+        elif step_type == "filter_rate_limit":
+            compiled_rules: list[dict[str, Any]] = []
+            rules = config.get("rate_limit_rules")
+            if isinstance(rules, list):
+                for rule in rules:
+                    if not isinstance(rule, dict):
+                        continue
+                    compiled = _compile_callsign_pattern(rule.get("source_callsign_pattern"))
+                    if compiled is None:
+                        continue
+                    compiled_rules.append({**rule, "_compiled_pattern": compiled})
+            step["_compiled_rate_limit_rules"] = tuple(compiled_rules)
+        prepared_steps.append(step)
+    prepared["steps"] = prepared_steps
+    prepared["step_count"] = len(prepared_steps)
+    return prepared
+
+
+def reload_digi_flow_routing_snapshot() -> DigiFlowRoutingSnapshot:
+    """Reload routing configuration once, outside the per-frame path."""
+    global _routing_snapshot, _routing_snapshot_revision
+    with _routing_snapshot_reload_lock:
+        flows = tuple(_prepare_runtime_flow(flow) for flow in list_enabled_digi_flows())
+        modem_rows = fetch_all("SELECT name, modem_type, enabled, tx_blocked FROM modems")
+        modems_by_name = {
+            str(row["name"] or "").strip(): dict(row)
+            for row in modem_rows
+            if str(row["name"] or "").strip()
+        }
+        station_row = fetch_one("SELECT callsign, ssid FROM station_settings WHERE id = 1")
+        station_callsign = str(station_row["callsign"] or "").strip().upper() if station_row else ""
+        station_ssid = str(station_row["ssid"] or "").strip() if station_row else ""
+        if station_ssid == "0":
+            station_ssid = ""
+        local_station_identity = (
+            f"{station_callsign}-{station_ssid}" if station_callsign and station_ssid else station_callsign
+        )
+        local_station_identities: dict[str, str] = {}
+        if local_station_identity:
+            local_station_identities[local_station_identity] = "my_station"
+        wx_row = fetch_one("SELECT enabled, callsign, ssid FROM wx_config WHERE id = 1")
+        if wx_row is not None:
+            wx_callsign = str(wx_row["callsign"] or "").strip().upper() or station_callsign
+            wx_ssid = str(wx_row["ssid"] or "").strip()
+            if wx_ssid == "0":
+                wx_ssid = ""
+            wx_identity = f"{wx_callsign}-{wx_ssid}" if wx_callsign and wx_ssid else wx_callsign
+            if wx_identity and (int(wx_row["enabled"] or 0) == 1 or bool(str(wx_row["callsign"] or "").strip() or wx_ssid)):
+                local_station_identities.setdefault(wx_identity, "wx_station")
+        by_source_kind_mutable: dict[str, list[dict[str, Any]]] = {}
+        by_source_endpoint_mutable: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        by_target_endpoint_mutable: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for flow in flows:
+            source_kind = str(flow.get("source_kind") or "").strip()
+            source_ref = str(flow.get("source_ref") or "").strip()
+            target_kind = str(flow.get("target_kind") or "").strip()
+            target_ref = str(flow.get("target_ref") or "").strip()
+            by_source_kind_mutable.setdefault(source_kind, []).append(flow)
+            by_source_endpoint_mutable.setdefault((source_kind, source_ref), []).append(flow)
+            by_target_endpoint_mutable.setdefault((target_kind, target_ref), []).append(flow)
+        with _routing_snapshot_lock:
+            _routing_snapshot_revision += 1
+            snapshot = DigiFlowRoutingSnapshot(
+                revision=_routing_snapshot_revision,
+                flows=flows,
+                by_id={int(flow["id"]): flow for flow in flows},
+                by_source_kind={key: tuple(value) for key, value in by_source_kind_mutable.items()},
+                by_source_endpoint={key: tuple(value) for key, value in by_source_endpoint_mutable.items()},
+                by_target_endpoint={key: tuple(value) for key, value in by_target_endpoint_mutable.items()},
+                modems_by_name=modems_by_name,
+                local_station_identity=local_station_identity,
+                local_station_identities=local_station_identities,
+            )
+            _routing_snapshot = snapshot
+            return snapshot
+
+
+def get_digi_flow_routing_snapshot() -> DigiFlowRoutingSnapshot:
+    with _routing_snapshot_lock:
+        snapshot = _routing_snapshot
+    if snapshot is None:
+        return reload_digi_flow_routing_snapshot()
+    return snapshot
+
+
 def has_enabled_local_tx_aprsis_flow() -> bool:
     row = fetch_one(
         """
@@ -2016,6 +2164,7 @@ def create_digi_flow(payload: dict[str, Any]) -> int:
                 keep_flow_id=flow_id,
                 updated_at=timestamp,
             )
+    reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Created DIGI Flow #{flow_id}")
     return flow_id
 
@@ -2128,12 +2277,14 @@ def update_digi_flow(flow_id: int, payload: dict[str, Any]) -> None:
                 keep_flow_id=flow_id,
                 updated_at=timestamp,
             )
+    reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Updated DIGI Flow #{flow_id}")
 
 
 def delete_digi_flow(flow_id: int) -> None:
     with get_connection() as connection:
         connection.execute("DELETE FROM digi_flows WHERE id = ?", (flow_id,))
+    reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Deleted DIGI Flow #{flow_id}")
 
 
@@ -2260,6 +2411,7 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
                 """,
                 (timestamp, flow_id),
             )
+    reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Set DIGI Flow #{flow_id} enabled={1 if enabled else 0}")
 
 
@@ -2309,6 +2461,7 @@ def move_digi_flow(flow_id: int, direction: str) -> None:
                 """,
                 (sort_order, current_flow_id),
             )
+    reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Moved DIGI Flow #{flow_id} {normalized_direction}")
 
 
@@ -2340,6 +2493,116 @@ def log_digi_flow_event(
             (frame_uid, flow_id, step_id, event_type, decision, message, timestamp),
         )
         if event_type == "pipeline_finished":
+            _prune_digi_flow_event_log(connection, flow_id=flow_id)
+
+
+class DigiFlowTraceWriter:
+    def __init__(self, *, batch_size: int = 50, flush_interval: float = 0.075, queue_max_events: int = 4096) -> None:
+        self._batch_size = max(1, int(batch_size))
+        self._flush_interval = max(0.01, float(flush_interval))
+        self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=max(1, int(queue_max_events)))
+        self._task: asyncio.Task[None] | None = None
+        self._running = False
+        self._dropped = 0
+        self._high_water = 0
+
+    async def start(self) -> None:
+        if self._task is not None:
+            return
+        self._running = True
+        self._task = asyncio.create_task(self._run(), name="aprsbox-digi-flow-trace-writer")
+
+    def is_running(self) -> bool:
+        return self._task is not None and not self._task.done()
+
+    async def stop(self) -> None:
+        await self.wait_until_idle()
+        self._running = False
+        if self._task is None:
+            return
+        self._task.cancel()
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+        self._task = None
+
+    def enqueue(self, **event: Any) -> bool:
+        item = dict(event)
+        item["created_at"] = str(item.get("created_at") or utc_now())
+        try:
+            self._queue.put_nowait(item)
+        except asyncio.QueueFull:
+            self._dropped += 1
+            return False
+        self._high_water = max(self._high_water, self._queue.qsize())
+        return True
+
+    async def wait_until_idle(self) -> None:
+        await self._queue.join()
+
+    def snapshot(self) -> dict[str, int]:
+        return {
+            "current_queue_depth": self._queue.qsize(),
+            "queue_capacity": self._queue.maxsize,
+            "high_water": self._high_water,
+            "dropped": self._dropped,
+        }
+
+    async def _run(self) -> None:
+        while self._running:
+            first = await self._queue.get()
+            batch = [first]
+            deadline = asyncio.get_running_loop().time() + self._flush_interval
+            while len(batch) < self._batch_size:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    break
+                try:
+                    batch.append(await asyncio.wait_for(self._queue.get(), timeout=remaining))
+                except TimeoutError:
+                    break
+            try:
+                await asyncio.to_thread(_write_digi_flow_event_batch, batch)
+            except Exception as exc:
+                await asyncio.to_thread(
+                    log_event,
+                    "WARNING",
+                    "digi_flow_runtime",
+                    f"Failed to persist DIGI Flow trace batch: {exc}",
+                )
+            finally:
+                for _item in batch:
+                    self._queue.task_done()
+
+
+def _write_digi_flow_event_batch(events: list[dict[str, Any]]) -> None:
+    if not events:
+        return
+    completed_flow_ids: set[int] = set()
+    with get_connection() as connection:
+        connection.executemany(
+            """
+            INSERT INTO digi_flow_event_log(frame_uid, flow_id, step_id, event_type, decision, message, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(event["frame_uid"]),
+                    int(event["flow_id"]),
+                    int(event["step_id"]) if event.get("step_id") is not None else None,
+                    str(event["event_type"]),
+                    event.get("decision"),
+                    str(event["message"]),
+                    str(event["created_at"]),
+                )
+                for event in events
+            ],
+        )
+        for event in events:
+            if str(event.get("event_type") or "") == "pipeline_finished":
+                completed_flow_ids.add(int(event["flow_id"]))
+        for flow_id in completed_flow_ids:
             _prune_digi_flow_event_log(connection, flow_id=flow_id)
 
 

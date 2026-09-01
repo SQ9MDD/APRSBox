@@ -7,8 +7,10 @@ import re
 import time
 import uuid
 from collections import OrderedDict
+from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Callable
 
 from app.db import fetch_one, log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
@@ -22,6 +24,7 @@ from app.services.aprsis import (
     record_aprsis_strict_reject,
     record_aprsis_tx_result,
 )
+from app.services.aprsis_tx_dispatcher import AprsIsTxDispatcher
 from app.services.content import get_station_settings, parse_tnc2_frame
 from app.services.aprsis_rf import (
     ALLOW_RULES_STEP_TYPE,
@@ -44,7 +47,13 @@ from app.services.igate_messaging import (
     mark_pending_sender_position,
     message_return_capable_for_rf_source,
 )
-from app.services.digi_flows import LOCAL_TX_SOURCE_KIND, get_digi_flow, list_enabled_digi_flows, log_digi_flow_event
+from app.services.digi_flows import (
+    DigiFlowTraceWriter,
+    LOCAL_TX_SOURCE_KIND,
+    get_digi_flow_routing_snapshot,
+    log_digi_flow_event,
+    reload_digi_flow_routing_snapshot,
+)
 from app.services.outbound import (
     APRSIS_TO_RF_ORIGIN,
     DIGI_TX_BASE_MAX_AGE_SECONDS,
@@ -69,6 +78,7 @@ DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL = "DIGI_GUARD_ALREADY_REPEATED_BY_LOCAL"
 _LOCAL_IDENTITY_MY = "my_station"
 _LOCAL_IDENTITY_WX = "wx_station"
 DIGI_FLOW_QUEUE_MAX_FRAMES = 256
+EVENT_LOOP_LAG_SAMPLE_INTERVAL_SECONDS = 0.1
 
 
 def _monotonic_delta_ms(start: Any, end: Any) -> float | None:
@@ -81,11 +91,21 @@ def _monotonic_delta_ms(start: Any, end: Any) -> float | None:
 
 
 def _t(message: object) -> str:
-    return get_translator(get_app_language())(message)
+    translator = _active_worker_translator.get()
+    return (translator or get_translator(get_app_language()))(message)
 
 
 def _tf(message: object, params: dict[str, object] | None = None) -> str:
-    return get_format_translator(get_app_language())(message, params)
+    translator = _active_worker_translator.get()
+    if translator is None:
+        return get_format_translator(get_app_language())(message, params)
+    template = translator(message)
+    if not params:
+        return template
+    try:
+        return template.format(**params)
+    except (KeyError, ValueError):
+        return template
 
 
 @dataclass
@@ -131,21 +151,66 @@ class _TokenBucket:
     updated_at: float
 
 
+@dataclass
+class _WorkerTimingCollector:
+    source_kind: str
+    interface_id: int | None
+    interface_name: str
+    phase_samples: list[tuple[str, float]]
+    step_samples: list[tuple[str, float]]
+    active: bool = True
+
+    def record_phase(self, name: str, started_monotonic: float) -> None:
+        if self.active:
+            self.phase_samples.append((name, max(0.0, (time.monotonic() - started_monotonic) * 1000.0)))
+
+    def record_step(self, step_type: str, started_monotonic: float) -> None:
+        if self.active:
+            self.step_samples.append((step_type, max(0.0, (time.monotonic() - started_monotonic) * 1000.0)))
+
+    def record_elapsed(self, name: str, value_ms: float) -> None:
+        if self.active:
+            self.phase_samples.append((name, max(0.0, value_ms)))
+
+
+_active_worker_timing: ContextVar[_WorkerTimingCollector | None] = ContextVar(
+    "aprsbox_active_worker_timing",
+    default=None,
+)
+_active_worker_translator: ContextVar[Callable[[object], str] | None] = ContextVar(
+    "aprsbox_active_worker_translator",
+    default=None,
+)
+
+
 class DigiFlowRuntimeService:
     def __init__(
         self,
         *,
         poll_interval: float = 0.5,
         aprsis_client: AprsisClientService | None = None,
+        aprsis_tx_dispatcher: AprsIsTxDispatcher | None = None,
+        rf_tx_dispatcher: Any | None = None,
+        trace_writer: DigiFlowTraceWriter | None = None,
         aprsis_rf_delay_override: float | None = None,
         queue_max_frames: int = DIGI_FLOW_QUEUE_MAX_FRAMES,
         aprsis_tx_max_frame_age_seconds: float = APRSIS_TX_MAX_FRAME_AGE_SECONDS,
+        event_loop_lag_sample_interval: float = EVENT_LOOP_LAG_SAMPLE_INTERVAL_SECONDS,
     ) -> None:
         self._poll_interval = poll_interval
         self._aprsis_client = aprsis_client
+        self._owns_aprsis_tx_dispatcher = aprsis_tx_dispatcher is None and aprsis_client is not None
+        self._aprsis_tx_dispatcher = aprsis_tx_dispatcher or (
+            AprsIsTxDispatcher(client=aprsis_client) if aprsis_client is not None else None
+        )
+        self._rf_tx_dispatcher = rf_tx_dispatcher
+        self._owns_trace_writer = trace_writer is None
+        self._trace_writer = trace_writer or DigiFlowTraceWriter()
         self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=max(1, int(queue_max_frames)))
         self._aprsis_tx_max_frame_age_seconds = max(0.1, float(aprsis_tx_max_frame_age_seconds))
         self._task: asyncio.Task[None] | None = None
+        self._event_loop_lag_task: asyncio.Task[None] | None = None
+        self._event_loop_lag_sample_interval = max(0.01, float(event_loop_lag_sample_interval))
         self._stop_event = asyncio.Event()
         self._viscous_delay_lock = asyncio.Lock()
         self._viscous_delay_entries: dict[tuple[int, int, str, str], _ViscousDelayEntry] = {}
@@ -157,15 +222,167 @@ class DigiFlowRuntimeService:
         self._aprsis_rf_flow_buckets: dict[tuple[int, str], _TokenBucket] = {}
         self._aprsis_rf_source_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
         self._aprsis_rf_recipient_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
+        self._latency_metrics: dict[str, dict[str, float | int | None]] = {}
+        self._latency_by_source_interface: dict[
+            tuple[str, int | None, str], dict[str, dict[str, float | int | None]]
+        ] = {}
+        self._processing_breakdown_by_source_interface: dict[
+            tuple[str, int | None, str], dict[str, dict[str, dict[str, float | int | None]]]
+        ] = {}
+        self._max_queue_depth = 0
+        reload_digi_flow_routing_snapshot()
+
+    def latency_snapshot(self) -> dict[str, Any]:
+        routing_snapshot = get_digi_flow_routing_snapshot()
+        dispatcher_snapshot = (
+            self._rf_tx_dispatcher.latency_snapshot()
+            if self._rf_tx_dispatcher is not None
+            else {
+                "queue_depth_by_interface": {},
+                "current_queue_depth": 0,
+                "max_queue_depth": 0,
+                "worker_count": 0,
+            }
+        )
+        return {
+            "metrics_ms": {name: dict(values) for name, values in self._latency_metrics.items()},
+            "latency_by_source_interface": [
+                {
+                    "source_kind": source_kind,
+                    "interface_id": interface_id,
+                    "interface_name": interface_name,
+                    "metrics_ms": {
+                        name: dict(values)
+                        for name, values in self._latency_by_source_interface
+                        .get((source_kind, interface_id, interface_name), {})
+                        .items()
+                    },
+                    "digiflow_processing_breakdown_ms": {
+                        section: {name: dict(values) for name, values in section_metrics.items()}
+                        for section, section_metrics in self._processing_breakdown_by_source_interface
+                        .get((source_kind, interface_id, interface_name), {})
+                        .items()
+                    },
+                }
+                for source_kind, interface_id, interface_name in sorted(
+                    set(self._latency_by_source_interface) | set(self._processing_breakdown_by_source_interface),
+                    key=lambda key: (key[0], key[2], key[1] or 0),
+                )
+            ],
+            "event_loop_lag_ms": dict(self._latency_metrics.get("event_loop_lag", {})),
+            "digiflow_config_cache": {
+                "revision": routing_snapshot.revision,
+                "enabled_flow_count": len(routing_snapshot.flows),
+                "source_endpoint_count": len(routing_snapshot.by_source_endpoint),
+                "target_endpoint_count": len(routing_snapshot.by_target_endpoint),
+            },
+            "digiflow_queue": {
+                "current_depth": self._queue.qsize(),
+                "max_depth": self._max_queue_depth,
+                "capacity": self._queue.maxsize,
+            },
+            "rf_tx_dispatcher": dispatcher_snapshot,
+            "aprsis_tx_dispatcher": (
+                self._aprsis_tx_dispatcher.latency_snapshot()
+                if self._aprsis_tx_dispatcher is not None
+                else {
+                    "current_queue_depth": 0,
+                    "queue_capacity": 0,
+                    "high_water": 0,
+                    "enqueued": 0,
+                    "sent": 0,
+                    "failed": 0,
+                    "dropped_overflow": 0,
+                }
+            ),
+            "digiflow_trace_writer": self._trace_writer.snapshot(),
+        }
+
+    def _record_latency(self, name: str, value_ms: float | None) -> None:
+        if value_ms is None:
+            return
+        self._update_latency_metric(self._latency_metrics, name, value_ms)
+
+    def _record_source_latency(
+        self,
+        name: str,
+        value_ms: float | None,
+        *,
+        source_kind: str,
+        interface_id: int | None,
+        interface_name: str,
+    ) -> None:
+        if value_ms is None:
+            return
+        key = self._source_metric_key(source_kind, interface_id, interface_name)
+        metrics = self._latency_by_source_interface.setdefault(key, {})
+        self._update_latency_metric(metrics, name, value_ms)
+
+    @staticmethod
+    def _source_metric_key(
+        source_kind: str,
+        interface_id: int | None,
+        interface_name: str,
+    ) -> tuple[str, int | None, str]:
+        return (
+            str(source_kind or "unknown").strip() or "unknown",
+            int(interface_id) if interface_id is not None else None,
+            str(interface_name or "").strip(),
+        )
+
+    def _record_processing_breakdown(self, collector: _WorkerTimingCollector) -> None:
+        key = self._source_metric_key(
+            collector.source_kind,
+            collector.interface_id,
+            collector.interface_name,
+        )
+        breakdown = self._processing_breakdown_by_source_interface.setdefault(
+            key,
+            {"phases": {}, "step_types": {}},
+        )
+        for name, value_ms in collector.phase_samples:
+            self._update_latency_metric(breakdown["phases"], name, value_ms)
+        for step_type, value_ms in collector.step_samples:
+            self._update_latency_metric(breakdown["step_types"], step_type, value_ms)
+
+    @staticmethod
+    def _update_latency_metric(
+        metrics: dict[str, dict[str, float | int | None]],
+        name: str,
+        value_ms: float,
+    ) -> None:
+        metric = metrics.setdefault(
+            name,
+            {"count": 0, "total_ms": 0.0, "last_ms": None, "max_ms": 0.0},
+        )
+        metric["count"] = int(metric["count"] or 0) + 1
+        metric["total_ms"] = float(metric["total_ms"] or 0.0) + value_ms
+        metric["last_ms"] = value_ms
+        metric["max_ms"] = max(float(metric["max_ms"] or 0.0), value_ms)
+        metric["avg_ms"] = float(metric["total_ms"]) / int(metric["count"])
 
     async def start(self) -> None:
         if self._task is not None:
             return
+        if self._owns_trace_writer:
+            await self._trace_writer.start()
+        if self._owns_aprsis_tx_dispatcher and self._aprsis_tx_dispatcher is not None:
+            await self._aprsis_tx_dispatcher.start()
         self._stop_event.clear()
         self._task = asyncio.create_task(self._run(), name="aprsbox-digi-flow-runtime")
+        self._event_loop_lag_task = asyncio.create_task(
+            self._measure_event_loop_lag(),
+            name="aprsbox-digi-flow-event-loop-lag",
+        )
 
     async def stop(self) -> None:
         self._stop_event.set()
+        lag_task = self._event_loop_lag_task
+        self._event_loop_lag_task = None
+        if lag_task is not None:
+            lag_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await lag_task
         cleanup_tasks: list[asyncio.Task[None]] = []
         async with self._viscous_delay_lock:
             cleanup_tasks = [
@@ -204,6 +421,20 @@ class DigiFlowRuntimeService:
         except asyncio.CancelledError:
             pass
         self._task = None
+        if self._owns_aprsis_tx_dispatcher and self._aprsis_tx_dispatcher is not None:
+            await self._aprsis_tx_dispatcher.stop()
+        if self._owns_trace_writer:
+            await self._trace_writer.stop()
+
+    async def _measure_event_loop_lag(self) -> None:
+        expected = time.monotonic() + self._event_loop_lag_sample_interval
+        while not self._stop_event.is_set():
+            await asyncio.sleep(max(0.0, expected - time.monotonic()))
+            observed = time.monotonic()
+            self._record_latency("event_loop_lag", max(0.0, (observed - expected) * 1000.0))
+            expected += self._event_loop_lag_sample_interval
+            if expected < observed:
+                expected = observed + self._event_loop_lag_sample_interval
 
     async def wait_until_idle(self) -> None:
         await self._queue.join()
@@ -211,8 +442,21 @@ class DigiFlowRuntimeService:
             async with self._viscous_delay_lock:
                 pending = self._pending_viscous_wait_count
             if pending <= 0 and not self._aprsis_rf_pending:
-                return
+                break
             await asyncio.sleep(0.01)
+        if self._aprsis_tx_dispatcher is not None:
+            await self._aprsis_tx_dispatcher.wait_until_idle()
+        await self._trace_writer.wait_until_idle()
+
+    def _log_digi_flow_event(self, **event: Any) -> None:
+        collector = _active_worker_timing.get()
+        started_monotonic = time.monotonic() if collector is not None else 0.0
+        if self._trace_writer.is_running():
+            self._trace_writer.enqueue(**event)
+        else:
+            log_digi_flow_event(**event)
+        if collector is not None:
+            collector.record_phase("trace_log_enqueue", started_monotonic)
 
     def enqueue_tnc2_frame(
         self,
@@ -223,6 +467,11 @@ class DigiFlowRuntimeService:
         frame_uid: str | None = None,
         created_at: str | None = None,
         rx_received_monotonic: float | None = None,
+        rx_processing_started_monotonic: float | None = None,
+        digiflow_enqueue_requested_monotonic: float | None = None,
+        latency_source_kind: str | None = None,
+        latency_interface_id: int | None = None,
+        latency_interface_name: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         enqueue_monotonic = time.monotonic()
@@ -234,11 +483,48 @@ class DigiFlowRuntimeService:
             created_at=created_at,
             enqueue_monotonic=enqueue_monotonic,
             rx_received_monotonic=rx_received_monotonic,
+            rx_processing_started_monotonic=rx_processing_started_monotonic,
+            digiflow_enqueue_requested_monotonic=digiflow_enqueue_requested_monotonic,
+            latency_source_kind=latency_source_kind,
+            latency_interface_id=latency_interface_id,
+            latency_interface_name=latency_interface_name,
             metadata=metadata,
         )
         try:
             self._queue.put_nowait(frame)
         except asyncio.QueueFull:
+            superseded = self._supersede_queued_position(frame)
+            if superseded is not None:
+                matching_old_flows = self._matching_flows(
+                    source_kind=str(superseded["source_kind"]),
+                    source_ref=str(superseded["source_ref"]),
+                )
+                if any(
+                    str(flow.get("target_kind") or "").strip() == "tx_aprsis"
+                    for flow in matching_old_flows
+                ):
+                    record_aprsis_tx_result(
+                        sent=False,
+                        frame_line=str(superseded["raw_payload"]),
+                    )
+                log_event(
+                    "WARNING",
+                    "digi_flow_runtime",
+                    (
+                        "Replaced an older queued position with the latest position "
+                        f"because the routing queue is full (limit={self._queue.maxsize}) | "
+                        f"old_frame_uid={superseded['frame_uid']} | new_frame_uid={frame['frame_uid']} | "
+                        f"source={frame['source_kind']}:{frame['source_ref']}"
+                    ),
+                )
+                return {
+                    "frame_uid": frame["frame_uid"],
+                    "created_at": frame["created_at"],
+                    "queue_depth": self._queue.qsize(),
+                    "parsed": bool(frame["parsed"]),
+                    "accepted": True,
+                    "superseded_frame_uid": superseded["frame_uid"],
+                }
             matching_flows = self._matching_flows(
                 source_kind=str(frame["source_kind"]),
                 source_ref=str(frame["source_ref"]),
@@ -266,6 +552,7 @@ class DigiFlowRuntimeService:
                 "accepted": False,
                 "drop_reason": "routing_queue_full",
             }
+        self._max_queue_depth = max(self._max_queue_depth, self._queue.qsize())
         source_is_aprsis = str(frame["source_kind"]) == APRSIS_FLOW_SOURCE_KIND
         log_event(
             "DEBUG" if source_is_aprsis else "INFO",
@@ -284,14 +571,70 @@ class DigiFlowRuntimeService:
             "accepted": True,
         }
 
+    def _supersede_queued_position(
+        self,
+        incoming: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        incoming_key = _queued_position_key(incoming)
+        if incoming_key is None:
+            return None
+
+        queued: list[dict[str, Any]] = []
+        while True:
+            try:
+                queued.append(self._queue.get_nowait())
+            except asyncio.QueueEmpty:
+                break
+        if not queued:
+            return None
+
+        replacement_index = next(
+            (
+                index
+                for index, candidate in enumerate(queued)
+                if _queued_position_key(candidate) == incoming_key
+            ),
+            None,
+        )
+        for _candidate in queued:
+            self._queue.task_done()
+        if replacement_index is None:
+            for candidate in queued:
+                self._queue.put_nowait(candidate)
+            return None
+
+        superseded = queued[replacement_index]
+        queued[replacement_index] = incoming
+        for candidate in queued:
+            self._queue.put_nowait(candidate)
+        return superseded
+
     def enqueue_rx_tnc2_frame(
         self,
         line: str,
         *,
         source_ref: str,
+        source_interface_id: int | None = None,
         rx_received_at: str | None = None,
         rx_received_monotonic: float | None = None,
+        rx_processing_started_monotonic: float | None = None,
+        latency_source_kind: str = "rf_unknown",
     ) -> None:
+        enqueue_requested_monotonic = time.monotonic()
+        self._record_source_latency(
+            "source_receive_to_rx_processing_start",
+            _monotonic_delta_ms(rx_received_monotonic, rx_processing_started_monotonic),
+            source_kind=latency_source_kind,
+            interface_id=source_interface_id,
+            interface_name=source_ref,
+        )
+        self._record_source_latency(
+            "rx_processing_start_to_digiflow_enqueue_request",
+            _monotonic_delta_ms(rx_processing_started_monotonic, enqueue_requested_monotonic),
+            source_kind=latency_source_kind,
+            interface_id=source_interface_id,
+            interface_name=source_ref,
+        )
         parsed = parse_tnc2_frame(line)
         packet_hash = logical_packet_hash(parsed)
         if packet_hash:
@@ -318,6 +661,11 @@ class DigiFlowRuntimeService:
             raw_payload=line,
             created_at=rx_received_at,
             rx_received_monotonic=rx_received_monotonic,
+            rx_processing_started_monotonic=rx_processing_started_monotonic,
+            digiflow_enqueue_requested_monotonic=enqueue_requested_monotonic,
+            latency_source_kind=latency_source_kind,
+            latency_interface_id=source_interface_id,
+            latency_interface_name=source_ref,
         )
 
     def enqueue_aprsis_tnc2_frame(
@@ -328,8 +676,25 @@ class DigiFlowRuntimeService:
         source_interface_id: int | None = None,
         rx_received_at: str | None = None,
         rx_received_monotonic: float | None = None,
+        rx_processing_started_monotonic: float | None = None,
+        latency_source_kind: str = "aprsis",
         metadata: dict[str, Any] | None = None,
     ) -> None:
+        enqueue_requested_monotonic = time.monotonic()
+        self._record_source_latency(
+            "source_receive_to_rx_processing_start",
+            _monotonic_delta_ms(rx_received_monotonic, rx_processing_started_monotonic),
+            source_kind=latency_source_kind,
+            interface_id=source_interface_id,
+            interface_name=source_ref,
+        )
+        self._record_source_latency(
+            "rx_processing_start_to_digiflow_enqueue_request",
+            _monotonic_delta_ms(rx_processing_started_monotonic, enqueue_requested_monotonic),
+            source_kind=latency_source_kind,
+            interface_id=source_interface_id,
+            interface_name=source_ref,
+        )
         matching_flows = self._matching_flows(source_kind=APRSIS_FLOW_SOURCE_KIND, source_ref=source_ref)
         if not matching_flows:
             log_event(
@@ -347,6 +712,11 @@ class DigiFlowRuntimeService:
             raw_payload=line,
             created_at=rx_received_at,
             rx_received_monotonic=rx_received_monotonic,
+            rx_processing_started_monotonic=rx_processing_started_monotonic,
+            digiflow_enqueue_requested_monotonic=enqueue_requested_monotonic,
+            latency_source_kind=latency_source_kind,
+            latency_interface_id=source_interface_id,
+            latency_interface_name=source_ref,
             metadata=normalized_metadata,
         )
 
@@ -358,70 +728,115 @@ class DigiFlowRuntimeService:
                 continue
 
             try:
+                processing_started = time.monotonic()
+                self._record_latency(
+                    "digiflow_enqueue_to_worker_start",
+                    _monotonic_delta_ms(frame.get("enqueue_monotonic"), processing_started),
+                )
+                self._record_source_latency(
+                    "digiflow_enqueue_to_worker_start",
+                    _monotonic_delta_ms(frame.get("enqueue_monotonic"), processing_started),
+                    source_kind=str(frame.get("latency_source_kind") or frame.get("source_kind") or "unknown"),
+                    interface_id=frame.get("latency_interface_id"),
+                    interface_name=str(frame.get("latency_interface_name") or frame.get("source_ref") or ""),
+                )
                 await self._process_frame(frame)
             except Exception as exc:
                 error = str(exc).strip() or exc.__class__.__name__
                 log_event("WARNING", "digi_flow_runtime", f"Failed to process DIGI Flow frame {frame['frame_uid']}: {error}")
             finally:
+                processing_finished = time.monotonic()
+                self._record_latency(
+                    "digiflow_worker_processing",
+                    _monotonic_delta_ms(processing_started, processing_finished),
+                )
+                self._record_source_latency(
+                    "digiflow_worker_processing",
+                    _monotonic_delta_ms(processing_started, processing_finished),
+                    source_kind=str(frame.get("latency_source_kind") or frame.get("source_kind") or "unknown"),
+                    interface_id=frame.get("latency_interface_id"),
+                    interface_name=str(frame.get("latency_interface_name") or frame.get("source_ref") or ""),
+                )
                 self._queue.task_done()
 
     async def _process_frame(self, frame: dict[str, Any]) -> None:
-        flows = self._matching_flows(
-            source_kind=str(frame["source_kind"]),
-            source_ref=str(frame["source_ref"]),
+        worker_started = time.monotonic()
+        collector = _WorkerTimingCollector(
+            source_kind=str(frame.get("latency_source_kind") or frame.get("source_kind") or "unknown"),
+            interface_id=frame.get("latency_interface_id"),
+            interface_name=str(frame.get("latency_interface_name") or frame.get("source_ref") or ""),
+            phase_samples=[],
+            step_samples=[],
         )
-        if not flows:
-            return
+        token = _active_worker_timing.set(collector)
+        translator_token = _active_worker_translator.set(get_translator(get_app_language()))
+        try:
+            matching_started = time.monotonic()
+            flows = self._matching_flows(
+                source_kind=str(frame["source_kind"]),
+                source_ref=str(frame["source_ref"]),
+            )
+            collector.record_phase("matching_select_flow", matching_started)
+            if not flows:
+                return
 
-        for flow in flows:
-            flow_id = int(flow["id"])
-            if str(frame.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND:
-                record_aprsis_rf_stat(flow_id, "received_from_aprsis")
-            flow_name = str(flow.get("name") or f"flow-{flow_id}")
-            source_label = f"{frame['source_kind']}:{frame['source_ref']}"
-            log_digi_flow_event(
-                frame_uid=str(frame["frame_uid"]),
-                flow_id=flow_id,
-                step_id=None,
-                event_type="frame_received",
-                decision="queued",
-                message=f"Frame accepted from {source_label} | line={frame['raw_payload']}",
-                created_at=str(frame["created_at"]),
+            for flow in flows:
+                flow_id = int(flow["id"])
+                if str(frame.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND:
+                    record_aprsis_rf_stat(flow_id, "received_from_aprsis")
+                flow_name = str(flow.get("name") or f"flow-{flow_id}")
+                source_label = f"{frame['source_kind']}:{frame['source_ref']}"
+                self._log_digi_flow_event(
+                    frame_uid=str(frame["frame_uid"]), flow_id=flow_id, step_id=None,
+                    event_type="frame_received", decision="queued",
+                    message=f"Frame accepted from {source_label} | line={frame['raw_payload']}",
+                    created_at=str(frame["created_at"]),
+                )
+                self._log_digi_flow_event(
+                    frame_uid=str(frame["frame_uid"]), flow_id=flow_id, step_id=None,
+                    event_type="flow_matched", decision="matched", message=f"Matched flow {flow_name}.",
+                    created_at=str(frame["created_at"]),
+                )
+                context_started = time.monotonic()
+                context = {
+                    "flow": flow, "frame_uid": str(frame["frame_uid"]), "created_at": str(frame["created_at"]),
+                    "enqueue_monotonic": frame.get("enqueue_monotonic"),
+                    "rx_received_monotonic": frame.get("rx_received_monotonic"),
+                    "source_kind": str(frame["source_kind"]), "source_ref": str(frame["source_ref"]),
+                    "raw_payload": str(frame["raw_payload"]), "current_line": str(frame["raw_payload"]),
+                    "parsed": dict(frame["parsed"]) if frame["parsed"] else None,
+                    "original_parsed": dict(frame["parsed"]) if frame["parsed"] else None,
+                    "metadata": dict(frame.get("metadata") or {}),
+                }
+                collector.record_phase("frame_context_build_parse", context_started)
+                execution_started = time.monotonic()
+                await self._execute_flow(context)
+                collector.record_phase("flow_execution", execution_started)
+        finally:
+            worker_elapsed_ms = max(0.0, (time.monotonic() - worker_started) * 1000.0)
+            exclusive_phase_total_ms = sum(
+                value_ms
+                for name, value_ms in collector.phase_samples
+                if name in {"matching_select_flow", "frame_context_build_parse", "flow_execution"}
             )
-            log_digi_flow_event(
-                frame_uid=str(frame["frame_uid"]),
-                flow_id=flow_id,
-                step_id=None,
-                event_type="flow_matched",
-                decision="matched",
-                message=f"Matched flow {flow_name}.",
-                created_at=str(frame["created_at"]),
+            collector.record_elapsed(
+                "remaining_worker_time",
+                worker_elapsed_ms - exclusive_phase_total_ms,
             )
-            context = {
-                "flow": flow,
-                "frame_uid": str(frame["frame_uid"]),
-                "created_at": str(frame["created_at"]),
-                "enqueue_monotonic": frame.get("enqueue_monotonic"),
-                "rx_received_monotonic": frame.get("rx_received_monotonic"),
-                "source_kind": str(frame["source_kind"]),
-                "source_ref": str(frame["source_ref"]),
-                "raw_payload": str(frame["raw_payload"]),
-                "current_line": str(frame["raw_payload"]),
-                "parsed": dict(frame["parsed"]) if frame["parsed"] else None,
-                "original_parsed": dict(frame["parsed"]) if frame["parsed"] else None,
-                "metadata": dict(frame.get("metadata") or {}),
-            }
-            await self._execute_flow(context)
+            collector.active = False
+            _active_worker_timing.reset(token)
+            _active_worker_translator.reset(translator_token)
+            self._record_processing_breakdown(collector)
 
     def _matching_flows(self, *, source_kind: str, source_ref: str) -> list[dict[str, Any]]:
         normalized_kind = str(source_kind or "").strip()
         normalized_ref = str(source_ref or "").strip()
-        flows = list_enabled_digi_flows(source_kind=normalized_kind)
+        snapshot = get_digi_flow_routing_snapshot()
         if normalized_kind != "receiver_rf":
-            return [flow for flow in flows if str(flow.get("source_ref") or "").strip() == normalized_ref]
+            return list(snapshot.by_source_endpoint.get((normalized_kind, normalized_ref), ()))
         return [
             flow
-            for flow in flows
+            for flow in snapshot.by_source_kind.get(normalized_kind, ())
             if _receiver_source_ref_matches(str(flow.get("source_ref") or ""), normalized_ref)
         ]
 
@@ -437,7 +852,7 @@ class DigiFlowRuntimeService:
             step_type = str(step["step_type"])
             step_title = str(step.get("title") or step_type)
             if int(step.get("enabled") or 0) != 1:
-                log_digi_flow_event(
+                self._log_digi_flow_event(
                     frame_uid=context["frame_uid"],
                     flow_id=flow_id,
                     step_id=step_id,
@@ -447,7 +862,7 @@ class DigiFlowRuntimeService:
                 )
                 continue
 
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -455,9 +870,28 @@ class DigiFlowRuntimeService:
                 decision="continue",
                 message=f"Entering step {step_title}.",
             )
+            step_started = time.monotonic()
             result = await self._execute_step(context, step, step_index=step_index)
+            collector = _active_worker_timing.get()
+            if collector is not None:
+                collector.record_step(step_type, step_started)
+                if step_type == "filter_dupe":
+                    collector.record_phase("dupe_handling", step_started)
+                    if str(result.get("decision") or "") == "defer":
+                        collector.record_phase("viscous_handling_scheduling", step_started)
+                elif step_type == RF_TX_GUARD_STEP_TYPE and str(context.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND:
+                    collector.record_phase("aprsis_rf_viscous_scheduling", step_started)
+                elif step_type == "tx_rf":
+                    collector.record_phase(
+                        "aprsis_rf_viscous_scheduling"
+                        if str(context.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND
+                        else "rf_tx_decision_enqueue",
+                        step_started,
+                    )
+                elif step_type == "tx_aprsis":
+                    collector.record_phase("aprsis_tx_decision_enqueue", step_started)
             last_decision = str(result["decision"])
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -476,7 +910,7 @@ class DigiFlowRuntimeService:
     async def _execute_step(self, context: dict[str, Any], step: dict[str, Any], *, step_index: int) -> dict[str, str]:
         step_type = str(step["step_type"])
         if step_type in {"receiver_rf", "receiver_aprsis", LOCAL_TX_SOURCE_KIND}:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=int(context["flow"]["id"]),
                 step_id=int(step["id"]),
@@ -536,7 +970,7 @@ class DigiFlowRuntimeService:
         if step_type == "tx_aprsis":
             return await self._execute_tx_aprsis(context, step)
 
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=int(context["flow"]["id"]),
             step_id=int(step["id"]),
@@ -648,7 +1082,7 @@ class DigiFlowRuntimeService:
         self._aprsis_rf_seen.move_to_end(packet_hash)
         context["normalized_packet_hash"] = packet_hash
         context["aprsis_rf_guard_input_checked"] = True
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=frame_uid,
             flow_id=flow_id,
             step_id=step_id,
@@ -727,7 +1161,7 @@ class DigiFlowRuntimeService:
         context["aprsis_message_delivery_result"] = dict(result)
 
         if route == "not_applicable":
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -763,7 +1197,7 @@ class DigiFlowRuntimeService:
                     "APRS-IS Message Delivery Rule passed "
                     f"| route=associated_position sender={result.get('sender') or '-'}"
                 )
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -793,7 +1227,7 @@ class DigiFlowRuntimeService:
         route_authorization = str(context.get("aprsis_route_authorization") or "")
         if route_authorization in {"message", "associated_position"}:
             context["aprsis_default_deny_filter_matched"] = True
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -825,7 +1259,7 @@ class DigiFlowRuntimeService:
             )
         context["aprsis_default_deny_filter_matched"] = True
         record_aprsis_rf_stat(flow_id, "matched_allow_rule")
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -868,7 +1302,7 @@ class DigiFlowRuntimeService:
     ) -> dict[str, str]:
         flow_id = int(context["flow"]["id"])
         record_aprsis_rf_stat(flow_id, stat_counter)
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -888,7 +1322,7 @@ class DigiFlowRuntimeService:
         flow_id = int(context["flow"]["id"])
         step_id = int(step["id"])
         if parsed is None:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -901,7 +1335,7 @@ class DigiFlowRuntimeService:
         source_callsign = str(parsed.get("source") or "").strip().upper()
         payload = str(parsed.get("info") or "")
         if not source_callsign:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -952,7 +1386,7 @@ class DigiFlowRuntimeService:
             except (TypeError, ValueError):
                 existing_delay = 0.0
             context["digi_tx_viscous_delay_seconds"] = max(existing_delay, float(window_sec))
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -970,7 +1404,7 @@ class DigiFlowRuntimeService:
             {"window_sec": window_sec, "fingerprint": fingerprint_label},
         )
         if first_context_to_drop is not None:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=first_context_to_drop["frame_uid"],
                 flow_id=int(first_context_to_drop["flow"]["id"]),
                 step_id=step_id,
@@ -980,7 +1414,7 @@ class DigiFlowRuntimeService:
             )
             self._log_pipeline_finished(first_context_to_drop, decision="drop")
 
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -1015,7 +1449,7 @@ class DigiFlowRuntimeService:
 
         if resume_context is None:
             return
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=resume_context["frame_uid"],
             flow_id=entry_to_resume.flow_id,
             step_id=entry_to_resume.step_id,
@@ -1045,7 +1479,7 @@ class DigiFlowRuntimeService:
         return f"{source_callsign} | {payload}"
 
     def _log_pipeline_finished(self, context: dict[str, Any], *, decision: str) -> None:
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=int(context["flow"]["id"]),
             step_id=None,
@@ -1060,7 +1494,12 @@ class DigiFlowRuntimeService:
         config = dict(step.get("config") or {})
         mode = str(config.get("mode") or "allow").strip().lower() or "allow"
         configured = [str(item).strip().upper() for item in config.get("callsigns") or [] if str(item).strip()]
-        matched_pattern = _find_matching_callsign_pattern(callsign, configured) if callsign else None
+        compiled_patterns = step.get("_compiled_callsign_patterns")
+        matched_pattern = (
+            _find_matching_callsign_pattern(callsign, configured, compiled_patterns=compiled_patterns)
+            if callsign
+            else None
+        )
 
         if not callsign:
             decision = "drop"
@@ -1106,7 +1545,7 @@ class DigiFlowRuntimeService:
                     {"mode": mode, "callsign": callsign},
                 )
 
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=int(context["flow"]["id"]),
             step_id=int(step["id"]),
@@ -1121,7 +1560,7 @@ class DigiFlowRuntimeService:
         flow_id = int(context["flow"]["id"])
         step_id = int(step["id"])
         if parsed is None:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1139,7 +1578,7 @@ class DigiFlowRuntimeService:
         info_field = str(parsed.get("info") or "")
 
         if bool(parsed.get("is_third_party")) or info_field.startswith("}"):
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1161,7 +1600,7 @@ class DigiFlowRuntimeService:
             else:
                 reason_code = DIGI_GUARD_LOCAL_SOURCE_MY_STATION
                 identity_label = _t("My station")
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1185,7 +1624,7 @@ class DigiFlowRuntimeService:
             else:
                 reason_code = DIGI_GUARD_LOCAL_MESSAGE_MY_STATION
                 identity_label = _t("My station")
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1209,7 +1648,7 @@ class DigiFlowRuntimeService:
             else:
                 reason_code = DIGI_GUARD_LOCAL_QUERY_MY_STATION
                 identity_label = _t("My station")
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1229,7 +1668,7 @@ class DigiFlowRuntimeService:
         input_path = str(parsed.get("path") or "").strip().upper()
         path_tokens = _split_path_tokens(input_path)
         if not path_tokens:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1241,7 +1680,7 @@ class DigiFlowRuntimeService:
 
         first_unconsumed_index = next((index for index, token in enumerate(path_tokens) if not token.endswith("*")), None)
         if first_unconsumed_index is None:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1254,11 +1693,14 @@ class DigiFlowRuntimeService:
             )
             return {"decision": "drop"}
 
-        local_identity = _local_station_identity()
+        local_identity = next(
+            (identity for identity, owner in local_identities.items() if owner == _LOCAL_IDENTITY_MY),
+            "",
+        )
         consumed_local = _find_consumed_local_identity(path_tokens, local_identities)
         if consumed_local is not None:
             consumed_identity = consumed_local[0]
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1277,14 +1719,26 @@ class DigiFlowRuntimeService:
 
         candidate = path_tokens[first_unconsumed_index]
         config = dict(step.get("config") or {})
-        trace_specs = [str(item).strip().upper() for item in config.get("trace_paths") or [] if str(item).strip()]
-        no_trace_specs = [str(item).strip().upper() for item in config.get("no_trace_paths") or [] if str(item).strip()]
+        trace_specs = step.get("_trace_path_specs")
+        if not isinstance(trace_specs, tuple):
+            trace_specs = tuple(
+                str(item).strip().upper().rstrip("*")
+                for item in config.get("trace_paths") or []
+                if str(item).strip()
+            )
+        no_trace_specs = step.get("_no_trace_path_specs")
+        if not isinstance(no_trace_specs, tuple):
+            no_trace_specs = tuple(
+                str(item).strip().upper().rstrip("*")
+                for item in config.get("no_trace_paths") or []
+                if str(item).strip()
+            )
         matched_trace = _find_matching_path_spec(candidate, trace_specs)
         matched_no_trace = _find_matching_path_spec(candidate, no_trace_specs)
 
         if matched_trace:
             if not local_identity:
-                log_digi_flow_event(
+                self._log_digi_flow_event(
                     frame_uid=context["frame_uid"],
                     flow_id=flow_id,
                     step_id=step_id,
@@ -1299,7 +1753,7 @@ class DigiFlowRuntimeService:
             updated_tokens = _rewrite_trace_path(path_tokens, first_unconsumed_index, local_identity)
             updated_path = ",".join(updated_tokens)
             self._apply_updated_path(context, updated_path)
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1316,7 +1770,7 @@ class DigiFlowRuntimeService:
             updated_tokens = _rewrite_no_trace_path(path_tokens, first_unconsumed_index)
             updated_path = ",".join(updated_tokens)
             self._apply_updated_path(context, updated_path)
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1329,7 +1783,7 @@ class DigiFlowRuntimeService:
             )
             return {"decision": "continue"}
 
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -1349,7 +1803,7 @@ class DigiFlowRuntimeService:
         is_aprsis_target = str((context.get("flow") or {}).get("target_kind") or "").strip() == "tx_aprsis"
         if parsed is None:
             message = _t("Strict filter rejected frame because TNC2 parsing failed.")
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1368,7 +1822,7 @@ class DigiFlowRuntimeService:
         local_tx_reject = _local_tx_strict_reject_reason(context, parsed)
         if local_tx_reject is not None:
             message, reason_key = local_tx_reject
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1387,7 +1841,7 @@ class DigiFlowRuntimeService:
         blocked = _find_blocked_strict_token(parsed)
         if blocked is None:
             input_path = str(parsed.get("path") or "").strip().upper()
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1407,7 +1861,7 @@ class DigiFlowRuntimeService:
                 "Strict filter rejected frame because {scope} contains blocked token {blocked_token}. Input path: {input_path}",
                 {"scope": blocked_scope, "blocked_token": blocked_token, "input_path": blocked_path or "-"},
             )
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -1428,7 +1882,7 @@ class DigiFlowRuntimeService:
         flow_id = int(context["flow"]["id"])
         step_id = int(step["id"])
         if parsed is None:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1441,7 +1895,7 @@ class DigiFlowRuntimeService:
         input_path = str(parsed.get("path") or "").strip().upper()
         consumed_hops = _consumed_path_hops(_split_path_tokens(input_path))
         if consumed_hops:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1454,7 +1908,7 @@ class DigiFlowRuntimeService:
             )
             return {"decision": "drop"}
 
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -1476,7 +1930,7 @@ class DigiFlowRuntimeService:
         configured = [str(item).strip().upper() for item in config.get("digis") or [] if str(item).strip()]
 
         if parsed is None:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1488,7 +1942,11 @@ class DigiFlowRuntimeService:
 
         input_path = str(parsed.get("path") or "").strip().upper()
         consumed_hops = _consumed_path_hops(_split_path_tokens(input_path))
-        matched_pattern, matched_hop = _find_matching_digi_pattern(consumed_hops, configured)
+        matched_pattern, matched_hop = _find_matching_digi_pattern(
+            consumed_hops,
+            configured,
+            compiled_patterns=step.get("_compiled_callsign_patterns"),
+        )
 
         if mode == "allow":
             passed = matched_pattern is not None
@@ -1525,7 +1983,7 @@ class DigiFlowRuntimeService:
             else:
                 message = _t("DIGI filter (deny) passed because the deny list is empty.")
 
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -1596,7 +2054,7 @@ class DigiFlowRuntimeService:
                     {"mode": mode, "inspected": inspected},
                 )
 
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -1663,7 +2121,7 @@ class DigiFlowRuntimeService:
                     {"mode": mode, "symbol": symbol},
                 )
 
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -1679,7 +2137,7 @@ class DigiFlowRuntimeService:
         config = dict(step.get("config") or {})
         zones = _distance_filter_zones(config)
         if not zones:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1691,7 +2149,7 @@ class DigiFlowRuntimeService:
 
         position = _parsed_aprs_position(context.get("parsed"))
         if position is None:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1710,7 +2168,7 @@ class DigiFlowRuntimeService:
                 float(zone["longitude"]),
             )
             if distance_km <= float(zone["radius_km"]):
-                log_digi_flow_event(
+                self._log_digi_flow_event(
                     frame_uid=context["frame_uid"],
                     flow_id=flow_id,
                     step_id=step_id,
@@ -1727,7 +2185,7 @@ class DigiFlowRuntimeService:
                 )
                 return {"decision": "continue"}
 
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -1742,10 +2200,11 @@ class DigiFlowRuntimeService:
         step_id = int(step["id"])
         config = dict(step.get("config") or {})
         source_callsign = str((context.get("parsed") or {}).get("source") or "").strip().upper()
-        rules = _rate_limit_rules_from_config(config)
+        cached_rules = step.get("_compiled_rate_limit_rules")
+        rules = list(cached_rules) if cached_rules else _rate_limit_rules_from_config(config)
         matched_rule = _find_rate_limit_rule(source_callsign, rules)
         if matched_rule is None:
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1767,7 +2226,7 @@ class DigiFlowRuntimeService:
         if last_passed is not None:
             elapsed_seconds = now - last_passed
             if elapsed_seconds <= rate_limit_seconds:
-                log_digi_flow_event(
+                self._log_digi_flow_event(
                     frame_uid=context["frame_uid"],
                     flow_id=flow_id,
                     step_id=step_id,
@@ -1786,7 +2245,7 @@ class DigiFlowRuntimeService:
                 return {"decision": "drop"}
 
             self._rate_limit_last_passed[state_key] = now
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -1805,7 +2264,7 @@ class DigiFlowRuntimeService:
             return {"decision": "continue"}
 
         self._rate_limit_last_passed[state_key] = now
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -1827,7 +2286,7 @@ class DigiFlowRuntimeService:
         tag = str(config.get("log_tag") or "").strip()
         note = str(config.get("note") or "").strip()
         message_parts = [part for part in (f"tag={tag}" if tag else "", note, f"line={context['current_line']}") if part]
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=int(context["flow"]["id"]),
             step_id=int(step["id"]),
@@ -1841,7 +2300,7 @@ class DigiFlowRuntimeService:
         config = dict(step.get("config") or {})
         note = str(config.get("note") or "").strip()
         message = f"DROP {note}" if note else "DROP packet."
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=int(context["flow"]["id"]),
             step_id=int(step["id"]),
@@ -1866,13 +2325,23 @@ class DigiFlowRuntimeService:
             viscous_delay_seconds = max(0.0, float(context.get("digi_tx_viscous_delay_seconds") or 0.0))
         except (TypeError, ValueError):
             viscous_delay_seconds = 0.0
-        success, detail = enqueue_digi_tx_job(
-            interface_name=target,
-            line=str(context["current_line"]),
-            flow_id=int(context["flow"]["id"]),
-            frame_uid=str(context["frame_uid"]),
-            received_at=str(context.get("created_at") or ""),
-            max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + viscous_delay_seconds,
+        decision_monotonic = time.monotonic()
+        if self._rf_tx_dispatcher is None:
+            success, detail = False, "RF TX dispatcher is unavailable."
+        else:
+            success, detail = self._rf_tx_dispatcher.enqueue_digi_tx(
+                interface_name=target,
+                line=str(context["current_line"]),
+                flow_id=int(context["flow"]["id"]),
+                frame_uid=str(context["frame_uid"]),
+                received_monotonic=context.get("rx_received_monotonic")
+                if isinstance(context.get("rx_received_monotonic"), (int, float))
+                else context.get("enqueue_monotonic"),
+                max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + viscous_delay_seconds,
+            )
+        self._record_latency(
+            "digi_decision_to_rf_tx_enqueue",
+            _monotonic_delta_ms(decision_monotonic, time.monotonic()),
         )
         decision = "tx" if success else "drop"
         message = (
@@ -1882,7 +2351,7 @@ class DigiFlowRuntimeService:
         )
         if detail:
             message = f"{message} {detail}"
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=int(context["flow"]["id"]),
             step_id=int(step["id"]),
@@ -1960,7 +2429,7 @@ class DigiFlowRuntimeService:
             name=f"aprsbox-aprsis-rf-{flow_id}-{packet_hash[:10]}",
         )
         self._aprsis_rf_pending[pending_key] = entry
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=guard_step_id,
@@ -1991,7 +2460,7 @@ class DigiFlowRuntimeService:
                 )
                 return
 
-            flow = get_digi_flow(entry.flow_id)
+            flow = get_digi_flow_routing_snapshot().by_id.get(entry.flow_id)
             if flow is None:
                 log_event("DEBUG", "aprsis_rf", f"DROP reason=flow_disabled flow_id={entry.flow_id} (flow removed)")
                 return
@@ -2089,7 +2558,7 @@ class DigiFlowRuntimeService:
                     self._finish_aprsis_rf_pending_drop(entry, reason_code=reason, stat_counter="dropped_safety_guard")
                 return
 
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=entry.context["frame_uid"],
                 flow_id=entry.flow_id,
                 step_id=entry.guard_step_id,
@@ -2114,12 +2583,12 @@ class DigiFlowRuntimeService:
                     "normalized_packet_hash": entry.packet_hash,
                 },
                 received_at=str(entry.context.get("created_at") or ""),
-                max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + delay_sec,
+                max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + entry.delay_sec,
             )
             if not success:
                 reason = str(detail or "target_unavailable")
                 record_aprsis_rf_stat(entry.flow_id, "tx_failed")
-                log_digi_flow_event(
+                self._log_digi_flow_event(
                     frame_uid=entry.context["frame_uid"],
                     flow_id=entry.flow_id,
                     step_id=entry.target_step_id,
@@ -2150,7 +2619,7 @@ class DigiFlowRuntimeService:
                     flow_id=entry.flow_id,
                     sender_key=str(delivery_result.get("sender") or entry.source_callsign),
                 )
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=entry.context["frame_uid"],
                 flow_id=entry.flow_id,
                 step_id=entry.target_step_id,
@@ -2272,6 +2741,38 @@ class DigiFlowRuntimeService:
         flow_id = int(context["flow"]["id"])
         step_id = int(step["id"])
         now_monotonic = time.monotonic()
+        metadata = dict(context.get("metadata") or {})
+        if str(context.get("source_kind") or "") == LOCAL_TX_SOURCE_KIND:
+            created_at = _parse_utc_datetime(metadata.get("local_tx_created_at"))
+            try:
+                position_max_age_seconds = float(
+                    metadata.get("aprsis_position_max_age_seconds") or 0.0
+                )
+            except (TypeError, ValueError):
+                position_max_age_seconds = 0.0
+            if created_at is not None and position_max_age_seconds > 0:
+                wall_age_seconds = max(
+                    0.0,
+                    (datetime.now(timezone.utc) - created_at).total_seconds(),
+                )
+                if wall_age_seconds > position_max_age_seconds:
+                    message = _t(
+                        "APRS-IS TX dropped stale locally generated position "
+                        f"(age={wall_age_seconds:.1f}s, limit={position_max_age_seconds:.1f}s)."
+                    )
+                    self._log_digi_flow_event(
+                        frame_uid=context["frame_uid"],
+                        flow_id=flow_id,
+                        step_id=step_id,
+                        event_type="output_action",
+                        decision="drop",
+                        message=message,
+                    )
+                    record_aprsis_tx_result(
+                        sent=False,
+                        frame_line=str(context.get("current_line") or ""),
+                    )
+                    return {"decision": "drop"}
         frame_age_ms = _monotonic_delta_ms(
             context.get("rx_received_monotonic")
             if isinstance(context.get("rx_received_monotonic"), (int, float))
@@ -2290,7 +2791,7 @@ class DigiFlowRuntimeService:
                 "APRS-IS TX dropped stale frame before transport write "
                 f"(age={age_label}, limit={max_frame_age_ms:.0f} ms)."
             )
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -2303,7 +2804,7 @@ class DigiFlowRuntimeService:
         parsed = context.get("parsed")
         if parsed is None:
             message = _t("APRS-IS TX rejected frame because TNC2 parsing failed.")
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -2317,7 +2818,7 @@ class DigiFlowRuntimeService:
         local_igate = _local_station_identity()
         if not local_igate:
             message = _t("APRS-IS TX rejected frame because local station identity is not configured.")
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -2348,6 +2849,7 @@ class DigiFlowRuntimeService:
                 return_capable, q_reason = message_return_capable_for_rf_source(
                     str(context.get("source_ref") or ""),
                     consumed_hops=consumed_hops,
+                    routing_snapshot=get_digi_flow_routing_snapshot(),
                 )
             q_construct = "qAR" if return_capable else "qAO"
             tx_line = _build_aprsis_uplink_line(
@@ -2357,7 +2859,7 @@ class DigiFlowRuntimeService:
             )
         if not tx_line:
             message = _t("APRS-IS TX rejected frame because APRS-IS uplink formatting failed.")
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -2368,9 +2870,9 @@ class DigiFlowRuntimeService:
             record_aprsis_tx_result(sent=False, frame_line=str(context.get("current_line") or ""))
             return {"decision": "drop"}
 
-        if self._aprsis_client is None:
+        if self._aprsis_tx_dispatcher is None:
             message = _t("APRS-IS TX rejected frame because APRS-IS uplink runtime is unavailable.")
-            log_digi_flow_event(
+            self._log_digi_flow_event(
                 frame_uid=context["frame_uid"],
                 flow_id=flow_id,
                 step_id=step_id,
@@ -2396,19 +2898,46 @@ class DigiFlowRuntimeService:
             "rx_to_igate_enqueue_ms": rx_to_igate_enqueue_ms,
             "igate_queue_wait_ms": igate_queue_wait_ms,
             "max_frame_age_seconds": max_frame_age_seconds,
+            "aprsis_dispatch_enqueued_monotonic": time.monotonic(),
         }
-        if isinstance(self._aprsis_client, AprsisClientService):
-            success, detail = await self._aprsis_client.send_tnc2_line(tx_line, telemetry=tx_telemetry)
-        else:
-            success, detail = await self._aprsis_client.send_tnc2_line(tx_line)
-        decision = "tx" if success else "drop"
-        message = detail or ("APRS-IS TX sent." if success else "APRS-IS TX dropped.")
         uplink_identity = (
             "TCPIP* client-originated"
             if source_kind == LOCAL_TX_SOURCE_KIND
             else f"{q_construct} ({q_reason})"
         )
-        log_digi_flow_event(
+
+        async def on_result(sent: bool, result_detail: str) -> None:
+            if sent and source_kind == LOCAL_TX_SOURCE_KIND:
+                await asyncio.to_thread(
+                    persist_outbound_frame,
+                    source="APRS-IS",
+                    line=tx_line,
+                    source_kind=APRSIS_SOURCE_KIND,
+                )
+            await asyncio.to_thread(record_aprsis_tx_result, sent=sent, frame_line=tx_line)
+            if not sent:
+                self._log_digi_flow_event(
+                    frame_uid=context["frame_uid"],
+                    flow_id=flow_id,
+                    step_id=step_id,
+                    event_type="output_result",
+                    decision="drop",
+                    message=f"{result_detail or 'APRS-IS TX dropped.'} | uplink={uplink_identity} | line={tx_line}",
+                )
+
+        aprsis_decision_monotonic = time.monotonic()
+        success, detail = self._aprsis_tx_dispatcher.enqueue(
+            line=tx_line,
+            telemetry=tx_telemetry,
+            on_result=on_result,
+        )
+        self._record_latency(
+            "igate_decision_to_aprsis_tx_enqueue",
+            _monotonic_delta_ms(aprsis_decision_monotonic, time.monotonic()),
+        )
+        decision = "tx" if success else "drop"
+        message = detail or ("APRS-IS TX queued." if success else "APRS-IS TX dropped.")
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
             step_id=step_id,
@@ -2416,13 +2945,6 @@ class DigiFlowRuntimeService:
             decision=decision,
             message=f"{message} | uplink={uplink_identity} | line={tx_line}",
         )
-        if success and source_kind == LOCAL_TX_SOURCE_KIND:
-            persist_outbound_frame(
-                source="APRS-IS",
-                line=tx_line,
-                source_kind=APRSIS_SOURCE_KIND,
-            )
-        record_aprsis_tx_result(sent=success, frame_line=tx_line)
         return {"decision": decision}
 
     def _execute_tx_stub(self, context: dict[str, Any], step: dict[str, Any], *, target_label: str) -> dict[str, str]:
@@ -2431,7 +2953,7 @@ class DigiFlowRuntimeService:
             target = str(config.get("rf_target") or "").strip()
         else:
             target = str(config.get("aprsis_target") or "").strip()
-        log_digi_flow_event(
+        self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=int(context["flow"]["id"]),
             step_id=int(step["id"]),
@@ -2457,6 +2979,11 @@ class DigiFlowRuntimeService:
         created_at: str | None,
         enqueue_monotonic: float,
         rx_received_monotonic: float | None,
+        rx_processing_started_monotonic: float | None,
+        digiflow_enqueue_requested_monotonic: float | None,
+        latency_source_kind: str | None,
+        latency_interface_id: int | None,
+        latency_interface_name: str | None,
         metadata: dict[str, Any] | None,
     ) -> dict[str, Any]:
         timestamp = created_at or utc_now()
@@ -2471,6 +2998,11 @@ class DigiFlowRuntimeService:
             "created_at": timestamp,
             "enqueue_monotonic": enqueue_monotonic,
             "rx_received_monotonic": rx_received_monotonic,
+            "rx_processing_started_monotonic": rx_processing_started_monotonic,
+            "digiflow_enqueue_requested_monotonic": digiflow_enqueue_requested_monotonic,
+            "latency_source_kind": str(latency_source_kind or source_kind or "unknown"),
+            "latency_interface_id": latency_interface_id,
+            "latency_interface_name": str(latency_interface_name or source_ref or ""),
         }
 
 
@@ -2484,6 +3016,45 @@ def _normalize_frame_metadata(metadata: Any) -> dict[str, Any]:
             continue
         normalized[key_text] = value
     return normalized
+
+
+def _queued_position_key(frame: dict[str, Any]) -> tuple[str, str, str] | None:
+    parsed = frame.get("parsed")
+    if not isinstance(parsed, dict):
+        return None
+    aprs_data = dict(parsed.get("aprs_data") or {})
+    if str(aprs_data.get("packet_group") or "").strip().casefold() not in {
+        "position",
+        "object",
+    }:
+        return None
+    entity = str(
+        aprs_data.get("entity_name")
+        or parsed.get("logical_source_key")
+        or parsed.get("source_key")
+        or parsed.get("source")
+        or ""
+    ).strip().upper()
+    if not entity:
+        return None
+    return (
+        str(frame.get("source_kind") or "").strip(),
+        str(frame.get("source_ref") or "").strip(),
+        entity,
+    )
+
+
+def _parse_utc_datetime(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _optional_int(value: Any) -> int | None:
@@ -2516,14 +3087,26 @@ def _receiver_source_ref_aliases(value: str) -> set[str]:
 def _find_matching_path_spec(token: str, specs: list[str]) -> str | None:
     normalized_token = token.strip().upper().rstrip("*")
     for spec in specs:
-        normalized_spec = spec.strip().upper().rstrip("*")
-        if normalized_token == normalized_spec:
-            return normalized_spec
+        if normalized_token == spec:
+            return spec
     return None
 
 
-def _find_matching_callsign_pattern(callsign: str, patterns: list[str]) -> str | None:
+def _find_matching_callsign_pattern(
+    callsign: str,
+    patterns: list[str],
+    *,
+    compiled_patterns: Any = None,
+) -> str | None:
     normalized_callsign = callsign.strip().upper()
+    if compiled_patterns:
+        for normalized_pattern, compiled in compiled_patterns:
+            if compiled is None:
+                if normalized_callsign == normalized_pattern:
+                    return normalized_pattern
+            elif compiled.match(normalized_callsign) is not None:
+                return normalized_pattern
+        return None
     for pattern in patterns:
         normalized_pattern = pattern.strip().upper()
         if _callsign_matches_pattern(normalized_callsign, normalized_pattern):
@@ -2535,9 +3118,18 @@ def _consumed_path_hops(path_tokens: list[str]) -> list[str]:
     return [token.rstrip("*") for token in path_tokens if token.endswith("*") and token.rstrip("*")]
 
 
-def _find_matching_digi_pattern(consumed_hops: list[str], patterns: list[str]) -> tuple[str | None, str | None]:
+def _find_matching_digi_pattern(
+    consumed_hops: list[str],
+    patterns: list[str],
+    *,
+    compiled_patterns: Any = None,
+) -> tuple[str | None, str | None]:
     for hop in consumed_hops:
-        matched_pattern = _find_matching_callsign_pattern(hop, patterns)
+        matched_pattern = _find_matching_callsign_pattern(
+            hop,
+            patterns,
+            compiled_patterns=compiled_patterns,
+        )
         if matched_pattern is not None:
             return matched_pattern, hop
     return None, None
@@ -2699,6 +3291,18 @@ def _rate_limit_pattern_matches_source(pattern: str, source_callsign: str) -> bo
     return source_base == pattern_base
 
 
+def _compiled_rate_limit_pattern_matches_source(
+    compiled_pattern: Any,
+    pattern: str,
+    source_callsign: str,
+) -> bool:
+    if compiled_pattern:
+        _normalized, compiled = compiled_pattern
+        if compiled is not None:
+            return compiled.match(str(source_callsign or "").strip().upper()) is not None
+    return _rate_limit_pattern_matches_source(pattern, source_callsign)
+
+
 def _rate_limit_rule_sort_key(rule: dict[str, Any]) -> tuple[int, int, int, int]:
     pattern = str(rule.get("source_callsign_pattern") or "").strip().upper()
     has_wildcard = 1 if "*" in pattern else 0
@@ -2713,7 +3317,11 @@ def _find_rate_limit_rule(source_callsign: str, rules: list[dict[str, Any]]) -> 
         pattern = str(rule.get("source_callsign_pattern") or "").strip().upper()
         if not pattern:
             continue
-        if _rate_limit_pattern_matches_source(pattern, source_callsign):
+        if _compiled_rate_limit_pattern_matches_source(
+            rule.get("_compiled_pattern"),
+            pattern,
+            source_callsign,
+        ):
             matches.append((_rate_limit_rule_sort_key(rule), -index, rule))
     if not matches:
         return None
@@ -2819,33 +3427,11 @@ def _split_path_tokens_keep_case(path: str) -> list[str]:
 
 
 def _local_station_identity() -> str:
-    station_settings = get_station_settings()
-    return _build_source_key(station_settings.get("callsign"), station_settings.get("ssid"))
+    return get_digi_flow_routing_snapshot().local_station_identity
 
 
 def _local_station_identities() -> dict[str, str]:
-    station_settings = get_station_settings()
-    identities: dict[str, str] = {}
-    my_identity = _build_source_key(station_settings.get("callsign"), station_settings.get("ssid"))
-    if my_identity:
-        identities[my_identity] = _LOCAL_IDENTITY_MY
-
-    wx_row = fetch_one("SELECT enabled, callsign, ssid FROM wx_config WHERE id = 1")
-    if not wx_row:
-        return identities
-
-    wx_enabled = int(wx_row["enabled"] or 0) == 1
-    raw_wx_callsign = str(wx_row["callsign"] or "").strip().upper()
-    raw_wx_ssid = str(wx_row["ssid"] or "").strip()
-    wx_has_explicit_identity = bool(raw_wx_callsign or raw_wx_ssid)
-    if not wx_enabled and not wx_has_explicit_identity:
-        return identities
-
-    wx_callsign = raw_wx_callsign or str(station_settings.get("callsign") or "").strip().upper()
-    wx_identity = _build_source_key(wx_callsign, raw_wx_ssid)
-    if wx_identity:
-        identities.setdefault(wx_identity, _LOCAL_IDENTITY_WX)
-    return identities
+    return dict(get_digi_flow_routing_snapshot().local_station_identities)
 
 
 def _find_consumed_local_identity(path_tokens: list[str], local_identities: dict[str, str]) -> tuple[str, str] | None:
