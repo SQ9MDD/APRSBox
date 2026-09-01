@@ -32,7 +32,11 @@ from app.services.map_service import (
     get_map_station_markers_payload,
 )
 from app.services.radio_activity import run_radio_activity_aggregation
-from app.services.rx_side_effect_dispatcher import RxSideEffectDispatcher
+from app.services.rx_side_effect_dispatcher import (
+    RxSideEffectDispatcher,
+    current_rx_side_effect_stage_collector,
+    rx_side_effect_stage,
+)
 from app.services.traffic import process_normalized_tnc2_rx
 
 
@@ -696,6 +700,111 @@ class AprsisAsyncSideEffectTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(metrics["running"])
         self.assertEqual(metrics["current_queue_depth"], 0)
         self.assertEqual(metrics["completed"], 2)
+
+    async def test_stage_breakdown_preserves_aprsis_side_effect_order(self) -> None:
+        with temporary_database():
+            interface_id = create_aprsis_interface()
+            service = AprsisClientService(frame_consumer=lambda *_args, **_kwargs: None)
+            service._desired_rx_interface = {
+                "id": interface_id,
+                "name": "Internet RX",
+                "filter": "m/20",
+            }
+            await service._rx_side_effect_dispatcher.start()
+            try:
+                self.assertTrue(service._process_server_line(POSITION_LINE))
+                await service.wait_until_rx_side_effects_idle()
+                metrics = service.rx_side_effect_snapshot()
+
+                self.assertEqual(
+                    metrics["last_stage_order"],
+                    [
+                        "normalize_parse",
+                        "traffic_db_transaction",
+                        "traffic_db_insert",
+                        "alerts",
+                        "map_state",
+                        "post_projection_logs",
+                        "igate_bookkeeping",
+                        "traffic_latency_log",
+                        "messages",
+                        "radar",
+                    ],
+                )
+                self.assertNotIn("statistics", metrics["stage_breakdown_ms"])
+                for stage_name in metrics["last_stage_order"]:
+                    self.assertEqual(metrics["stage_breakdown_ms"][stage_name]["count"], 1)
+            finally:
+                await service._rx_side_effect_dispatcher.stop()
+
+    async def test_stage_exception_is_measured_and_worker_continues(self) -> None:
+        with temporary_database():
+            from app.services import traffic as traffic_service
+
+            interface_id = create_aprsis_interface()
+            original_process_alert_frame = traffic_service.process_alert_frame
+            alert_calls = 0
+
+            def flaky_alert(*args, **kwargs):
+                nonlocal alert_calls
+                alert_calls += 1
+                if alert_calls == 1:
+                    raise RuntimeError("alert observer failed")
+                return original_process_alert_frame(*args, **kwargs)
+
+            service = AprsisClientService(frame_consumer=lambda *_args, **_kwargs: None)
+            service._desired_rx_interface = {
+                "id": interface_id,
+                "name": "Internet RX",
+                "filter": "m/20",
+            }
+            await service._rx_side_effect_dispatcher.start()
+            try:
+                second_line = POSITION_LINE.replace("test", "after-error")
+                with patch("app.services.traffic.process_alert_frame", side_effect=flaky_alert):
+                    self.assertTrue(service._process_server_line(POSITION_LINE))
+                    self.assertTrue(service._process_server_line(second_line))
+                    await service.wait_until_rx_side_effects_idle()
+
+                metrics = service.rx_side_effect_snapshot()
+                self.assertEqual(metrics["failed"], 1)
+                self.assertEqual(metrics["completed"], 1)
+                self.assertTrue(metrics["running"])
+                self.assertEqual(metrics["stage_breakdown_ms"]["alerts"]["count"], 2)
+                self.assertEqual(metrics["stage_breakdown_ms"]["traffic_db_transaction"]["count"], 2)
+                self.assertEqual(metrics["stage_breakdown_ms"]["worker_exception_log"]["count"], 1)
+                self.assertGreaterEqual(metrics["stage_breakdown_ms"]["alerts"]["max_ms"], 0.0)
+            finally:
+                await service._rx_side_effect_dispatcher.stop()
+
+    async def test_stage_metrics_are_aggregated(self) -> None:
+        def instrumented_observer(_line: str, **_kwargs: object) -> bool:
+            collector = current_rx_side_effect_stage_collector()
+            with rx_side_effect_stage(collector, "synthetic_stage"):
+                time.sleep(0.002)
+            return True
+
+        service = self._service(
+            rx_processor=instrumented_observer,
+            frame_consumer=lambda *_args, **_kwargs: None,
+        )
+        await service._rx_side_effect_dispatcher.start()
+        try:
+            self.assertTrue(service._process_server_line(POSITION_LINE))
+            self.assertTrue(service._process_server_line(POSITION_LINE.replace("test", "again")))
+            await service.wait_until_rx_side_effects_idle()
+
+            stage = service.rx_side_effect_snapshot()["stage_breakdown_ms"]["synthetic_stage"]
+            self.assertEqual(
+                set(stage),
+                {"count", "total_ms", "avg_ms", "max_ms", "last_ms"},
+            )
+            self.assertEqual(stage["count"], 2)
+            self.assertAlmostEqual(stage["avg_ms"], stage["total_ms"] / 2.0, places=9)
+            self.assertGreaterEqual(stage["max_ms"], stage["last_ms"])
+            self.assertGreaterEqual(stage["total_ms"], stage["max_ms"])
+        finally:
+            await service._rx_side_effect_dispatcher.stop()
 
 
 class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):

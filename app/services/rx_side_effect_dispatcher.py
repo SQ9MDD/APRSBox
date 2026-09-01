@@ -1,14 +1,63 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar
 import time
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from app.db import log_event
 
 
 RX_SIDE_EFFECT_QUEUE_MAX_FRAMES = 2048
+
+
+@dataclass(frozen=True)
+class RxSideEffectStageSample:
+    name: str
+    elapsed_ms: float
+
+
+class RxSideEffectStageCollector:
+    def __init__(self) -> None:
+        self.samples: list[RxSideEffectStageSample] = []
+        self.stage_order: list[str] = []
+
+    @contextmanager
+    def measure(self, name: str) -> Iterator[None]:
+        normalized_name = str(name or "unknown").strip() or "unknown"
+        self.stage_order.append(normalized_name)
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            self.samples.append(
+                RxSideEffectStageSample(
+                    name=normalized_name,
+                    elapsed_ms=max(0.0, (time.monotonic() - started) * 1000.0),
+                )
+            )
+
+
+_active_stage_collector: ContextVar[RxSideEffectStageCollector | None] = ContextVar(
+    "rx_side_effect_stage_collector",
+    default=None,
+)
+_noop_rx_side_effect_stage = nullcontext()
+
+
+def current_rx_side_effect_stage_collector() -> RxSideEffectStageCollector | None:
+    return _active_stage_collector.get()
+
+
+def rx_side_effect_stage(
+    collector: RxSideEffectStageCollector | None,
+    name: str,
+):
+    if collector is None:
+        return _noop_rx_side_effect_stage
+    return collector.measure(name)
 
 
 @dataclass(frozen=True)
@@ -41,6 +90,8 @@ class RxSideEffectDispatcher:
         self._dropped_overflow = 0
         self._rejected_not_running = 0
         self._metrics_ms: dict[str, dict[str, float | int | None]] = {}
+        self._stage_breakdown_ms: dict[str, dict[str, float | int | None]] = {}
+        self._last_stage_order: list[str] = []
 
     async def start(self) -> None:
         if self._task is not None:
@@ -121,6 +172,10 @@ class RxSideEffectDispatcher:
             "metrics_ms": {
                 name: dict(values) for name, values in self._metrics_ms.items()
             },
+            "stage_breakdown_ms": {
+                name: dict(values) for name, values in self._stage_breakdown_ms.items()
+            },
+            "last_stage_order": list(self._last_stage_order),
         }
 
     async def _run(self) -> None:
@@ -135,6 +190,8 @@ class RxSideEffectDispatcher:
                         (processing_started - request.enqueued_monotonic) * 1000.0,
                     ),
                 )
+                collector = RxSideEffectStageCollector()
+                collector_token = _active_stage_collector.set(collector)
                 try:
                     await asyncio.to_thread(
                         request.processor,
@@ -143,10 +200,13 @@ class RxSideEffectDispatcher:
                     )
                 except Exception as exc:
                     self._failed += 1
-                    await self._log_failure(exc)
+                    with collector.measure("worker_exception_log"):
+                        await self._log_failure(exc)
                 else:
                     self._completed += 1
                 finally:
+                    _active_stage_collector.reset(collector_token)
+                    self._record_stage_breakdown(collector)
                     self._record_metric(
                         "rx_side_effect_processing",
                         max(0.0, (time.monotonic() - processing_started) * 1000.0),
@@ -167,8 +227,25 @@ class RxSideEffectDispatcher:
             # Logging is an observer too; its failure must not terminate the worker.
             return
 
+    def _record_stage_breakdown(self, collector: RxSideEffectStageCollector) -> None:
+        self._last_stage_order = list(collector.stage_order)
+        for sample in collector.samples:
+            self._update_metric(
+                self._stage_breakdown_ms,
+                sample.name,
+                sample.elapsed_ms,
+            )
+
     def _record_metric(self, name: str, value_ms: float) -> None:
-        metric = self._metrics_ms.setdefault(
+        self._update_metric(self._metrics_ms, name, value_ms)
+
+    @staticmethod
+    def _update_metric(
+        metrics: dict[str, dict[str, float | int | None]],
+        name: str,
+        value_ms: float,
+    ) -> None:
+        metric = metrics.setdefault(
             name,
             {"count": 0, "total_ms": 0.0, "last_ms": None, "max_ms": 0.0},
         )

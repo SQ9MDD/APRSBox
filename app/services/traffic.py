@@ -17,6 +17,10 @@ from app.services.messages import process_incoming_tnc2_message
 from app.services.notifications import queue_radar_notifications
 from app.services.outbound import build_object_tnc2, persist_outbound_frame
 from app.services.radio_activity import record_traffic_device_station_observation
+from app.services.rx_side_effect_dispatcher import (
+    current_rx_side_effect_stage_collector,
+    rx_side_effect_stage,
+)
 from app.services.serial_broker import RxSilenceReconnectWatchdog, SerialKissTcpBroker
 from app.services.serial_tnc import normalize_serial_baud_rate, normalize_serial_device_path
 from app.services.traffic_source import APRSIS_SOURCE_KIND, RF_SOURCE_KIND, normalize_source_kind, should_collect_statistics
@@ -187,16 +191,22 @@ def process_normalized_tnc2_rx(
     buffers, band-condition data, or RF Digi Flow inputs are touched.
     """
 
-    processing_started_monotonic = time.monotonic()
-    normalized_line = str(line or "").rstrip("\r\n")
-    parsed_frame = parse_tnc2_frame(normalized_line) if normalized_line else None
+    stage_collector = current_rx_side_effect_stage_collector()
+    with rx_side_effect_stage(stage_collector, "normalize_parse"):
+        processing_started_monotonic = time.monotonic()
+        normalized_line = str(line or "").rstrip("\r\n")
+        parsed_frame = parse_tnc2_frame(normalized_line) if normalized_line else None
+        if normalized_line and parsed_frame is not None:
+            normalized_kind = normalize_source_kind(source_kind)
+            occurred_at = str(timestamp or utc_now())
+            collect_statistics = should_collect_statistics(normalized_kind)
+            frame_length = (
+                int(payload_length)
+                if payload_length is not None
+                else len(normalized_line.encode("latin-1", errors="replace"))
+            )
     if not normalized_line or parsed_frame is None:
         return False
-
-    normalized_kind = normalize_source_kind(source_kind)
-    occurred_at = str(timestamp or utc_now())
-    collect_statistics = should_collect_statistics(normalized_kind)
-    frame_length = int(payload_length) if payload_length is not None else len(normalized_line.encode("latin-1", errors="replace"))
 
     if collect_statistics and frame_consumer is not None:
         consumer_source_ref = str(source_ref or source or "").strip()
@@ -223,151 +233,161 @@ def process_normalized_tnc2_rx(
     alert_result: dict[str, Any] | None = None
     map_projection_error: str | None = None
     statistics_projection_error: str | None = None
-    with get_connection() as connection:
-        cursor = connection.execute(
-            """
-            INSERT INTO traffic_frames(
-                source, source_kind, interface_id, direction, band,
-                format, line, port, command, length, hex, created_at
-            )
-            VALUES (?, ?, ?, 'rx', ?, 'TNC2', ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(source or "").strip() or "Unknown source",
-                normalized_kind,
-                source_interface_id,
-                str(band or "").strip(),
-                normalized_line,
-                str(port or ""),
-                str(command or "RX"),
-                frame_length,
-                str(payload_hex or ""),
-                occurred_at,
-            ),
-        )
-        frame_id = int(cursor.lastrowid)
-        alert_result = process_alert_frame(
-            connection,
-            frame_id=frame_id,
-            parsed=parsed_frame,
-            frame_row={
-                "source": str(source or "").strip() or "Unknown source",
-                "source_kind": normalized_kind,
-                "interface_id": source_interface_id,
-                "direction": "rx",
-                "band": str(band or "").strip(),
-                "format": "TNC2",
-                "line": normalized_line,
-                "port": str(port or ""),
-                "command": str(command or "RX"),
-                "length": frame_length,
-                "hex": str(payload_hex or ""),
-                "created_at": occurred_at,
-            },
-        )
-        from app.services.map_station_state import update_map_station_state_for_frame
-
-        connection.execute("SAVEPOINT map_station_projection")
-        try:
-            update_map_station_state_for_frame(
-                connection,
-                frame_id=frame_id,
-                frame_format="TNC2",
-                frame_row={
-                    "source": str(source or "").strip() or "Unknown source",
-                    "source_kind": normalized_kind,
-                    "interface_id": source_interface_id,
-                    "line": normalized_line,
-                    "created_at": occurred_at,
-                },
-                parsed=parsed_frame,
-            )
-        except Exception as exc:
-            connection.execute("ROLLBACK TO map_station_projection")
-            map_projection_error = str(exc).strip() or exc.__class__.__name__
-        finally:
-            connection.execute("RELEASE map_station_projection")
-
-        if collect_statistics:
-            connection.execute("SAVEPOINT statistics_projection")
-            try:
-                record_traffic_device_station_observation(
-                    frame_format="TNC2",
-                    line=normalized_line,
-                    timestamp=occurred_at,
-                    parsed_frame=parsed_frame,
-                    connection=connection,
+    with rx_side_effect_stage(stage_collector, "traffic_db_transaction"):
+        with get_connection() as connection:
+            with rx_side_effect_stage(stage_collector, "traffic_db_insert"):
+                cursor = connection.execute(
+                    """
+                    INSERT INTO traffic_frames(
+                        source, source_kind, interface_id, direction, band,
+                        format, line, port, command, length, hex, created_at
+                    )
+                    VALUES (?, ?, ?, 'rx', ?, 'TNC2', ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(source or "").strip() or "Unknown source",
+                        normalized_kind,
+                        source_interface_id,
+                        str(band or "").strip(),
+                        normalized_line,
+                        str(port or ""),
+                        str(command or "RX"),
+                        frame_length,
+                        str(payload_hex or ""),
+                        occurred_at,
+                    ),
                 )
-            except Exception as exc:
-                connection.execute("ROLLBACK TO statistics_projection")
-                statistics_projection_error = str(exc).strip() or exc.__class__.__name__
-            finally:
-                connection.execute("RELEASE statistics_projection")
+                frame_id = int(cursor.lastrowid)
+            with rx_side_effect_stage(stage_collector, "alerts"):
+                alert_result = process_alert_frame(
+                    connection,
+                    frame_id=frame_id,
+                    parsed=parsed_frame,
+                    frame_row={
+                        "source": str(source or "").strip() or "Unknown source",
+                        "source_kind": normalized_kind,
+                        "interface_id": source_interface_id,
+                        "direction": "rx",
+                        "band": str(band or "").strip(),
+                        "format": "TNC2",
+                        "line": normalized_line,
+                        "port": str(port or ""),
+                        "command": str(command or "RX"),
+                        "length": frame_length,
+                        "hex": str(payload_hex or ""),
+                        "created_at": occurred_at,
+                    },
+                )
+            from app.services.map_station_state import update_map_station_state_for_frame
 
-    if map_projection_error:
-        log_event("WARNING", "map", f"Failed to update map station projection: {map_projection_error}")
-    if statistics_projection_error:
-        log_event("WARNING", "statistics", f"Failed to update devices statistics buffer: {statistics_projection_error}")
+            with rx_side_effect_stage(stage_collector, "map_state"):
+                connection.execute("SAVEPOINT map_station_projection")
+                try:
+                    update_map_station_state_for_frame(
+                        connection,
+                        frame_id=frame_id,
+                        frame_format="TNC2",
+                        frame_row={
+                            "source": str(source or "").strip() or "Unknown source",
+                            "source_kind": normalized_kind,
+                            "interface_id": source_interface_id,
+                            "line": normalized_line,
+                            "created_at": occurred_at,
+                        },
+                        parsed=parsed_frame,
+                    )
+                except Exception as exc:
+                    connection.execute("ROLLBACK TO map_station_projection")
+                    map_projection_error = str(exc).strip() or exc.__class__.__name__
+                finally:
+                    connection.execute("RELEASE map_station_projection")
 
-    if alert_result and alert_result.get("created"):
-        warning_kind = str(alert_result.get("warning_kind") or "warning").strip()
-        log_event(
-            "WARNING",
-            "alerts",
-            (
-                f"Created APRS {warning_kind} alert {alert_result['alert_id']} "
-                f"for {alert_result['source_callsign']}"
-            ),
-        )
+            if collect_statistics:
+                with rx_side_effect_stage(stage_collector, "statistics"):
+                    connection.execute("SAVEPOINT statistics_projection")
+                    try:
+                        record_traffic_device_station_observation(
+                            frame_format="TNC2",
+                            line=normalized_line,
+                            timestamp=occurred_at,
+                            parsed_frame=parsed_frame,
+                            connection=connection,
+                        )
+                    except Exception as exc:
+                        connection.execute("ROLLBACK TO statistics_projection")
+                        statistics_projection_error = str(exc).strip() or exc.__class__.__name__
+                    finally:
+                        connection.execute("RELEASE statistics_projection")
 
-    try:
-        from app.services.igate_messaging import (
-            record_aprsis_station_presence,
-            record_rf_heard_station,
-        )
+    with rx_side_effect_stage(stage_collector, "post_projection_logs"):
+        if map_projection_error:
+            log_event("WARNING", "map", f"Failed to update map station projection: {map_projection_error}")
+        if statistics_projection_error:
+            log_event("WARNING", "statistics", f"Failed to update devices statistics buffer: {statistics_projection_error}")
 
-        if normalized_kind == RF_SOURCE_KIND:
-            record_rf_heard_station(
-                parsed_frame,
-                interface_id=source_interface_id,
-                timestamp=occurred_at,
+        if alert_result and alert_result.get("created"):
+            warning_kind = str(alert_result.get("warning_kind") or "warning").strip()
+            log_event(
+                "WARNING",
+                "alerts",
+                (
+                    f"Created APRS {warning_kind} alert {alert_result['alert_id']} "
+                    f"for {alert_result['source_callsign']}"
+                ),
             )
-        elif normalized_kind == APRSIS_SOURCE_KIND:
-            record_aprsis_station_presence(
-                parsed_frame,
-                timestamp=occurred_at,
-            )
-    except Exception as exc:
-        log_event("WARNING", "igate", f"Failed to update IGate station state: {exc}")
 
-    latency_parts = [f"source={source}", f"source_kind={normalized_kind}", f"line={normalized_line[:120]}"]
-    source_receive_to_processing_ms = _elapsed_ms_since(
-        rx_received_monotonic,
-        now=processing_started_monotonic,
-    )
-    if source_receive_to_processing_ms is not None:
-        latency_parts.append(f"source_receive_to_rx_processing_start_ms={source_receive_to_processing_ms:.3f}")
-    if rx_processing_to_igate_enqueue_request_ms is not None:
-        latency_parts.append(
-            "rx_processing_start_to_igate_enqueue_request_ms="
-            f"{rx_processing_to_igate_enqueue_request_ms:.3f}"
+    with rx_side_effect_stage(stage_collector, "igate_bookkeeping"):
+        try:
+            from app.services.igate_messaging import (
+                record_aprsis_station_presence,
+                record_rf_heard_station,
+            )
+
+            if normalized_kind == RF_SOURCE_KIND:
+                record_rf_heard_station(
+                    parsed_frame,
+                    interface_id=source_interface_id,
+                    timestamp=occurred_at,
+                )
+            elif normalized_kind == APRSIS_SOURCE_KIND:
+                record_aprsis_station_presence(
+                    parsed_frame,
+                    timestamp=occurred_at,
+                )
+        except Exception as exc:
+            log_event("WARNING", "igate", f"Failed to update IGate station state: {exc}")
+
+    with rx_side_effect_stage(stage_collector, "traffic_latency_log"):
+        latency_parts = [f"source={source}", f"source_kind={normalized_kind}", f"line={normalized_line[:120]}"]
+        source_receive_to_processing_ms = _elapsed_ms_since(
+            rx_received_monotonic,
+            now=processing_started_monotonic,
         )
-    rx_to_db_commit_ms = _elapsed_ms_since(rx_received_monotonic)
-    if rx_to_db_commit_ms is not None:
-        latency_parts.append(f"rx_to_db_commit_ms={rx_to_db_commit_ms:.3f}")
-    log_event("DEBUG", "traffic_latency", " | ".join(latency_parts))
+        if source_receive_to_processing_ms is not None:
+            latency_parts.append(f"source_receive_to_rx_processing_start_ms={source_receive_to_processing_ms:.3f}")
+        if rx_processing_to_igate_enqueue_request_ms is not None:
+            latency_parts.append(
+                "rx_processing_start_to_igate_enqueue_request_ms="
+                f"{rx_processing_to_igate_enqueue_request_ms:.3f}"
+            )
+        rx_to_db_commit_ms = _elapsed_ms_since(rx_received_monotonic)
+        if rx_to_db_commit_ms is not None:
+            latency_parts.append(f"rx_to_db_commit_ms={rx_to_db_commit_ms:.3f}")
+        log_event("DEBUG", "traffic_latency", " | ".join(latency_parts))
 
     # APRS-IS traffic stays excluded from RF statistics, but a numbered
     # message addressed to this station still requires an Internet ACK.
     # Keep that response on Internal TX so it cannot key a local TNC.
-    process_incoming_tnc2_message(
-        normalized_line,
-        timestamp=occurred_at,
-        allow_automatic_responses=collect_statistics or normalized_kind == APRSIS_SOURCE_KIND,
-        automatic_response_internal_tx_only=normalized_kind == APRSIS_SOURCE_KIND,
-        source_kind=normalized_kind,
-    )
-    queue_radar_notifications(timestamp=occurred_at)
+    with rx_side_effect_stage(stage_collector, "messages"):
+        process_incoming_tnc2_message(
+            normalized_line,
+            timestamp=occurred_at,
+            allow_automatic_responses=collect_statistics or normalized_kind == APRSIS_SOURCE_KIND,
+            automatic_response_internal_tx_only=normalized_kind == APRSIS_SOURCE_KIND,
+            source_kind=normalized_kind,
+        )
+    with rx_side_effect_stage(stage_collector, "radar"):
+        queue_radar_notifications(timestamp=occurred_at)
     return True
 
 
