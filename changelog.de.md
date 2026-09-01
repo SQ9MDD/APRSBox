@@ -1,6 +1,9 @@
 # Changelog
 
 ## 1.12.13.dev - 2026-09-01
+- `Packet Routing / Diagnose`: DigiFlow-Metriken sind nach Quelle und Schnittstelle getrennt, erfassen Worker-Phasen sowie Event-Loop-Lag und verwenden gecachte Konfiguration, Pfade und Identitäten statt SQLite-Lesezugriffen pro Frame.
+- `APRS-IS / uvloop`: Verbleibende Transportbytes nach erfolgreichem `drain()` gelten nicht mehr als TX-Fehler; geschlossene Transporte und echte Schreib-/Drain-Fehler bleiben behandelt. Danke an SQ5BUJ für die Hinweise.
+- `Installer und Updater`: `/opt/aprsbox/venv` installiert `uvloop` und `httptools` aus `requirements.txt` und prüft ihre Imports; nach erfolgreichem Backup behält der Updater standardmäßig die vier neuesten Datenbanksicherungen.
 - `Packet Routing / Latenz`: leichte Zeit- und Queue-Tiefen-Aggregate im RAM wurden ergänzt. Reguläres RF-DIGI umgeht nun persistente `outbound_jobs` und nutzt flüchtige Queues sowie eigene Worker pro Schnittstelle, sodass TX-Gap oder ein langsames TNC andere TNCs nicht blockieren.
 - `APRS-IS / TX`: Das Routing übergibt Frames blockierungsfrei an eine begrenzte RAM-Queue; ein eigener Worker behält die bestehende Socket-, `drain()`- und Reconnect-Logik bei. Bei Überlauf wird der Frame sofort mit Warnung und Zähler verworfen.
 - `DigiFlow / Trace`: Die Diagnose der einzelnen Schritte wird außerhalb des Echtzeitpfads in Batches mit bis zu 50 Ereignissen oder alle 75 ms in einer Transaktion gespeichert. Auch das Bereinigen der Historie wurde aus der Frame-Verarbeitung entfernt.

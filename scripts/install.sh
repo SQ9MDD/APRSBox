@@ -355,7 +355,7 @@ verify_python_runtime() {
         APRSBOX_ENV=production \
         APRSBOX_INSTALL_ROOT="$INSTALL_ROOT" \
         APRSBOX_DB_PATH="$DB_PATH" \
-        "$VENV_DIR/bin/python" -c "import uvicorn, app.main, app.core_main"
+        "$VENV_DIR/bin/python" -c "import uvicorn, uvloop, httptools, app.main, app.core_main"
 }
 
 activate_staged_installation() {

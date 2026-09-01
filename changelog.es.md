@@ -1,6 +1,9 @@
 # Changelog
 
 ## 1.12.13.dev - 2026-09-01
+- `Packet Routing / diagnóstico`: las métricas de DigiFlow se separan por fuente e interfaz, cubren fases del worker y lag del event loop, y el routing usa configuración, rutas e identidades en caché en vez de lecturas SQLite por trama.
+- `APRS-IS / uvloop`: los bytes pendientes tras un `drain()` correcto ya no se consideran un error de TX; se mantienen los controles de transporte cerrado y de errores reales de escritura/drain. Gracias a SQ5BUJ por los comentarios.
+- `Instalador y actualizador`: `/opt/aprsbox/venv` instala `uvloop` y `httptools` desde `requirements.txt` y comprueba sus imports; tras un backup correcto, el actualizador conserva por defecto las cuatro copias más recientes de la base de datos.
 - `Packet Routing / latencia`: se añadieron agregados ligeros en RAM para tiempos y profundidad de colas. El DIGI RF normal ya no usa `outbound_jobs` persistente y funciona con colas efímeras y un worker por interfaz, por lo que el TX gap o un TNC lento no bloquean otros TNC.
 - `APRS-IS / TX`: el routing entrega las tramas sin bloqueo a una cola RAM limitada; un worker separado conserva la lógica existente de socket, `drain()` y reconexión. El desbordamiento descarta inmediatamente la trama con aviso y contador.
 - `DigiFlow / trace`: el diagnóstico de cada paso se guarda fuera del camino realtime en lotes de hasta 50 eventos o cada 75 ms, usando una sola transacción. La limpieza del historial también se retiró del procesamiento de cada trama.

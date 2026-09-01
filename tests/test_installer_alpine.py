@@ -36,6 +36,20 @@ class AlpineInstallerTests(unittest.TestCase):
             self.assertIn('APRSBOX_PRIVILEGED_RUNNER="doas -n"', service_source)
             self.assertNotIn('APRSBOX_PRIVILEGED_RUNNER="sudo -n"', service_source)
 
+    def test_installer_and_updater_install_and_verify_uvloop_dependencies(self) -> None:
+        requirements = Path("requirements.txt").read_text(encoding="utf-8")
+        installer_source = Path("scripts/install.sh").read_text(encoding="utf-8")
+        updater_source = Path("scripts/update.sh").read_text(encoding="utf-8")
+
+        self.assertIn("uvloop==0.22.1", requirements)
+        self.assertIn("httptools==0.6.4", requirements)
+        self.assertIn('"$VENV_DIR/bin/pip" install -r "$STAGING_APP_DIR/requirements.txt"', installer_source)
+        self.assertIn("import uvicorn, uvloop, httptools", installer_source)
+        self.assertIn('"$NEW_VENV_DIR/bin/pip" install -r "$STAGING_APP_DIR/requirements.txt"', updater_source)
+        self.assertIn('"$VENV_DIR/bin/python" -c "import uvloop, httptools"', updater_source)
+        self.assertIn("BACKUP_RETENTION_COUNT", updater_source)
+        self.assertIn('prune_database_backups "$backup_path"', updater_source)
+
 
 if __name__ == "__main__":
     unittest.main()
