@@ -2,6 +2,8 @@ import asyncio
 import contextlib
 import os
 import tempfile
+import threading
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -30,6 +32,7 @@ from app.services.map_service import (
     get_map_station_markers_payload,
 )
 from app.services.radio_activity import run_radio_activity_aggregation
+from app.services.rx_side_effect_dispatcher import RxSideEffectDispatcher
 from app.services.traffic import process_normalized_tnc2_rx
 
 
@@ -519,6 +522,180 @@ class AprsisReceivePipelineTests(unittest.TestCase):
             rf_points = [point for point in points if point["interface_id"] == rf_interface_id]
             self.assertEqual(len(rf_points), 2)
             self.assertNotEqual(rf_points[0]["latitude"], rf_points[1]["latitude"])
+
+
+class AprsisAsyncSideEffectTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def _service(
+        *,
+        rx_processor=None,
+        frame_consumer=None,
+        queue_capacity: int = 8,
+    ) -> AprsisClientService:
+        service = AprsisClientService(
+            rx_processor=rx_processor,
+            frame_consumer=frame_consumer,
+            rx_side_effect_queue_max_frames=queue_capacity,
+        )
+        service._desired_rx_interface = {
+            "id": 9,
+            "name": "Internet RX",
+            "filter": "m/20",
+        }
+        return service
+
+    async def test_real_traffic_side_effect_runs_after_aprsis_rx(self) -> None:
+        with temporary_database():
+            interface_id = create_aprsis_interface()
+            digi_frames: list[str] = []
+            service = AprsisClientService(
+                frame_consumer=lambda line, **_kwargs: digi_frames.append(line),
+            )
+            service._desired_rx_interface = {
+                "id": interface_id,
+                "name": "Internet RX",
+                "filter": "m/20",
+            }
+            await service._rx_side_effect_dispatcher.start()
+            try:
+                self.assertTrue(service._process_server_line(POSITION_LINE))
+                self.assertEqual(digi_frames, [POSITION_LINE])
+                await service.wait_until_rx_side_effects_idle()
+                history = fetch_one(
+                    "SELECT source_kind, interface_id, line FROM traffic_frames ORDER BY id DESC LIMIT 1"
+                )
+                self.assertIsNotNone(history)
+                assert history is not None
+                self.assertEqual(history["source_kind"], "aprsis")
+                self.assertEqual(int(history["interface_id"]), interface_id)
+                self.assertEqual(history["line"], POSITION_LINE)
+            finally:
+                await service._rx_side_effect_dispatcher.stop()
+
+    async def test_digiflow_enqueue_does_not_wait_for_slow_side_effect(self) -> None:
+        observer_started = threading.Event()
+        observer_release = threading.Event()
+        observer_finished = threading.Event()
+        order: list[str] = []
+
+        def slow_observer(_line: str, **_kwargs: object) -> bool:
+            observer_started.set()
+            observer_release.wait(timeout=2.0)
+            order.append("side-effect")
+            observer_finished.set()
+            return True
+
+        def digi_consumer(_line: str, **_kwargs: object) -> None:
+            order.append("digiflow")
+
+        service = self._service(
+            rx_processor=slow_observer,
+            frame_consumer=digi_consumer,
+        )
+        await service._rx_side_effect_dispatcher.start()
+        try:
+            started = time.monotonic()
+            self.assertTrue(service._process_server_line(POSITION_LINE))
+            elapsed = time.monotonic() - started
+
+            self.assertLess(elapsed, 0.1)
+            self.assertEqual(order, ["digiflow"])
+            self.assertFalse(observer_finished.is_set())
+            self.assertTrue(
+                await asyncio.wait_for(asyncio.to_thread(observer_started.wait, 1.0), timeout=1.5)
+            )
+            observer_release.set()
+            await service.wait_until_rx_side_effects_idle()
+            self.assertEqual(order, ["digiflow", "side-effect"])
+            metrics = service.rx_side_effect_snapshot()
+            self.assertEqual(metrics["completed"], 1)
+            self.assertEqual(metrics["metrics_ms"]["rx_side_effect_enqueue"]["count"], 1)
+        finally:
+            observer_release.set()
+            await service._rx_side_effect_dispatcher.stop()
+
+    async def test_observer_exception_does_not_kill_rx_or_worker(self) -> None:
+        observer_calls: list[str] = []
+        digi_frames: list[str] = []
+
+        def observer(line: str, **_kwargs: object) -> bool:
+            observer_calls.append(line)
+            if len(observer_calls) == 1:
+                raise RuntimeError("observer failed")
+            return True
+
+        service = self._service(
+            rx_processor=observer,
+            frame_consumer=lambda line, **_kwargs: digi_frames.append(line),
+        )
+        await service._rx_side_effect_dispatcher.start()
+        try:
+            second_line = POSITION_LINE.replace("test", "second")
+            self.assertTrue(service._process_server_line(POSITION_LINE))
+            self.assertTrue(service._process_server_line(second_line))
+            await service.wait_until_rx_side_effects_idle()
+
+            self.assertEqual(digi_frames, [POSITION_LINE, second_line])
+            self.assertEqual(observer_calls, [POSITION_LINE, second_line])
+            metrics = service.rx_side_effect_snapshot()
+            self.assertEqual(metrics["failed"], 1)
+            self.assertEqual(metrics["completed"], 1)
+            self.assertTrue(metrics["running"])
+        finally:
+            await service._rx_side_effect_dispatcher.stop()
+
+    async def test_side_effect_overflow_is_nonblocking_and_measurable(self) -> None:
+        observer_started = threading.Event()
+        observer_release = threading.Event()
+        digi_frames: list[str] = []
+
+        def slow_observer(_line: str, **_kwargs: object) -> bool:
+            observer_started.set()
+            observer_release.wait(timeout=2.0)
+            return True
+
+        service = self._service(
+            rx_processor=slow_observer,
+            frame_consumer=lambda line, **_kwargs: digi_frames.append(line),
+            queue_capacity=1,
+        )
+        await service._rx_side_effect_dispatcher.start()
+        try:
+            lines = [POSITION_LINE.replace("test", f"test-{index}") for index in range(3)]
+            self.assertTrue(service._process_server_line(lines[0]))
+            self.assertTrue(
+                await asyncio.wait_for(asyncio.to_thread(observer_started.wait, 1.0), timeout=1.5)
+            )
+            self.assertTrue(service._process_server_line(lines[1]))
+            started = time.monotonic()
+            self.assertTrue(service._process_server_line(lines[2]))
+            self.assertLess(time.monotonic() - started, 0.1)
+
+            metrics = service.rx_side_effect_snapshot()
+            self.assertEqual(digi_frames, lines)
+            self.assertEqual(metrics["high_water"], 1)
+            self.assertEqual(metrics["enqueued"], 2)
+            self.assertEqual(metrics["dropped_overflow"], 1)
+            observer_release.set()
+            await service.wait_until_rx_side_effects_idle()
+        finally:
+            observer_release.set()
+            await service._rx_side_effect_dispatcher.stop()
+
+    async def test_shutdown_drains_fifo_queue_and_stops_worker(self) -> None:
+        processed: list[int] = []
+        dispatcher = RxSideEffectDispatcher(queue_max_frames=4, worker_name="test-rx-side-effects")
+        await dispatcher.start()
+        self.assertTrue(dispatcher.enqueue(processed.append, 1))
+        self.assertTrue(dispatcher.enqueue(processed.append, 2))
+
+        await dispatcher.stop()
+
+        self.assertEqual(processed, [1, 2])
+        metrics = dispatcher.snapshot()
+        self.assertFalse(metrics["running"])
+        self.assertEqual(metrics["current_queue_depth"], 0)
+        self.assertEqual(metrics["completed"], 2)
 
 
 class AprsisSharedConnectionTests(unittest.IsolatedAsyncioTestCase):

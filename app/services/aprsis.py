@@ -11,6 +11,10 @@ from typing import Any, Callable
 from app import get_version
 from app.db import fetch_one, get_app_setting, get_connection, log_event, set_app_setting, utc_now
 from app.services.alarm_groups import build_effective_aprsis_filter
+from app.services.rx_side_effect_dispatcher import (
+    RX_SIDE_EFFECT_QUEUE_MAX_FRAMES,
+    RxSideEffectDispatcher,
+)
 from app.services.traffic_source import DEFAULT_APRSIS_FILTER, normalize_aprsis_filter
 
 DEFAULT_APRSIS_SERVER = "rotate.aprs2.net"
@@ -1102,6 +1106,7 @@ class AprsisClientService:
         reconnect_delay: float = 5.0,
         rx_processor: Callable[..., bool] | None = None,
         frame_consumer: Callable[..., None] | None = None,
+        rx_side_effect_queue_max_frames: int = RX_SIDE_EFFECT_QUEUE_MAX_FRAMES,
     ) -> None:
         self._poll_interval = poll_interval
         self._reconnect_delay = reconnect_delay
@@ -1117,6 +1122,10 @@ class AprsisClientService:
         self._retry_not_before = 0.0
         self._rx_processor = rx_processor
         self._frame_consumer = frame_consumer
+        self._rx_side_effect_dispatcher = RxSideEffectDispatcher(
+            queue_max_frames=rx_side_effect_queue_max_frames,
+            worker_name="aprsbox-aprsis-rx-side-effects",
+        )
 
     def set_frame_consumer(self, frame_consumer: Callable[..., None] | None) -> None:
         self._frame_consumer = frame_consumer
@@ -1125,19 +1134,27 @@ class AprsisClientService:
         if self._task is not None:
             return
         self._stop_event.clear()
+        await self._rx_side_effect_dispatcher.start()
         self._task = asyncio.create_task(self._run(), name="aprsbox-aprsis-uplink")
 
     async def stop(self) -> None:
         self._stop_event.set()
         await self._disconnect(reason="APRS-IS uplink stopped.", status=APRSIS_STATUS_INACTIVE)
-        if self._task is None:
-            return
-        self._task.cancel()
-        try:
-            await self._task
-        except asyncio.CancelledError:
-            pass
-        self._task = None
+        task = self._task
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        await self._rx_side_effect_dispatcher.stop()
+
+    async def wait_until_rx_side_effects_idle(self) -> None:
+        await self._rx_side_effect_dispatcher.wait_until_idle()
+
+    def rx_side_effect_snapshot(self) -> dict[str, Any]:
+        return self._rx_side_effect_dispatcher.snapshot()
 
     async def send_tnc2_line(self, line: str, telemetry: dict[str, Any] | None = None) -> tuple[bool, str]:
         """Try one immediate APRS-IS write without retaining or retrying the line.
@@ -1516,24 +1533,30 @@ class AprsisClientService:
         occurred_at = utc_now()
         received_monotonic = time.monotonic()
         processing_started_monotonic = time.monotonic()
-        try:
-            processed = bool(
-                processor(
-                    line,
-                    source=f"APRS-IS · {interface_name}",
-                    source_kind="aprsis",
-                    source_interface_id=interface_id,
-                    band="",
-                    timestamp=occurred_at,
-                    rx_received_monotonic=received_monotonic,
-                    latency_source_kind="aprsis",
-                )
-            )
-        except Exception as exc:
-            log_event("WARNING", "aprsis", f"APRS-IS RX line processing failed: {exc}")
-            return False
-        if not processed or self._frame_consumer is None:
-            return processed
+        side_effect_kwargs = {
+            "source": f"APRS-IS · {interface_name}",
+            "source_kind": "aprsis",
+            "source_interface_id": interface_id,
+            "band": "",
+            "timestamp": occurred_at,
+            "rx_received_monotonic": received_monotonic,
+            "latency_source_kind": "aprsis",
+        }
+        defer_side_effects = self._rx_side_effect_dispatcher.is_running()
+
+        # Direct callers that have not started the service retain the legacy
+        # synchronous behavior. The live reader always has the dispatcher
+        # running and therefore never executes observers on the event loop.
+        if not defer_side_effects:
+            try:
+                processed = bool(processor(line, **side_effect_kwargs))
+            except Exception as exc:
+                log_event("WARNING", "aprsis", f"APRS-IS RX line processing failed: {exc}")
+                return False
+            if not processed:
+                return False
+            if self._frame_consumer is None:
+                return True
 
         try:
             from app.services.aprsis_rf import extract_q_construct
@@ -1543,29 +1566,46 @@ class AprsisClientService:
             if parsed is None:
                 return False
             aprs_data = dict(parsed.get("aprs_data") or {})
-            self._frame_consumer(
-                line,
-                source_ref=interface_name,
-                source_interface_id=interface_id,
-                rx_received_at=occurred_at,
-                rx_received_monotonic=received_monotonic,
-                rx_processing_started_monotonic=processing_started_monotonic,
-                latency_source_kind="aprsis",
-                metadata={
-                    "source_type": "APRSIS",
-                    "aprsis_interface_id": interface_id,
-                    "original_tnc2_line": line,
-                    "received_at": occurred_at,
-                    "source_callsign": str(parsed.get("source") or ""),
-                    "destination": str(parsed.get("destination") or ""),
-                    "path": str(parsed.get("path") or ""),
-                    "payload": str(parsed.get("info") or ""),
-                    "packet_type": str(aprs_data.get("packet_group") or aprs_data.get("packet_type_code") or ""),
-                    "q_construct": extract_q_construct(parsed),
-                    "is_third_party": bool(parsed.get("is_third_party")),
-                },
-            )
+            if self._frame_consumer is not None:
+                self._frame_consumer(
+                    line,
+                    source_ref=interface_name,
+                    source_interface_id=interface_id,
+                    rx_received_at=occurred_at,
+                    rx_received_monotonic=received_monotonic,
+                    rx_processing_started_monotonic=processing_started_monotonic,
+                    latency_source_kind="aprsis",
+                    metadata={
+                        "source_type": "APRSIS",
+                        "aprsis_interface_id": interface_id,
+                        "original_tnc2_line": line,
+                        "received_at": occurred_at,
+                        "source_callsign": str(parsed.get("source") or ""),
+                        "destination": str(parsed.get("destination") or ""),
+                        "path": str(parsed.get("path") or ""),
+                        "payload": str(parsed.get("info") or ""),
+                        "packet_type": str(
+                            aprs_data.get("packet_group")
+                            or aprs_data.get("packet_type_code")
+                            or ""
+                        ),
+                        "q_construct": extract_q_construct(parsed),
+                        "is_third_party": bool(parsed.get("is_third_party")),
+                    },
+                )
         except Exception as exc:
             log_event("WARNING", "aprsis", f"APRS-IS Packet Routing dispatch failed: {exc}")
+            if defer_side_effects:
+                self._rx_side_effect_dispatcher.enqueue(
+                    processor,
+                    line,
+                    **side_effect_kwargs,
+                )
             return False
+        if defer_side_effects:
+            self._rx_side_effect_dispatcher.enqueue(
+                processor,
+                line,
+                **side_effect_kwargs,
+            )
         return True
