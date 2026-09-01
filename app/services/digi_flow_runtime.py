@@ -49,9 +49,9 @@ from app.services.igate_messaging import (
 from app.services.digi_flows import (
     DigiFlowTraceWriter,
     LOCAL_TX_SOURCE_KIND,
-    get_digi_flow,
-    list_enabled_digi_flows,
+    get_digi_flow_routing_snapshot,
     log_digi_flow_event,
+    reload_digi_flow_routing_snapshot,
 )
 from app.services.outbound import (
     APRSIS_TO_RF_ORIGIN,
@@ -176,9 +176,14 @@ class DigiFlowRuntimeService:
         self._aprsis_rf_source_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
         self._aprsis_rf_recipient_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
         self._latency_metrics: dict[str, dict[str, float | int | None]] = {}
+        self._latency_by_source_interface: dict[
+            tuple[str, int | None, str], dict[str, dict[str, float | int | None]]
+        ] = {}
         self._max_queue_depth = 0
+        reload_digi_flow_routing_snapshot()
 
     def latency_snapshot(self) -> dict[str, Any]:
+        routing_snapshot = get_digi_flow_routing_snapshot()
         dispatcher_snapshot = (
             self._rf_tx_dispatcher.latency_snapshot()
             if self._rf_tx_dispatcher is not None
@@ -191,6 +196,24 @@ class DigiFlowRuntimeService:
         )
         return {
             "metrics_ms": {name: dict(values) for name, values in self._latency_metrics.items()},
+            "latency_by_source_interface": [
+                {
+                    "source_kind": source_kind,
+                    "interface_id": interface_id,
+                    "interface_name": interface_name,
+                    "metrics_ms": {name: dict(values) for name, values in metrics.items()},
+                }
+                for (source_kind, interface_id, interface_name), metrics in sorted(
+                    self._latency_by_source_interface.items(),
+                    key=lambda item: (item[0][0], item[0][2], item[0][1] or 0),
+                )
+            ],
+            "digiflow_config_cache": {
+                "revision": routing_snapshot.revision,
+                "enabled_flow_count": len(routing_snapshot.flows),
+                "source_endpoint_count": len(routing_snapshot.by_source_endpoint),
+                "target_endpoint_count": len(routing_snapshot.by_target_endpoint),
+            },
             "digiflow_queue": {
                 "current_depth": self._queue.qsize(),
                 "max_depth": self._max_queue_depth,
@@ -216,7 +239,34 @@ class DigiFlowRuntimeService:
     def _record_latency(self, name: str, value_ms: float | None) -> None:
         if value_ms is None:
             return
-        metric = self._latency_metrics.setdefault(
+        self._update_latency_metric(self._latency_metrics, name, value_ms)
+
+    def _record_source_latency(
+        self,
+        name: str,
+        value_ms: float | None,
+        *,
+        source_kind: str,
+        interface_id: int | None,
+        interface_name: str,
+    ) -> None:
+        if value_ms is None:
+            return
+        key = (
+            str(source_kind or "unknown").strip() or "unknown",
+            int(interface_id) if interface_id is not None else None,
+            str(interface_name or "").strip(),
+        )
+        metrics = self._latency_by_source_interface.setdefault(key, {})
+        self._update_latency_metric(metrics, name, value_ms)
+
+    @staticmethod
+    def _update_latency_metric(
+        metrics: dict[str, dict[str, float | int | None]],
+        name: str,
+        value_ms: float,
+    ) -> None:
+        metric = metrics.setdefault(
             name,
             {"count": 0, "total_ms": 0.0, "last_ms": None, "max_ms": 0.0},
         )
@@ -308,6 +358,11 @@ class DigiFlowRuntimeService:
         frame_uid: str | None = None,
         created_at: str | None = None,
         rx_received_monotonic: float | None = None,
+        rx_processing_started_monotonic: float | None = None,
+        digiflow_enqueue_requested_monotonic: float | None = None,
+        latency_source_kind: str | None = None,
+        latency_interface_id: int | None = None,
+        latency_interface_name: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         enqueue_monotonic = time.monotonic()
@@ -319,6 +374,11 @@ class DigiFlowRuntimeService:
             created_at=created_at,
             enqueue_monotonic=enqueue_monotonic,
             rx_received_monotonic=rx_received_monotonic,
+            rx_processing_started_monotonic=rx_processing_started_monotonic,
+            digiflow_enqueue_requested_monotonic=digiflow_enqueue_requested_monotonic,
+            latency_source_kind=latency_source_kind,
+            latency_interface_id=latency_interface_id,
+            latency_interface_name=latency_interface_name,
             metadata=metadata,
         )
         try:
@@ -384,10 +444,6 @@ class DigiFlowRuntimeService:
                 "drop_reason": "routing_queue_full",
             }
         self._max_queue_depth = max(self._max_queue_depth, self._queue.qsize())
-        self._record_latency(
-            "rx_to_digiflow_enqueue",
-            _monotonic_delta_ms(rx_received_monotonic, enqueue_monotonic),
-        )
         source_is_aprsis = str(frame["source_kind"]) == APRSIS_FLOW_SOURCE_KIND
         log_event(
             "DEBUG" if source_is_aprsis else "INFO",
@@ -449,9 +505,27 @@ class DigiFlowRuntimeService:
         line: str,
         *,
         source_ref: str,
+        source_interface_id: int | None = None,
         rx_received_at: str | None = None,
         rx_received_monotonic: float | None = None,
+        rx_processing_started_monotonic: float | None = None,
+        latency_source_kind: str = "rf_unknown",
     ) -> None:
+        enqueue_requested_monotonic = time.monotonic()
+        self._record_source_latency(
+            "source_receive_to_rx_processing_start",
+            _monotonic_delta_ms(rx_received_monotonic, rx_processing_started_monotonic),
+            source_kind=latency_source_kind,
+            interface_id=source_interface_id,
+            interface_name=source_ref,
+        )
+        self._record_source_latency(
+            "rx_processing_start_to_digiflow_enqueue_request",
+            _monotonic_delta_ms(rx_processing_started_monotonic, enqueue_requested_monotonic),
+            source_kind=latency_source_kind,
+            interface_id=source_interface_id,
+            interface_name=source_ref,
+        )
         parsed = parse_tnc2_frame(line)
         packet_hash = logical_packet_hash(parsed)
         if packet_hash:
@@ -478,6 +552,11 @@ class DigiFlowRuntimeService:
             raw_payload=line,
             created_at=rx_received_at,
             rx_received_monotonic=rx_received_monotonic,
+            rx_processing_started_monotonic=rx_processing_started_monotonic,
+            digiflow_enqueue_requested_monotonic=enqueue_requested_monotonic,
+            latency_source_kind=latency_source_kind,
+            latency_interface_id=source_interface_id,
+            latency_interface_name=source_ref,
         )
 
     def enqueue_aprsis_tnc2_frame(
@@ -488,8 +567,25 @@ class DigiFlowRuntimeService:
         source_interface_id: int | None = None,
         rx_received_at: str | None = None,
         rx_received_monotonic: float | None = None,
+        rx_processing_started_monotonic: float | None = None,
+        latency_source_kind: str = "aprsis",
         metadata: dict[str, Any] | None = None,
     ) -> None:
+        enqueue_requested_monotonic = time.monotonic()
+        self._record_source_latency(
+            "source_receive_to_rx_processing_start",
+            _monotonic_delta_ms(rx_received_monotonic, rx_processing_started_monotonic),
+            source_kind=latency_source_kind,
+            interface_id=source_interface_id,
+            interface_name=source_ref,
+        )
+        self._record_source_latency(
+            "rx_processing_start_to_digiflow_enqueue_request",
+            _monotonic_delta_ms(rx_processing_started_monotonic, enqueue_requested_monotonic),
+            source_kind=latency_source_kind,
+            interface_id=source_interface_id,
+            interface_name=source_ref,
+        )
         matching_flows = self._matching_flows(source_kind=APRSIS_FLOW_SOURCE_KIND, source_ref=source_ref)
         if not matching_flows:
             log_event(
@@ -507,6 +603,11 @@ class DigiFlowRuntimeService:
             raw_payload=line,
             created_at=rx_received_at,
             rx_received_monotonic=rx_received_monotonic,
+            rx_processing_started_monotonic=rx_processing_started_monotonic,
+            digiflow_enqueue_requested_monotonic=enqueue_requested_monotonic,
+            latency_source_kind=latency_source_kind,
+            latency_interface_id=source_interface_id,
+            latency_interface_name=source_ref,
             metadata=normalized_metadata,
         )
 
@@ -520,17 +621,32 @@ class DigiFlowRuntimeService:
             try:
                 processing_started = time.monotonic()
                 self._record_latency(
-                    "digiflow_enqueue_to_processing_start",
+                    "digiflow_enqueue_to_worker_start",
                     _monotonic_delta_ms(frame.get("enqueue_monotonic"), processing_started),
+                )
+                self._record_source_latency(
+                    "digiflow_enqueue_to_worker_start",
+                    _monotonic_delta_ms(frame.get("enqueue_monotonic"), processing_started),
+                    source_kind=str(frame.get("latency_source_kind") or frame.get("source_kind") or "unknown"),
+                    interface_id=frame.get("latency_interface_id"),
+                    interface_name=str(frame.get("latency_interface_name") or frame.get("source_ref") or ""),
                 )
                 await self._process_frame(frame)
             except Exception as exc:
                 error = str(exc).strip() or exc.__class__.__name__
                 log_event("WARNING", "digi_flow_runtime", f"Failed to process DIGI Flow frame {frame['frame_uid']}: {error}")
             finally:
+                processing_finished = time.monotonic()
                 self._record_latency(
-                    "digiflow_processing",
-                    _monotonic_delta_ms(processing_started, time.monotonic()),
+                    "digiflow_worker_processing",
+                    _monotonic_delta_ms(processing_started, processing_finished),
+                )
+                self._record_source_latency(
+                    "digiflow_worker_processing",
+                    _monotonic_delta_ms(processing_started, processing_finished),
+                    source_kind=str(frame.get("latency_source_kind") or frame.get("source_kind") or "unknown"),
+                    interface_id=frame.get("latency_interface_id"),
+                    interface_name=str(frame.get("latency_interface_name") or frame.get("source_ref") or ""),
                 )
                 self._queue.task_done()
 
@@ -585,12 +701,12 @@ class DigiFlowRuntimeService:
     def _matching_flows(self, *, source_kind: str, source_ref: str) -> list[dict[str, Any]]:
         normalized_kind = str(source_kind or "").strip()
         normalized_ref = str(source_ref or "").strip()
-        flows = list_enabled_digi_flows(source_kind=normalized_kind)
+        snapshot = get_digi_flow_routing_snapshot()
         if normalized_kind != "receiver_rf":
-            return [flow for flow in flows if str(flow.get("source_ref") or "").strip() == normalized_ref]
+            return list(snapshot.by_source_endpoint.get((normalized_kind, normalized_ref), ()))
         return [
             flow
-            for flow in flows
+            for flow in snapshot.by_source_kind.get(normalized_kind, ())
             if _receiver_source_ref_matches(str(flow.get("source_ref") or ""), normalized_ref)
         ]
 
@@ -1229,7 +1345,12 @@ class DigiFlowRuntimeService:
         config = dict(step.get("config") or {})
         mode = str(config.get("mode") or "allow").strip().lower() or "allow"
         configured = [str(item).strip().upper() for item in config.get("callsigns") or [] if str(item).strip()]
-        matched_pattern = _find_matching_callsign_pattern(callsign, configured) if callsign else None
+        compiled_patterns = step.get("_compiled_callsign_patterns")
+        matched_pattern = (
+            _find_matching_callsign_pattern(callsign, configured, compiled_patterns=compiled_patterns)
+            if callsign
+            else None
+        )
 
         if not callsign:
             decision = "drop"
@@ -1657,7 +1778,11 @@ class DigiFlowRuntimeService:
 
         input_path = str(parsed.get("path") or "").strip().upper()
         consumed_hops = _consumed_path_hops(_split_path_tokens(input_path))
-        matched_pattern, matched_hop = _find_matching_digi_pattern(consumed_hops, configured)
+        matched_pattern, matched_hop = _find_matching_digi_pattern(
+            consumed_hops,
+            configured,
+            compiled_patterns=step.get("_compiled_callsign_patterns"),
+        )
 
         if mode == "allow":
             passed = matched_pattern is not None
@@ -1911,7 +2036,8 @@ class DigiFlowRuntimeService:
         step_id = int(step["id"])
         config = dict(step.get("config") or {})
         source_callsign = str((context.get("parsed") or {}).get("source") or "").strip().upper()
-        rules = _rate_limit_rules_from_config(config)
+        cached_rules = step.get("_compiled_rate_limit_rules")
+        rules = list(cached_rules) if cached_rules else _rate_limit_rules_from_config(config)
         matched_rule = _find_rate_limit_rule(source_callsign, rules)
         if matched_rule is None:
             self._log_digi_flow_event(
@@ -2170,7 +2296,7 @@ class DigiFlowRuntimeService:
                 )
                 return
 
-            flow = get_digi_flow(entry.flow_id)
+            flow = get_digi_flow_routing_snapshot().by_id.get(entry.flow_id)
             if flow is None:
                 log_event("DEBUG", "aprsis_rf", f"DROP reason=flow_disabled flow_id={entry.flow_id} (flow removed)")
                 return
@@ -2688,6 +2814,11 @@ class DigiFlowRuntimeService:
         created_at: str | None,
         enqueue_monotonic: float,
         rx_received_monotonic: float | None,
+        rx_processing_started_monotonic: float | None,
+        digiflow_enqueue_requested_monotonic: float | None,
+        latency_source_kind: str | None,
+        latency_interface_id: int | None,
+        latency_interface_name: str | None,
         metadata: dict[str, Any] | None,
     ) -> dict[str, Any]:
         timestamp = created_at or utc_now()
@@ -2702,6 +2833,11 @@ class DigiFlowRuntimeService:
             "created_at": timestamp,
             "enqueue_monotonic": enqueue_monotonic,
             "rx_received_monotonic": rx_received_monotonic,
+            "rx_processing_started_monotonic": rx_processing_started_monotonic,
+            "digiflow_enqueue_requested_monotonic": digiflow_enqueue_requested_monotonic,
+            "latency_source_kind": str(latency_source_kind or source_kind or "unknown"),
+            "latency_interface_id": latency_interface_id,
+            "latency_interface_name": str(latency_interface_name or source_ref or ""),
         }
 
 
@@ -2792,8 +2928,21 @@ def _find_matching_path_spec(token: str, specs: list[str]) -> str | None:
     return None
 
 
-def _find_matching_callsign_pattern(callsign: str, patterns: list[str]) -> str | None:
+def _find_matching_callsign_pattern(
+    callsign: str,
+    patterns: list[str],
+    *,
+    compiled_patterns: Any = None,
+) -> str | None:
     normalized_callsign = callsign.strip().upper()
+    if compiled_patterns:
+        for normalized_pattern, compiled in compiled_patterns:
+            if compiled is None:
+                if normalized_callsign == normalized_pattern:
+                    return normalized_pattern
+            elif compiled.match(normalized_callsign) is not None:
+                return normalized_pattern
+        return None
     for pattern in patterns:
         normalized_pattern = pattern.strip().upper()
         if _callsign_matches_pattern(normalized_callsign, normalized_pattern):
@@ -2805,9 +2954,18 @@ def _consumed_path_hops(path_tokens: list[str]) -> list[str]:
     return [token.rstrip("*") for token in path_tokens if token.endswith("*") and token.rstrip("*")]
 
 
-def _find_matching_digi_pattern(consumed_hops: list[str], patterns: list[str]) -> tuple[str | None, str | None]:
+def _find_matching_digi_pattern(
+    consumed_hops: list[str],
+    patterns: list[str],
+    *,
+    compiled_patterns: Any = None,
+) -> tuple[str | None, str | None]:
     for hop in consumed_hops:
-        matched_pattern = _find_matching_callsign_pattern(hop, patterns)
+        matched_pattern = _find_matching_callsign_pattern(
+            hop,
+            patterns,
+            compiled_patterns=compiled_patterns,
+        )
         if matched_pattern is not None:
             return matched_pattern, hop
     return None, None
@@ -2969,6 +3127,18 @@ def _rate_limit_pattern_matches_source(pattern: str, source_callsign: str) -> bo
     return source_base == pattern_base
 
 
+def _compiled_rate_limit_pattern_matches_source(
+    compiled_pattern: Any,
+    pattern: str,
+    source_callsign: str,
+) -> bool:
+    if compiled_pattern:
+        _normalized, compiled = compiled_pattern
+        if compiled is not None:
+            return compiled.match(str(source_callsign or "").strip().upper()) is not None
+    return _rate_limit_pattern_matches_source(pattern, source_callsign)
+
+
 def _rate_limit_rule_sort_key(rule: dict[str, Any]) -> tuple[int, int, int, int]:
     pattern = str(rule.get("source_callsign_pattern") or "").strip().upper()
     has_wildcard = 1 if "*" in pattern else 0
@@ -2983,7 +3153,11 @@ def _find_rate_limit_rule(source_callsign: str, rules: list[dict[str, Any]]) -> 
         pattern = str(rule.get("source_callsign_pattern") or "").strip().upper()
         if not pattern:
             continue
-        if _rate_limit_pattern_matches_source(pattern, source_callsign):
+        if _compiled_rate_limit_pattern_matches_source(
+            rule.get("_compiled_pattern"),
+            pattern,
+            source_callsign,
+        ):
             matches.append((_rate_limit_rule_sort_key(rule), -index, rule))
     if not matches:
         return None

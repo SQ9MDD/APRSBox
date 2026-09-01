@@ -178,6 +178,7 @@ def process_normalized_tnc2_rx(
     frame_consumer: Callable[[str], None] | Callable[..., None] | None = None,
     source_ref: str | None = None,
     rx_received_monotonic: float | None = None,
+    latency_source_kind: str | None = None,
 ) -> bool:
     """Validate and process one transport-neutral TNC2 RX frame.
 
@@ -186,6 +187,7 @@ def process_normalized_tnc2_rx(
     buffers, band-condition data, or RF Digi Flow inputs are touched.
     """
 
+    processing_started_monotonic = time.monotonic()
     normalized_line = str(line or "").rstrip("\r\n")
     parsed_frame = parse_tnc2_frame(normalized_line) if normalized_line else None
     if not normalized_line or parsed_frame is None:
@@ -203,14 +205,20 @@ def process_normalized_tnc2_rx(
             frame_consumer(
                 normalized_line,
                 source_ref=consumer_source_ref,
+                source_interface_id=source_interface_id,
                 rx_received_at=occurred_at,
                 rx_received_monotonic=rx_received_monotonic,
+                rx_processing_started_monotonic=processing_started_monotonic,
+                latency_source_kind=str(latency_source_kind or normalized_kind),
             )
         except TypeError:
             frame_consumer(normalized_line, source_ref=consumer_source_ref)
-        rx_to_igate_enqueue_ms = _elapsed_ms_since(rx_received_monotonic, now=enqueue_started_at)
+        rx_processing_to_igate_enqueue_request_ms = _elapsed_ms_since(
+            processing_started_monotonic,
+            now=enqueue_started_at,
+        )
     else:
-        rx_to_igate_enqueue_ms = None
+        rx_processing_to_igate_enqueue_request_ms = None
 
     alert_result: dict[str, Any] | None = None
     map_projection_error: str | None = None
@@ -333,8 +341,17 @@ def process_normalized_tnc2_rx(
         log_event("WARNING", "igate", f"Failed to update IGate station state: {exc}")
 
     latency_parts = [f"source={source}", f"source_kind={normalized_kind}", f"line={normalized_line[:120]}"]
-    if rx_to_igate_enqueue_ms is not None:
-        latency_parts.append(f"rx_to_igate_enqueue_ms={rx_to_igate_enqueue_ms:.3f}")
+    source_receive_to_processing_ms = _elapsed_ms_since(
+        rx_received_monotonic,
+        now=processing_started_monotonic,
+    )
+    if source_receive_to_processing_ms is not None:
+        latency_parts.append(f"source_receive_to_rx_processing_start_ms={source_receive_to_processing_ms:.3f}")
+    if rx_processing_to_igate_enqueue_request_ms is not None:
+        latency_parts.append(
+            "rx_processing_start_to_igate_enqueue_request_ms="
+            f"{rx_processing_to_igate_enqueue_request_ms:.3f}"
+        )
     rx_to_db_commit_ms = _elapsed_ms_since(rx_received_monotonic)
     if rx_to_db_commit_ms is not None:
         latency_parts.append(f"rx_to_db_commit_ms={rx_to_db_commit_ms:.3f}")
@@ -2387,10 +2404,12 @@ class _TrafficModemRuntime:
     def _persist_frame(self, entry: dict[str, Any], timestamp: str) -> None:
         active_band = ""
         interface_id: int | None = None
+        modem_type = ""
         rx_monotonic = entry.get("_rx_monotonic")
         with self._lock:
             if self._active_modem:
                 active_band = str(self._active_modem.get("band") or "").strip()
+                modem_type = _normalize_modem_type(self._active_modem.get("modem_type"))
                 try:
                     interface_id = int(self._active_modem["id"])
                 except (TypeError, ValueError, KeyError):
@@ -2410,6 +2429,11 @@ class _TrafficModemRuntime:
                 frame_consumer=self._frame_consumer,
                 source_ref=self._format_modem_label(),
                 rx_received_monotonic=rx_monotonic,
+                latency_source_kind={
+                    "SERIALL": "serial_kiss",
+                    "TCP": "tcp_kiss",
+                    OPENWEBRX_MQTT_MODEM_TYPE: "openwebrx_mqtt",
+                }.get(modem_type, "rf_unknown"),
             )
             return
 

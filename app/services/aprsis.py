@@ -1528,6 +1528,7 @@ class AprsisClientService:
             processor = process_normalized_tnc2_rx
         occurred_at = utc_now()
         received_monotonic = time.monotonic()
+        processing_started_monotonic = time.monotonic()
         try:
             processed = bool(
                 processor(
@@ -1538,6 +1539,7 @@ class AprsisClientService:
                     band="",
                     timestamp=occurred_at,
                     rx_received_monotonic=received_monotonic,
+                    latency_source_kind="aprsis",
                 )
             )
         except Exception as exc:
@@ -1560,6 +1562,8 @@ class AprsisClientService:
                 source_interface_id=interface_id,
                 rx_received_at=occurred_at,
                 rx_received_monotonic=received_monotonic,
+                rx_processing_started_monotonic=processing_started_monotonic,
+                latency_source_kind="aprsis",
                 metadata={
                     "source_type": "APRSIS",
                     "aprsis_interface_id": interface_id,

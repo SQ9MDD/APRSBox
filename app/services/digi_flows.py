@@ -5,7 +5,9 @@ import json
 import math
 import re
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any
 
 from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
@@ -98,6 +100,22 @@ RUNTIME_IMPLEMENTED_STEP_TYPES = {
     "action_log",
 }
 RUNTIME_STUB_STEP_TYPES: set[str] = set()
+
+
+@dataclass(frozen=True)
+class DigiFlowRoutingSnapshot:
+    revision: int
+    flows: tuple[dict[str, Any], ...]
+    by_id: dict[int, dict[str, Any]]
+    by_source_kind: dict[str, tuple[dict[str, Any], ...]]
+    by_source_endpoint: dict[tuple[str, str], tuple[dict[str, Any], ...]]
+    by_target_endpoint: dict[tuple[str, str], tuple[dict[str, Any], ...]]
+
+
+_routing_snapshot_lock = Lock()
+_routing_snapshot_reload_lock = Lock()
+_routing_snapshot: DigiFlowRoutingSnapshot | None = None
+_routing_snapshot_revision = 0
 
 STEP_TYPE_META: dict[str, dict[str, Any]] = {
     "receiver_rf": {
@@ -1444,6 +1462,92 @@ def list_enabled_digi_flows(*, source_kind: str | None = None, source_ref: str |
     ]
 
 
+def _compile_callsign_pattern(pattern: Any) -> tuple[str, re.Pattern[str] | None] | None:
+    normalized = str(pattern or "").strip().upper()
+    if not normalized:
+        return None
+    if "*" not in normalized:
+        return normalized, None
+    expression = "^" + re.escape(normalized).replace(r"\*", ".*") + "$"
+    return normalized, re.compile(expression)
+
+
+def _prepare_runtime_flow(flow: dict[str, Any]) -> dict[str, Any]:
+    prepared = dict(flow)
+    prepared_steps: list[dict[str, Any]] = []
+    for raw_step in list(flow.get("steps") or []):
+        step = dict(raw_step)
+        config = dict(step.get("config") or {})
+        step["config"] = config
+        step_type = str(step.get("step_type") or "")
+        if step_type == "filter_callsign":
+            step["_compiled_callsign_patterns"] = tuple(
+                compiled
+                for value in config.get("callsigns") or []
+                if (compiled := _compile_callsign_pattern(value)) is not None
+            )
+        elif step_type == "filter_digi":
+            step["_compiled_callsign_patterns"] = tuple(
+                compiled
+                for value in config.get("digis") or []
+                if (compiled := _compile_callsign_pattern(value)) is not None
+            )
+        elif step_type == "filter_rate_limit":
+            compiled_rules: list[dict[str, Any]] = []
+            rules = config.get("rate_limit_rules")
+            if isinstance(rules, list):
+                for rule in rules:
+                    if not isinstance(rule, dict):
+                        continue
+                    compiled = _compile_callsign_pattern(rule.get("source_callsign_pattern"))
+                    if compiled is None:
+                        continue
+                    compiled_rules.append({**rule, "_compiled_pattern": compiled})
+            step["_compiled_rate_limit_rules"] = tuple(compiled_rules)
+        prepared_steps.append(step)
+    prepared["steps"] = prepared_steps
+    prepared["step_count"] = len(prepared_steps)
+    return prepared
+
+
+def reload_digi_flow_routing_snapshot() -> DigiFlowRoutingSnapshot:
+    """Reload routing configuration once, outside the per-frame path."""
+    global _routing_snapshot, _routing_snapshot_revision
+    with _routing_snapshot_reload_lock:
+        flows = tuple(_prepare_runtime_flow(flow) for flow in list_enabled_digi_flows())
+        by_source_kind_mutable: dict[str, list[dict[str, Any]]] = {}
+        by_source_endpoint_mutable: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        by_target_endpoint_mutable: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for flow in flows:
+            source_kind = str(flow.get("source_kind") or "").strip()
+            source_ref = str(flow.get("source_ref") or "").strip()
+            target_kind = str(flow.get("target_kind") or "").strip()
+            target_ref = str(flow.get("target_ref") or "").strip()
+            by_source_kind_mutable.setdefault(source_kind, []).append(flow)
+            by_source_endpoint_mutable.setdefault((source_kind, source_ref), []).append(flow)
+            by_target_endpoint_mutable.setdefault((target_kind, target_ref), []).append(flow)
+        with _routing_snapshot_lock:
+            _routing_snapshot_revision += 1
+            snapshot = DigiFlowRoutingSnapshot(
+                revision=_routing_snapshot_revision,
+                flows=flows,
+                by_id={int(flow["id"]): flow for flow in flows},
+                by_source_kind={key: tuple(value) for key, value in by_source_kind_mutable.items()},
+                by_source_endpoint={key: tuple(value) for key, value in by_source_endpoint_mutable.items()},
+                by_target_endpoint={key: tuple(value) for key, value in by_target_endpoint_mutable.items()},
+            )
+            _routing_snapshot = snapshot
+            return snapshot
+
+
+def get_digi_flow_routing_snapshot() -> DigiFlowRoutingSnapshot:
+    with _routing_snapshot_lock:
+        snapshot = _routing_snapshot
+    if snapshot is None:
+        return reload_digi_flow_routing_snapshot()
+    return snapshot
+
+
 def has_enabled_local_tx_aprsis_flow() -> bool:
     row = fetch_one(
         """
@@ -2017,6 +2121,7 @@ def create_digi_flow(payload: dict[str, Any]) -> int:
                 keep_flow_id=flow_id,
                 updated_at=timestamp,
             )
+    reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Created DIGI Flow #{flow_id}")
     return flow_id
 
@@ -2129,12 +2234,14 @@ def update_digi_flow(flow_id: int, payload: dict[str, Any]) -> None:
                 keep_flow_id=flow_id,
                 updated_at=timestamp,
             )
+    reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Updated DIGI Flow #{flow_id}")
 
 
 def delete_digi_flow(flow_id: int) -> None:
     with get_connection() as connection:
         connection.execute("DELETE FROM digi_flows WHERE id = ?", (flow_id,))
+    reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Deleted DIGI Flow #{flow_id}")
 
 
@@ -2261,6 +2368,7 @@ def set_digi_flow_enabled(flow_id: int, enabled: bool) -> None:
                 """,
                 (timestamp, flow_id),
             )
+    reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Set DIGI Flow #{flow_id} enabled={1 if enabled else 0}")
 
 
@@ -2310,6 +2418,7 @@ def move_digi_flow(flow_id: int, direction: str) -> None:
                 """,
                 (sort_order, current_flow_id),
             )
+    reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Moved DIGI Flow #{flow_id} {normalized_direction}")
 
 

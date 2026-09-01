@@ -399,6 +399,10 @@ def create_section_row(slug: str, payload: dict[str, Any]) -> None:
             f"INSERT INTO {definition.table_name} ({column_list}) VALUES ({placeholders})",
             tuple(params),
         )
+    if slug == "modems":
+        from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+        reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Created record in {definition.table_name}")
 
 
@@ -451,6 +455,10 @@ def update_section_row(slug: str, row_id: int, payload: dict[str, Any]) -> None:
                     previous_name=previous_name,
                     current_name=current_name,
                 )
+    if slug == "modems":
+        from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+        reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Updated record {row_id} in {definition.table_name}")
 
 
@@ -517,6 +525,10 @@ def delete_section_row(slug: str, row_id: int) -> None:
     definition = SECTION_DEFINITIONS[slug]
     with get_connection() as connection:
         connection.execute(f"DELETE FROM {definition.table_name} WHERE id = ?", (row_id,))
+    if slug == "modems":
+        from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+        reload_digi_flow_routing_snapshot()
     log_event("INFO", "config", f"Deleted record {row_id} from {definition.table_name}")
 
 
@@ -529,6 +541,9 @@ def set_modem_enabled(row_id: int, enabled: bool) -> None:
         )
         if cursor.rowcount == 0:
             raise ValueError("Interface not found.")
+    from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+    reload_digi_flow_routing_snapshot()
     state = "enabled" if enabled else "disabled"
     log_event("INFO", "config", f"Interface {row_id} {state}")
 
