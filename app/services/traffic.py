@@ -14,7 +14,7 @@ from app.services.alerts import process_alert_frame
 from app.services.mqtt_url import OPENWEBRX_MQTT_MODEM_TYPE, RX_CAPABLE_MODEM_TYPES, parse_mqtt_url, sanitize_url_passwords
 from app.services.content import parse_tnc2_frame
 from app.services.messages import process_incoming_tnc2_message
-from app.services.notifications import queue_radar_notifications
+from app.services.notifications import queue_radar_frame
 from app.services.outbound import build_object_tnc2, persist_outbound_frame
 from app.services.radio_activity import record_traffic_device_station_observation
 from app.services.rx_side_effect_dispatcher import (
@@ -387,7 +387,22 @@ def process_normalized_tnc2_rx(
             source_kind=normalized_kind,
         )
     with rx_side_effect_stage(stage_collector, "radar"):
-        queue_radar_notifications(timestamp=occurred_at)
+        aprs_data = dict(parsed_frame.get("aprs_data") or {})
+        radar_callsign = str(
+            aprs_data.get("entity_name")
+            or parsed_frame.get("logical_source_key")
+            or parsed_frame.get("source_key")
+            or ""
+        ).strip()
+        queue_radar_frame(
+            callsign=radar_callsign,
+            latitude=aprs_data.get("latitude"),
+            longitude=aprs_data.get("longitude"),
+            timestamp=occurred_at,
+            source=str(source or "").strip() or "Unknown source",
+            source_kind=normalized_kind,
+            fingerprint=f"traffic:{frame_id}",
+        )
     return True
 
 

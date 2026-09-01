@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import math
+from queue import Full, Queue
 import re
 import sqlite3
-from typing import Any
+from threading import RLock, Thread
+import time
+from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -26,6 +31,7 @@ from app.i18n import get_app_language, get_translator
 from app.services.alarm_groups import is_configured_aprs_alarm_group
 from app.services.content import get_station_settings, get_visible_station_snapshots
 from app.services.rx_side_effect_dispatcher import (
+    RxSideEffectStageCollector,
     collect_rx_radar_stages,
     current_rx_radar_stage_collector,
     current_rx_side_effect_stage_collector,
@@ -41,8 +47,276 @@ NOTIFICATION_RADAR_ENABLED_KEY = "radar_enabled"
 NOTIFICATION_RADAR_IGNORED_PATTERNS_KEY = "radar_ignored_patterns"
 NOTIFICATION_HTTP_TIMEOUT_SECONDS_DEFAULT = 5
 NOTIFICATION_RADAR_EVENT_LOG_CATEGORY = "notifications_radar"
+RADAR_QUEUE_MAX_FRAMES = 2048
 
 _NOTIFICATION_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aprsbox-notify")
+_RADAR_STOP = object()
+
+
+@dataclass(frozen=True)
+class RadarFrameObservation:
+    callsign: str
+    latitude: float | None
+    longitude: float | None
+    timestamp: str
+    source: str
+    source_kind: str
+    fingerprint: str | None = None
+    enqueued_monotonic: float = 0.0
+
+
+class RadarNotificationDispatcher:
+    """Bounded, ordered radar worker independent from the asyncio event loop."""
+
+    def __init__(
+        self,
+        *,
+        queue_capacity: int = RADAR_QUEUE_MAX_FRAMES,
+        processor: Callable[[RadarFrameObservation], Any] | None = None,
+        worker_name: str = "aprsbox-radar",
+    ) -> None:
+        self._queue: Queue[RadarFrameObservation | object] = Queue(
+            maxsize=max(1, int(queue_capacity))
+        )
+        self._processor = processor
+        self._worker_name = str(worker_name or "aprsbox-radar")
+        self._thread: Thread | None = None
+        self._accepting = False
+        self._lock = RLock()
+        self._high_water = 0
+        self._enqueued = 0
+        self._completed = 0
+        self._failed = 0
+        self._dropped = 0
+        self._dropped_overflow = 0
+        self._dropped_invalid = 0
+        self._rejected_not_running = 0
+        self._metrics_ms: dict[str, dict[str, float | int | None]] = {}
+        self._radar_breakdown_ms: dict[str, dict[str, float | int | None]] = {}
+
+    async def start(self) -> None:
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._accepting = True
+            self._thread = Thread(
+                target=self._run,
+                name=self._worker_name,
+                daemon=True,
+            )
+            self._thread.start()
+
+    async def stop(self) -> None:
+        """Stop accepting frames, drain accepted work, then join the worker."""
+
+        with self._lock:
+            self._accepting = False
+            thread = self._thread
+        if thread is None:
+            return
+        await asyncio.to_thread(self._queue.join)
+        self._queue.put(_RADAR_STOP)
+        await asyncio.to_thread(thread.join)
+        with self._lock:
+            if self._thread is thread:
+                self._thread = None
+
+    async def wait_until_idle(self) -> None:
+        await asyncio.to_thread(self._queue.join)
+
+    def enqueue(self, observation: RadarFrameObservation) -> bool:
+        enqueue_started = time.monotonic()
+        if not observation.callsign or not _valid_radar_position(
+            observation.latitude,
+            observation.longitude,
+        ):
+            with self._lock:
+                self._dropped += 1
+                self._dropped_invalid += 1
+                self._record_metric_locked(
+                    "radar_enqueue",
+                    max(0.0, (time.monotonic() - enqueue_started) * 1000.0),
+                )
+            return False
+        with self._lock:
+            if not self._accepting or self._thread is None or not self._thread.is_alive():
+                self._dropped += 1
+                self._rejected_not_running += 1
+                self._record_metric_locked(
+                    "radar_enqueue",
+                    max(0.0, (time.monotonic() - enqueue_started) * 1000.0),
+                )
+                return False
+            queued_observation = RadarFrameObservation(
+                callsign=observation.callsign,
+                latitude=observation.latitude,
+                longitude=observation.longitude,
+                timestamp=observation.timestamp,
+                source=observation.source,
+                source_kind=observation.source_kind,
+                fingerprint=observation.fingerprint,
+                enqueued_monotonic=time.monotonic(),
+            )
+            try:
+                self._queue.put_nowait(queued_observation)
+            except Full:
+                self._dropped += 1
+                self._dropped_overflow += 1
+                self._record_metric_locked(
+                    "radar_enqueue",
+                    max(0.0, (time.monotonic() - enqueue_started) * 1000.0),
+                )
+                return False
+            self._enqueued += 1
+            self._high_water = max(self._high_water, self._queue.qsize())
+            self._record_metric_locked(
+                "radar_enqueue",
+                max(0.0, (time.monotonic() - enqueue_started) * 1000.0),
+            )
+            return True
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            thread = self._thread
+            depth = self._queue.qsize()
+            return {
+                "depth": depth,
+                "current_queue_depth": depth,
+                "capacity": self._queue.maxsize,
+                "queue_capacity": self._queue.maxsize,
+                "high_water": self._high_water,
+                "enqueued": self._enqueued,
+                "completed": self._completed,
+                "failed": self._failed,
+                "dropped": self._dropped,
+                "dropped_overflow": self._dropped_overflow,
+                "dropped_invalid": self._dropped_invalid,
+                "rejected_not_running": self._rejected_not_running,
+                "running": bool(self._accepting and thread is not None and thread.is_alive()),
+                "metrics_ms": {
+                    name: dict(values) for name, values in self._metrics_ms.items()
+                },
+                "radar_breakdown_ms": {
+                    name: dict(values) for name, values in self._radar_breakdown_ms.items()
+                },
+            }
+
+    def _run(self) -> None:
+        while True:
+            item = self._queue.get()
+            try:
+                if item is _RADAR_STOP:
+                    return
+                assert isinstance(item, RadarFrameObservation)
+                processing_started = time.monotonic()
+                with self._lock:
+                    self._record_metric_locked(
+                        "radar_queue_wait",
+                        max(0.0, (processing_started - item.enqueued_monotonic) * 1000.0),
+                    )
+                collector = RxSideEffectStageCollector()
+                try:
+                    with collect_rx_radar_stages(collector):
+                        processor = self._processor or process_radar_frame_observation
+                        processor(item)
+                except Exception as exc:
+                    with self._lock:
+                        self._failed += 1
+                    self._log_failure(exc)
+                else:
+                    with self._lock:
+                        self._completed += 1
+                finally:
+                    elapsed_ms = max(0.0, (time.monotonic() - processing_started) * 1000.0)
+                    with self._lock:
+                        self._merge_breakdown_locked(collector.radar_metrics)
+                        self._record_metric_locked("radar_processing", elapsed_ms)
+            finally:
+                self._queue.task_done()
+
+    def _log_failure(self, exc: Exception) -> None:
+        detail = str(exc).strip() or exc.__class__.__name__
+        try:
+            log_event("WARNING", "notifications_radar", f"Radar worker failed: {detail}")
+        except Exception:
+            return
+
+    def _merge_breakdown_locked(
+        self,
+        samples: dict[str, dict[str, float | int | None]],
+    ) -> None:
+        for name, sample in samples.items():
+            metric = self._radar_breakdown_ms.setdefault(
+                name,
+                {"count": 0, "total_ms": 0.0, "last_ms": None, "max_ms": 0.0},
+            )
+            metric["count"] = int(metric["count"] or 0) + int(sample["count"] or 0)
+            metric["total_ms"] = float(metric["total_ms"] or 0.0) + float(sample["total_ms"] or 0.0)
+            metric["last_ms"] = sample["last_ms"]
+            metric["max_ms"] = max(
+                float(metric["max_ms"] or 0.0),
+                float(sample["max_ms"] or 0.0),
+            )
+            metric["avg_ms"] = float(metric["total_ms"] or 0.0) / int(metric["count"] or 1)
+
+    def _record_metric_locked(self, name: str, value_ms: float) -> None:
+        metric = self._metrics_ms.setdefault(
+            name,
+            {"count": 0, "total_ms": 0.0, "last_ms": None, "max_ms": 0.0},
+        )
+        metric["count"] = int(metric["count"] or 0) + 1
+        metric["total_ms"] = float(metric["total_ms"] or 0.0) + value_ms
+        metric["last_ms"] = value_ms
+        metric["max_ms"] = max(float(metric["max_ms"] or 0.0), value_ms)
+        metric["avg_ms"] = float(metric["total_ms"] or 0.0) / int(metric["count"] or 1)
+
+
+radar_notification_dispatcher = RadarNotificationDispatcher()
+
+
+async def start_radar_notification_dispatcher() -> None:
+    await radar_notification_dispatcher.start()
+
+
+async def stop_radar_notification_dispatcher() -> None:
+    await radar_notification_dispatcher.stop()
+
+
+def radar_notification_dispatcher_snapshot() -> dict[str, Any]:
+    return radar_notification_dispatcher.snapshot()
+
+
+def queue_radar_frame(
+    *,
+    callsign: Any,
+    latitude: Any,
+    longitude: Any,
+    timestamp: str,
+    source: str,
+    source_kind: str,
+    fingerprint: str | None = None,
+) -> bool:
+    observation = RadarFrameObservation(
+        callsign=str(callsign or "").strip().upper(),
+        latitude=_parse_coordinate(latitude),
+        longitude=_parse_coordinate(longitude),
+        timestamp=str(timestamp or utc_now()),
+        source=str(source or "").strip(),
+        source_kind=str(source_kind or "").strip(),
+        fingerprint=str(fingerprint).strip() if fingerprint else None,
+    )
+    return radar_notification_dispatcher.enqueue(observation)
+
+
+def _valid_radar_position(latitude: float | None, longitude: float | None) -> bool:
+    if latitude is None or longitude is None:
+        return False
+    return (
+        math.isfinite(latitude)
+        and math.isfinite(longitude)
+        and -90.0 <= latitude <= 90.0
+        and -180.0 <= longitude <= 180.0
+    )
 
 
 def _t(value: object) -> str:
@@ -483,7 +757,166 @@ def queue_aprs_message_notification(
     _NOTIFICATION_EXECUTOR.submit(_send_notification_event, event)
 
 
+def process_radar_frame_observation(observation: RadarFrameObservation) -> None:
+    events = evaluate_radar_frame_observation(observation)
+    radar_collector = current_rx_radar_stage_collector()
+    with rx_radar_stage(radar_collector, "notification_enqueue"):
+        for event in events:
+            _NOTIFICATION_EXECUTOR.submit(_send_notification_event, event)
+
+
+def evaluate_radar_frame_observation(
+    observation: RadarFrameObservation,
+) -> list[dict[str, Any]]:
+    """Evaluate one already parsed position without rebuilding station snapshots."""
+
+    radar_collector = current_rx_radar_stage_collector()
+    with rx_radar_stage(radar_collector, "settings_gate_read"):
+        settings = get_notification_settings()
+    if not settings["radar_enabled"]:
+        return []
+    if not observation.callsign or not _valid_radar_position(
+        observation.latitude,
+        observation.longitude,
+    ):
+        return []
+
+    with rx_radar_stage(radar_collector, "rules_read"):
+        ensure_notification_defaults()
+        rules = [
+            dict(row)
+            for row in fetch_all(
+                """
+                SELECT id, enabled, pattern, distance_m
+                FROM notification_radar_rules
+                ORDER BY id ASC
+                """
+            )
+        ]
+    if not rules:
+        return []
+
+    with rx_radar_stage(radar_collector, "configuration_db_read"):
+        station_settings = get_station_settings()
+        ignored_station_keys = _notification_radar_ignored_station_keys(station_settings)
+    with rx_radar_stage(radar_collector, "configuration_normalize"):
+        station_key = observation.callsign.strip().upper()
+        ignored_patterns = _parse_radar_ignored_patterns(settings.get("radar_ignored_patterns"))
+        reference_latitude = _parse_coordinate(station_settings.get("latitude"))
+        reference_longitude = _parse_coordinate(station_settings.get("longitude"))
+        reference_station = _reference_station_label(station_settings)
+    if station_key.casefold() in ignored_station_keys or _station_matches_ignored_patterns(
+        station_key,
+        ignored_patterns,
+    ):
+        return []
+
+    with rx_radar_stage(radar_collector, "callsign_rule_filter"):
+        matching_rules = [
+            rule
+            for rule in rules
+            if pattern_matches_callsign(str(rule.get("pattern") or ""), station_key)
+        ]
+    if not matching_rules:
+        return []
+
+    evaluated_rules: list[tuple[dict[str, Any], int | None, bool]] = []
+    with rx_radar_stage(radar_collector, "rule_distance_evaluation"):
+        snapshot = {
+            "latitude": observation.latitude,
+            "longitude": observation.longitude,
+        }
+        for rule in matching_rules:
+            threshold_m = int(rule.get("distance_m") or 0)
+            distance_m = _snapshot_distance_m(
+                snapshot,
+                reference_latitude,
+                reference_longitude,
+            )
+            is_inside = threshold_m <= 0 or (
+                distance_m is not None and distance_m <= threshold_m
+            )
+            evaluated_rules.append((rule, distance_m, is_inside))
+
+    rule_ids = [int(rule["id"]) for rule, _distance_m, _is_inside in evaluated_rules]
+    placeholders = ", ".join("?" for _rule_id in rule_ids)
+    pending_logs: list[str] = []
+    events: list[dict[str, Any]] = []
+    with rx_radar_stage(radar_collector, "evaluation_transaction"):
+        with get_connection() as connection:
+            with rx_radar_stage(radar_collector, "state_read"):
+                state_rows = connection.execute(
+                    f"""
+                    SELECT rule_id, station_key, is_inside, last_matched_at
+                    FROM notification_radar_state
+                    WHERE station_key = ? COLLATE NOCASE
+                      AND rule_id IN ({placeholders})
+                    """,
+                    (station_key, *rule_ids),
+                ).fetchall()
+                state_by_rule = {int(row["rule_id"]): dict(row) for row in state_rows}
+
+            with rx_radar_stage(radar_collector, "state_transition_persistence"):
+                for rule, distance_m, is_inside in evaluated_rules:
+                    rule_id = int(rule["id"])
+                    previous = state_by_rule.get(rule_id)
+                    was_inside = bool(int(previous.get("is_inside") or 0)) if previous else False
+                    if is_inside:
+                        _upsert_radar_state(
+                            connection,
+                            rule_id=rule_id,
+                            station_key=station_key,
+                            is_inside=1,
+                            last_matched_at=observation.timestamp if not was_inside else None,
+                        )
+                        if not was_inside and bool(int(rule.get("enabled") or 0)):
+                            pending_logs.append(
+                                f"{station_key} {_format_utc_log_timestamp(observation.timestamp)} wyslano powiadomienie; zalozono blokade ponownej wysylki"
+                            )
+                            with rx_radar_stage(radar_collector, "event_build"):
+                                events.append(
+                                    build_radar_station_match_event(
+                                        station=station_key,
+                                        matched_rule=rule,
+                                        distance_m=distance_m,
+                                        threshold_m=int(rule.get("distance_m") or 0),
+                                        latitude=str(observation.latitude),
+                                        longitude=str(observation.longitude),
+                                        reference_latitude=(
+                                            str(reference_latitude)
+                                            if reference_latitude is not None
+                                            else None
+                                        ),
+                                        reference_longitude=(
+                                            str(reference_longitude)
+                                            if reference_longitude is not None
+                                            else None
+                                        ),
+                                        reference_station=reference_station,
+                                        timestamp=observation.timestamp,
+                                    )
+                                )
+                    elif was_inside:
+                        pending_logs.append(
+                            f"{station_key} {_format_utc_log_timestamp(observation.timestamp)} wyszedl z zasiegu / wyespirowal czas; zdejmuje blokade"
+                        )
+                        _upsert_radar_state(
+                            connection,
+                            rule_id=rule_id,
+                            station_key=station_key,
+                            is_inside=0,
+                            last_matched_at=None,
+                        )
+
+    with rx_radar_stage(radar_collector, "event_log_persistence"):
+        for message in pending_logs:
+            log_event("INFO", NOTIFICATION_RADAR_EVENT_LOG_CATEGORY, message)
+    return events
+
+
 def queue_radar_notifications(*, timestamp: str | None = None) -> None:
+    """Legacy snapshot evaluation retained for explicit UI/analytics callers."""
+
     with collect_rx_radar_stages(current_rx_side_effect_stage_collector()) as radar_collector:
         with rx_radar_stage(radar_collector, "settings_gate_read"):
             settings = get_notification_settings()

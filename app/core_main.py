@@ -14,6 +14,11 @@ from app.services.beacon_scheduler import BeaconSchedulerService
 from app.services.bulletin_scheduler import BulletinSchedulerService
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
 from app.services.maintenance_scheduler import MaintenanceSchedulerService
+from app.services.notifications import (
+    radar_notification_dispatcher_snapshot,
+    start_radar_notification_dispatcher,
+    stop_radar_notification_dispatcher,
+)
 from app.services.object_scheduler import ObjectSchedulerService
 from app.services.own_alert_scheduler import OwnAlertSchedulerService
 from app.services.outbound_runtime import OutboundService
@@ -59,6 +64,7 @@ async def lifespan(app_instance: FastAPI):
     app_instance.state.own_alert_scheduler = own_alert_scheduler
     app_instance.state.wx_scheduler = wx_scheduler
     app_instance.state.radio_activity_aggregator = radio_activity_aggregator
+    await start_radar_notification_dispatcher()
     await aprsis_uplink.start()
     await aprsis_tx_dispatcher.start()
     await rf_tx_dispatcher.start()
@@ -89,6 +95,7 @@ async def lifespan(app_instance: FastAPI):
         await digi_flow_runtime.stop()
         await aprsis_tx_dispatcher.stop()
         await aprsis_uplink.stop()
+        await stop_radar_notification_dispatcher()
         await rf_tx_dispatcher.stop()
 
 
@@ -113,7 +120,11 @@ def traffic_snapshot() -> JSONResponse:
 @app.get("/api/digi-flows/latency")
 def digi_flow_latency_snapshot() -> JSONResponse:
     snapshot = app.state.digi_flow_runtime.latency_snapshot()
-    snapshot["rx_side_effect_dispatcher"] = app.state.aprsis_uplink.rx_side_effect_snapshot()
+    rx_side_effect_snapshot = app.state.aprsis_uplink.rx_side_effect_snapshot()
+    radar_snapshot = radar_notification_dispatcher_snapshot()
+    rx_side_effect_snapshot["radar_dispatcher"] = radar_snapshot
+    rx_side_effect_snapshot["radar_breakdown_ms"] = radar_snapshot["radar_breakdown_ms"]
+    snapshot["rx_side_effect_dispatcher"] = rx_side_effect_snapshot
     return JSONResponse(snapshot)
 
 

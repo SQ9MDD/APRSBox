@@ -735,10 +735,6 @@ class AprsisAsyncSideEffectTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("statistics", metrics["stage_breakdown_ms"])
                 for stage_name in metrics["last_stage_order"]:
                     self.assertEqual(metrics["stage_breakdown_ms"][stage_name]["count"], 1)
-                self.assertEqual(
-                    metrics["radar_breakdown_ms"]["settings_gate_read"]["count"],
-                    1,
-                )
             finally:
                 await service._rx_side_effect_dispatcher.stop()
 
