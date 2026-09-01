@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.14.dev - 01.09.2026
+- `RX / wydajność`: ciężkie operacje persistence i projekcji zostały odpięte od realtime DigiFlow i przeniesione do ograniczonej, uporządkowanej kolejki side-effectów z kontrolowanym shutdownem oraz metrykami opóźnień, przepełnień i czasów poszczególnych etapów.
+- `Radar / wydajność`: radar przetwarza teraz pojedynczą, już sparsowaną ramkę pozycyjną w dedykowanym workerze zamiast przebudowywać pełną listę stacji i ponownie parsować historię TNC2. Zachowano reguły exact/wildcard, obliczanie dystansu, stan blokady powtórzeń i powiadomienia; dodano metryki bounded queue i szczegółowe czasy etapów.
+
 ## 1.12.13.dev - 01.09.2026
 - `Packet Routing / diagnostyka`: metryki DigiFlow są rozdzielone według źródła i interfejsu, obejmują fazy workera oraz lag event loop; routing korzysta z cache konfiguracji, ścieżek i tożsamości zamiast odczytów SQLite per ramka.
 - `APRS-IS / uvloop`: niezerowy bufor transportu po poprawnym `drain()` nie jest już błędem TX; nadal obsługiwane są zamknięty transport oraz rzeczywiste błędy zapisu i drain. Dziękujemy SQ5BUJ za zgłoszone uwagi.
