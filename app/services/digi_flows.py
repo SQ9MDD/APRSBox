@@ -110,6 +110,9 @@ class DigiFlowRoutingSnapshot:
     by_source_kind: dict[str, tuple[dict[str, Any], ...]]
     by_source_endpoint: dict[tuple[str, str], tuple[dict[str, Any], ...]]
     by_target_endpoint: dict[tuple[str, str], tuple[dict[str, Any], ...]]
+    modems_by_name: dict[str, dict[str, Any]]
+    local_station_identity: str
+    local_station_identities: dict[str, str]
 
 
 _routing_snapshot_lock = Lock()
@@ -1486,6 +1489,17 @@ def _prepare_runtime_flow(flow: dict[str, Any]) -> dict[str, Any]:
                 for value in config.get("callsigns") or []
                 if (compiled := _compile_callsign_pattern(value)) is not None
             )
+        elif step_type == "filter_path":
+            step["_trace_path_specs"] = tuple(
+                str(value).strip().upper().rstrip("*")
+                for value in config.get("trace_paths") or []
+                if str(value).strip()
+            )
+            step["_no_trace_path_specs"] = tuple(
+                str(value).strip().upper().rstrip("*")
+                for value in config.get("no_trace_paths") or []
+                if str(value).strip()
+            )
         elif step_type == "filter_digi":
             step["_compiled_callsign_patterns"] = tuple(
                 compiled
@@ -1515,6 +1529,32 @@ def reload_digi_flow_routing_snapshot() -> DigiFlowRoutingSnapshot:
     global _routing_snapshot, _routing_snapshot_revision
     with _routing_snapshot_reload_lock:
         flows = tuple(_prepare_runtime_flow(flow) for flow in list_enabled_digi_flows())
+        modem_rows = fetch_all("SELECT name, modem_type, enabled, tx_blocked FROM modems")
+        modems_by_name = {
+            str(row["name"] or "").strip(): dict(row)
+            for row in modem_rows
+            if str(row["name"] or "").strip()
+        }
+        station_row = fetch_one("SELECT callsign, ssid FROM station_settings WHERE id = 1")
+        station_callsign = str(station_row["callsign"] or "").strip().upper() if station_row else ""
+        station_ssid = str(station_row["ssid"] or "").strip() if station_row else ""
+        if station_ssid == "0":
+            station_ssid = ""
+        local_station_identity = (
+            f"{station_callsign}-{station_ssid}" if station_callsign and station_ssid else station_callsign
+        )
+        local_station_identities: dict[str, str] = {}
+        if local_station_identity:
+            local_station_identities[local_station_identity] = "my_station"
+        wx_row = fetch_one("SELECT enabled, callsign, ssid FROM wx_config WHERE id = 1")
+        if wx_row is not None:
+            wx_callsign = str(wx_row["callsign"] or "").strip().upper() or station_callsign
+            wx_ssid = str(wx_row["ssid"] or "").strip()
+            if wx_ssid == "0":
+                wx_ssid = ""
+            wx_identity = f"{wx_callsign}-{wx_ssid}" if wx_callsign and wx_ssid else wx_callsign
+            if wx_identity and (int(wx_row["enabled"] or 0) == 1 or bool(str(wx_row["callsign"] or "").strip() or wx_ssid)):
+                local_station_identities.setdefault(wx_identity, "wx_station")
         by_source_kind_mutable: dict[str, list[dict[str, Any]]] = {}
         by_source_endpoint_mutable: dict[tuple[str, str], list[dict[str, Any]]] = {}
         by_target_endpoint_mutable: dict[tuple[str, str], list[dict[str, Any]]] = {}
@@ -1535,6 +1575,9 @@ def reload_digi_flow_routing_snapshot() -> DigiFlowRoutingSnapshot:
                 by_source_kind={key: tuple(value) for key, value in by_source_kind_mutable.items()},
                 by_source_endpoint={key: tuple(value) for key, value in by_source_endpoint_mutable.items()},
                 by_target_endpoint={key: tuple(value) for key, value in by_target_endpoint_mutable.items()},
+                modems_by_name=modems_by_name,
+                local_station_identity=local_station_identity,
+                local_station_identities=local_station_identities,
             )
             _routing_snapshot = snapshot
             return snapshot

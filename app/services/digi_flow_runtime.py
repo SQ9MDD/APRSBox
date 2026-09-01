@@ -10,7 +10,7 @@ from collections import OrderedDict
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from app.db import fetch_one, log_event, utc_now
 from app.i18n import get_app_language, get_format_translator, get_translator
@@ -91,11 +91,21 @@ def _monotonic_delta_ms(start: Any, end: Any) -> float | None:
 
 
 def _t(message: object) -> str:
-    return get_translator(get_app_language())(message)
+    translator = _active_worker_translator.get()
+    return (translator or get_translator(get_app_language()))(message)
 
 
 def _tf(message: object, params: dict[str, object] | None = None) -> str:
-    return get_format_translator(get_app_language())(message, params)
+    translator = _active_worker_translator.get()
+    if translator is None:
+        return get_format_translator(get_app_language())(message, params)
+    template = translator(message)
+    if not params:
+        return template
+    try:
+        return template.format(**params)
+    except (KeyError, ValueError):
+        return template
 
 
 @dataclass
@@ -165,6 +175,10 @@ class _WorkerTimingCollector:
 
 _active_worker_timing: ContextVar[_WorkerTimingCollector | None] = ContextVar(
     "aprsbox_active_worker_timing",
+    default=None,
+)
+_active_worker_translator: ContextVar[Callable[[object], str] | None] = ContextVar(
+    "aprsbox_active_worker_translator",
     default=None,
 )
 
@@ -755,6 +769,7 @@ class DigiFlowRuntimeService:
             step_samples=[],
         )
         token = _active_worker_timing.set(collector)
+        translator_token = _active_worker_translator.set(get_translator(get_app_language()))
         try:
             matching_started = time.monotonic()
             flows = self._matching_flows(
@@ -810,6 +825,7 @@ class DigiFlowRuntimeService:
             )
             collector.active = False
             _active_worker_timing.reset(token)
+            _active_worker_translator.reset(translator_token)
             self._record_processing_breakdown(collector)
 
     def _matching_flows(self, *, source_kind: str, source_ref: str) -> list[dict[str, Any]]:
@@ -1677,7 +1693,10 @@ class DigiFlowRuntimeService:
             )
             return {"decision": "drop"}
 
-        local_identity = _local_station_identity()
+        local_identity = next(
+            (identity for identity, owner in local_identities.items() if owner == _LOCAL_IDENTITY_MY),
+            "",
+        )
         consumed_local = _find_consumed_local_identity(path_tokens, local_identities)
         if consumed_local is not None:
             consumed_identity = consumed_local[0]
@@ -1700,8 +1719,20 @@ class DigiFlowRuntimeService:
 
         candidate = path_tokens[first_unconsumed_index]
         config = dict(step.get("config") or {})
-        trace_specs = [str(item).strip().upper() for item in config.get("trace_paths") or [] if str(item).strip()]
-        no_trace_specs = [str(item).strip().upper() for item in config.get("no_trace_paths") or [] if str(item).strip()]
+        trace_specs = step.get("_trace_path_specs")
+        if not isinstance(trace_specs, tuple):
+            trace_specs = tuple(
+                str(item).strip().upper().rstrip("*")
+                for item in config.get("trace_paths") or []
+                if str(item).strip()
+            )
+        no_trace_specs = step.get("_no_trace_path_specs")
+        if not isinstance(no_trace_specs, tuple):
+            no_trace_specs = tuple(
+                str(item).strip().upper().rstrip("*")
+                for item in config.get("no_trace_paths") or []
+                if str(item).strip()
+            )
         matched_trace = _find_matching_path_spec(candidate, trace_specs)
         matched_no_trace = _find_matching_path_spec(candidate, no_trace_specs)
 
@@ -2818,6 +2849,7 @@ class DigiFlowRuntimeService:
                 return_capable, q_reason = message_return_capable_for_rf_source(
                     str(context.get("source_ref") or ""),
                     consumed_hops=consumed_hops,
+                    routing_snapshot=get_digi_flow_routing_snapshot(),
                 )
             q_construct = "qAR" if return_capable else "qAO"
             tx_line = _build_aprsis_uplink_line(
@@ -3055,9 +3087,8 @@ def _receiver_source_ref_aliases(value: str) -> set[str]:
 def _find_matching_path_spec(token: str, specs: list[str]) -> str | None:
     normalized_token = token.strip().upper().rstrip("*")
     for spec in specs:
-        normalized_spec = spec.strip().upper().rstrip("*")
-        if normalized_token == normalized_spec:
-            return normalized_spec
+        if normalized_token == spec:
+            return spec
     return None
 
 
@@ -3396,33 +3427,11 @@ def _split_path_tokens_keep_case(path: str) -> list[str]:
 
 
 def _local_station_identity() -> str:
-    station_settings = get_station_settings()
-    return _build_source_key(station_settings.get("callsign"), station_settings.get("ssid"))
+    return get_digi_flow_routing_snapshot().local_station_identity
 
 
 def _local_station_identities() -> dict[str, str]:
-    station_settings = get_station_settings()
-    identities: dict[str, str] = {}
-    my_identity = _build_source_key(station_settings.get("callsign"), station_settings.get("ssid"))
-    if my_identity:
-        identities[my_identity] = _LOCAL_IDENTITY_MY
-
-    wx_row = fetch_one("SELECT enabled, callsign, ssid FROM wx_config WHERE id = 1")
-    if not wx_row:
-        return identities
-
-    wx_enabled = int(wx_row["enabled"] or 0) == 1
-    raw_wx_callsign = str(wx_row["callsign"] or "").strip().upper()
-    raw_wx_ssid = str(wx_row["ssid"] or "").strip()
-    wx_has_explicit_identity = bool(raw_wx_callsign or raw_wx_ssid)
-    if not wx_enabled and not wx_has_explicit_identity:
-        return identities
-
-    wx_callsign = raw_wx_callsign or str(station_settings.get("callsign") or "").strip().upper()
-    wx_identity = _build_source_key(wx_callsign, raw_wx_ssid)
-    if wx_identity:
-        identities.setdefault(wx_identity, _LOCAL_IDENTITY_WX)
-    return identities
+    return dict(get_digi_flow_routing_snapshot().local_station_identities)
 
 
 def _find_consumed_local_identity(path_tokens: list[str], local_identities: dict[str, str]) -> tuple[str, str] | None:

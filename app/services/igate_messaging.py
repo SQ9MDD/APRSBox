@@ -251,10 +251,17 @@ def message_return_capable_for_rf_source(
     rf_source_ref: str,
     *,
     consumed_hops: int = 0,
+    routing_snapshot: Any | None = None,
 ) -> tuple[bool, str]:
     source_ref = str(rf_source_ref or "").strip()
     if not source_ref:
         return False, "missing_rf_source"
+    if routing_snapshot is not None:
+        return _message_return_capable_from_snapshot(
+            source_ref,
+            consumed_hops=consumed_hops,
+            routing_snapshot=routing_snapshot,
+        )
     source_row = fetch_one(
         f"""
         SELECT 1
@@ -297,6 +304,51 @@ def message_return_capable_for_rf_source(
         if int(row["target_enabled"] or 0) != 1 or int(row["target_tx_blocked"] or 0) == 1:
             continue
         return True, f"message_return_flow:{int(row['flow_id'])}"
+    return False, "no_message_return_flow"
+
+
+def _message_return_capable_from_snapshot(
+    source_ref: str,
+    *,
+    consumed_hops: int,
+    routing_snapshot: Any,
+) -> tuple[bool, str]:
+    modems_by_name = getattr(routing_snapshot, "modems_by_name", {}) or {}
+    source_modem = modems_by_name.get(source_ref)
+    if source_modem is None or (
+        int(source_modem.get("enabled") or 0) != 1
+        or int(source_modem.get("tx_blocked") or 0) == 1
+        or str(source_modem.get("modem_type") or "").upper() not in TX_CAPABLE_MODEM_TYPES
+    ):
+        return False, "rf_source_not_tx_enabled"
+    if int(consumed_hops) > MAX_LOCAL_CONSUMED_HOPS:
+        return False, "rf_source_not_direct"
+
+    flows = sorted(
+        getattr(routing_snapshot, "by_source_kind", {}).get("receiver_aprsis", ()),
+        key=lambda flow: int(flow.get("id") or 0),
+    )
+    for flow in flows:
+        if str(flow.get("target_kind") or "") != "tx_rf":
+            continue
+        if not any(
+            str(step.get("step_type") or "") == MESSAGE_DELIVERY_STEP_TYPE
+            and int(step.get("enabled") or 0) == 1
+            for step in flow.get("steps") or ()
+        ):
+            continue
+        aprsis_source = modems_by_name.get(str(flow.get("source_ref") or ""))
+        rf_target = modems_by_name.get(str(flow.get("target_ref") or ""))
+        if aprsis_source is None or int(aprsis_source.get("enabled") or 0) != 1:
+            continue
+        if (
+            rf_target is None
+            or int(rf_target.get("enabled") or 0) != 1
+            or int(rf_target.get("tx_blocked") or 0) == 1
+            or str(rf_target.get("modem_type") or "").upper() not in TX_CAPABLE_MODEM_TYPES
+        ):
+            continue
+        return True, f"message_return_flow:{int(flow['id'])}"
     return False, "no_message_return_flow"
 
 

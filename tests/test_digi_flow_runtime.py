@@ -1877,6 +1877,39 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await runtime.stop()
 
+    async def test_path_rule_uses_cached_identities_and_prepared_path_specs(self) -> None:
+        with temporary_database():
+            set_local_station_identity()
+            create_flow(
+                {
+                    "name": "Cached path rule",
+                    "description": "",
+                    "source_kind": "receiver_rf",
+                    "source_ref": "TNC-1",
+                    "target_kind": "action_log",
+                    "target_ref": "log-only",
+                    "enabled": 1,
+                    "steps": [
+                        {"step_type": "receiver_rf", "title": "Receiver RF", "enabled": 1, "config": {"rf_port": "TNC-1"}},
+                        {"step_type": "filter_path", "title": "Path Rule", "enabled": 1, "config": {"mode": "allow", "trace_paths": ["WIDE1-1"], "no_trace_paths": []}},
+                        {"step_type": "action_log", "title": "Log Only", "enabled": 1, "config": {"log_tag": "log-only"}},
+                    ],
+                }
+            )
+            runtime = DigiFlowRuntimeService()
+            await runtime.start()
+            try:
+                with patch("app.services.digi_flow_runtime.fetch_one", side_effect=AssertionError("unexpected SQLite read")):
+                    for index in range(4):
+                        runtime.enqueue_tnc2_frame(
+                            source_kind="receiver_rf",
+                            source_ref="TNC-1",
+                            raw_payload=f"SP8ABC-{index}>APRS,WIDE1-1:>Cached path",
+                        )
+                    await runtime.wait_until_idle()
+            finally:
+                await runtime.stop()
+
     async def test_outbound_service_sends_digi_tx_job(self) -> None:
         with temporary_database():
             insert_modem(name="RF-OUT", device_path="127.0.0.1:9004")

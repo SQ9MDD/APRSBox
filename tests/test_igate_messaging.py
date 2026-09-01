@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import execute, fetch_one, init_db, utc_now
 from app.services.aprsis_rf import APRSIS_FLOW_SOURCE_KIND, get_aprsis_rf_stats
@@ -11,6 +12,7 @@ from app.services.content import parse_tnc2_frame
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
 from app.services.digi_flows import (
     create_digi_flow,
+    get_digi_flow_routing_snapshot,
     get_digi_flow_execution_summaries,
     set_digi_flow_enabled,
 )
@@ -633,6 +635,14 @@ class IgateMessagingRuntimeTests(unittest.IsolatedAsyncioTestCase):
             execute("UPDATE modems SET tx_blocked = 0 WHERE name = 'RF-OUT'")
             create_digi_flow(rf_to_aprsis_flow_payload())
             create_digi_flow(local_tx_to_aprsis_flow_payload())
+            snapshot = get_digi_flow_routing_snapshot()
+            with patch("app.services.igate_messaging.fetch_one", side_effect=AssertionError("unexpected SQLite read")), patch(
+                "app.services.igate_messaging.fetch_all", side_effect=AssertionError("unexpected SQLite read")
+            ):
+                self.assertEqual(
+                    message_return_capable_for_rf_source("RF-OUT", routing_snapshot=snapshot),
+                    (True, f"message_return_flow:{return_flow_id}"),
+                )
 
             class FakeAprsisClient:
                 def __init__(self) -> None:

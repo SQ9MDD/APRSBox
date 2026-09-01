@@ -196,6 +196,9 @@ def save_wx_config(payload: dict[str, Any]) -> None:
             """,
             normalized,
         )
+    from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+    reload_digi_flow_routing_snapshot()
     log_event(
         "INFO",
         "wx",

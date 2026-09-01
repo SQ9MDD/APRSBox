@@ -643,6 +643,9 @@ def update_station_settings(payload: dict[str, Any]) -> None:
             values,
         )
     set_app_setting(STATION_TX_INTERNAL_MODE_SETTING_KEY, "1" if internal_tx_enabled else "0")
+    from app.services.digi_flows import reload_digi_flow_routing_snapshot
+
+    reload_digi_flow_routing_snapshot()
     log_event(
         "INFO",
         "config",
