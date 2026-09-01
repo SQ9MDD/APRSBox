@@ -1,6 +1,7 @@
 # Changelog
 
-## 1.12.14.dev - 2026-09-01
+## 1.12.15 - 2026-09-01
+- `Stabile Version`: Die Leistungsverbesserungen für RX, DigiFlow und Radar aus dem aktuellen Entwicklungszyklus wurden in den stabilen Kanal übernommen.
 - `RX / Leistung`: aufwendige Persistenz- und Projektionsarbeiten wurden vom Echtzeitpfad von DigiFlow getrennt und in eine begrenzte, geordnete Side-Effect-Warteschlange mit kontrolliertem Herunterfahren sowie Metriken für Latenz, Überlauf und einzelne Verarbeitungsschritte verschoben.
 - `Radar / Leistung`: Das Radar verarbeitet jetzt einen einzelnen, bereits geparsten Positionsrahmen in einem dedizierten Worker, statt die vollständige Stationsliste neu aufzubauen und die TNC2-Historie erneut zu parsen. Exact-/Wildcard-Regeln, Entfernungsprüfung, Wiederholungssperre und Benachrichtigungen bleiben erhalten; ergänzt wurden Metriken für die begrenzte Warteschlange und die einzelnen Zeitphasen.
 

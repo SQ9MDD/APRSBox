@@ -1,6 +1,7 @@
 # Changelog
 
-## 1.12.14.dev - 2026-09-01
+## 1.12.15 - 2026-09-01
+- `Stable release`: the RX, DigiFlow, and radar performance changes from the current development cycle have been promoted to the stable channel.
 - `RX / performance`: heavy persistence and projection work was detached from the realtime DigiFlow path and moved to a bounded, ordered side-effect queue with controlled shutdown and metrics for latency, overflow, and individual processing stages.
 - `Radar / performance`: radar now processes one already parsed position frame in a dedicated worker instead of rebuilding the full station list and reparsing TNC2 history. Exact/wildcard rules, distance checks, repeat-block state, and notifications are preserved, with bounded-queue and per-stage timing metrics added.
 
