@@ -252,7 +252,7 @@ verify_runtime_dependencies() {
     if [ ! -x "$VENV_DIR/bin/python" ]; then
         fail "Python virtual environment is missing at $VENV_DIR"
     fi
-    "$VENV_DIR/bin/python" -c "import uvloop, httptools"
+    "$VENV_DIR/bin/python" -c "import uvicorn"
 }
 
 resolve_update_channel() {
