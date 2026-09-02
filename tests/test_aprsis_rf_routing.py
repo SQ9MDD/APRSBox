@@ -3,6 +3,7 @@ import contextlib
 import json
 import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -735,6 +736,57 @@ class AprsisRfRuntimeTests(unittest.IsolatedAsyncioTestCase):
         await runtime.wait_until_idle()
         await runtime.stop()
         return runtime, frames
+
+    async def test_aprsis_flow_uses_routing_snapshot_for_station_and_target(self) -> None:
+        self.create_flow(callsigns=["SP5ABC"], radius_km="2")
+        runtime = DigiFlowRuntimeService(aprsis_rf_delay_override=0)
+        await runtime.start()
+        try:
+            with patch("app.services.digi_flow_runtime.get_station_settings", create=True) as station_read:
+                with patch("app.services.aprsis_rf.fetch_one") as modem_read:
+                    with patch("app.services.igate_messaging.fetch_all") as active_modems_read:
+                        runtime.enqueue_tnc2_frame(
+                            source_kind=APRSIS_FLOW_SOURCE_KIND,
+                            source_ref="APRSIS-RX",
+                            raw_payload=position_line(),
+                        )
+                        runtime.enqueue_tnc2_frame(
+                            source_kind=APRSIS_FLOW_SOURCE_KIND,
+                            source_ref="APRSIS-RX",
+                            raw_payload=message_line(),
+                        )
+                        await runtime.wait_until_idle()
+            station_read.assert_not_called()
+            modem_read.assert_not_called()
+            active_modems_read.assert_not_called()
+        finally:
+            await runtime.stop()
+
+    async def test_aprsis_stat_persistence_does_not_hold_digiflow_worker(self) -> None:
+        self.create_flow(callsigns=[], radius_km="")
+        persistence_started = threading.Event()
+        release_persistence = threading.Event()
+
+        def slow_persist(*_args, **_kwargs) -> None:
+            persistence_started.set()
+            release_persistence.wait(timeout=1.0)
+
+        runtime = DigiFlowRuntimeService(aprsis_rf_delay_override=0)
+        await runtime.start()
+        try:
+            with patch("app.services.digi_flow_runtime.record_aprsis_rf_stat", side_effect=slow_persist):
+                runtime.enqueue_tnc2_frame(
+                    source_kind=APRSIS_FLOW_SOURCE_KIND,
+                    source_ref="APRSIS-RX",
+                    raw_payload=position_line(),
+                )
+                await asyncio.wait_for(runtime._queue.join(), timeout=0.25)
+                await asyncio.wait_for(asyncio.to_thread(persistence_started.wait), timeout=1.0)
+                release_persistence.set()
+                await runtime.wait_until_idle()
+        finally:
+            release_persistence.set()
+            await runtime.stop()
 
     async def test_empty_filter_is_valid_and_default_deny_without_pending_or_job(self) -> None:
         flow_id = self.create_flow(callsigns=[], radius_km="")

@@ -111,6 +111,7 @@ class DigiFlowRoutingSnapshot:
     by_source_endpoint: dict[tuple[str, str], tuple[dict[str, Any], ...]]
     by_target_endpoint: dict[tuple[str, str], tuple[dict[str, Any], ...]]
     modems_by_name: dict[str, dict[str, Any]]
+    station_settings: dict[str, Any]
     local_station_identity: str
     local_station_identities: dict[str, str]
 
@@ -1537,7 +1538,8 @@ def reload_digi_flow_routing_snapshot() -> DigiFlowRoutingSnapshot:
             for row in modem_rows
             if str(row["name"] or "").strip()
         }
-        station_row = fetch_one("SELECT callsign, ssid FROM station_settings WHERE id = 1")
+        station_row = fetch_one("SELECT callsign, ssid, latitude, longitude FROM station_settings WHERE id = 1")
+        station_settings = dict(station_row) if station_row is not None else {}
         station_callsign = str(station_row["callsign"] or "").strip().upper() if station_row else ""
         station_ssid = str(station_row["ssid"] or "").strip() if station_row else ""
         if station_ssid == "0":
@@ -1578,6 +1580,7 @@ def reload_digi_flow_routing_snapshot() -> DigiFlowRoutingSnapshot:
                 by_source_endpoint={key: tuple(value) for key, value in by_source_endpoint_mutable.items()},
                 by_target_endpoint={key: tuple(value) for key, value in by_target_endpoint_mutable.items()},
                 modems_by_name=modems_by_name,
+                station_settings=station_settings,
                 local_station_identity=local_station_identity,
                 local_station_identities=local_station_identities,
             )

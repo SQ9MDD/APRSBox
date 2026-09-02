@@ -115,6 +115,7 @@ def evaluate_message_delivery(
     flow_id: int,
     local_igate: str,
     now: datetime | None = None,
+    routing_snapshot: Any | None = None,
 ) -> dict[str, Any]:
     if not parsed:
         return {"route": "drop", "reason": "invalid_aprs"}
@@ -161,12 +162,14 @@ def evaluate_message_delivery(
             "recipient": addressee,
         }
 
-    interface_ids = _active_tx_enabled_rf_interface_ids()
+    interface_ids = _active_tx_enabled_rf_interface_ids(routing_snapshot=routing_snapshot)
+    interface_names_by_id = _snapshot_interface_names_by_id(routing_snapshot)
     cutoff = reference - timedelta(minutes=LOCAL_HEARD_WINDOW_MINUTES)
     recipient_heard = _recent_rf_heard(
         addressee,
         interface_ids=interface_ids,
         cutoff=cutoff,
+        interface_names_by_id=interface_names_by_id,
     )
     if recipient_heard is None:
         return {
@@ -186,6 +189,7 @@ def evaluate_message_delivery(
         sender,
         interface_ids=interface_ids,
         cutoff=cutoff,
+        interface_names_by_id=interface_names_by_id,
     ) is not None:
         return {
             "route": "drop",
@@ -389,7 +393,16 @@ def _has_pending_sender_position(flow_id: int, sender_key: str, *, now: datetime
     return row is not None
 
 
-def _active_tx_enabled_rf_interface_ids() -> list[int]:
+def _active_tx_enabled_rf_interface_ids(*, routing_snapshot: Any | None = None) -> list[int]:
+    if routing_snapshot is not None:
+        return [
+            int(modem["id"])
+            for modem in (getattr(routing_snapshot, "modems_by_name", {}) or {}).values()
+            if modem.get("id") is not None
+            and int(modem.get("enabled") or 0) == 1
+            and int(modem.get("tx_blocked") or 0) == 0
+            and str(modem.get("modem_type") or "").upper() in TX_CAPABLE_MODEM_TYPES
+        ]
     placeholders = ", ".join("?" for _ in TX_CAPABLE_MODEM_TYPES)
     rows = fetch_all(
         f"""
@@ -404,35 +417,60 @@ def _active_tx_enabled_rf_interface_ids() -> list[int]:
     return [int(row["id"]) for row in rows]
 
 
+def _snapshot_interface_names_by_id(routing_snapshot: Any | None) -> dict[int, str] | None:
+    if routing_snapshot is None:
+        return None
+    return {
+        int(modem["id"]): str(modem.get("name") or name)
+        for name, modem in (getattr(routing_snapshot, "modems_by_name", {}) or {}).items()
+        if modem.get("id") is not None
+    }
+
+
 def _recent_rf_heard(
     station_key: str,
     *,
     interface_ids: list[int],
     cutoff: datetime,
+    interface_names_by_id: dict[int, str] | None = None,
 ) -> Any | None:
     if not station_key or not interface_ids:
         return None
     placeholders = ", ".join("?" for _ in interface_ids)
-    return fetch_one(
+    if interface_names_by_id is None:
+        return fetch_one(
+            f"""
+            SELECT h.interface_id, h.last_heard_at, h.last_path, h.consumed_hops,
+                   m.name AS interface_name
+            FROM aprsis_igate_rf_heard AS h
+            JOIN modems AS m ON m.id = h.interface_id
+            WHERE h.station_key = ?
+              AND h.interface_id IN ({placeholders})
+              AND h.last_heard_at >= ?
+              AND h.consumed_hops = ?
+            ORDER BY h.last_heard_at DESC
+            LIMIT 1
+            """,
+            (station_key, *interface_ids, cutoff.isoformat(), MAX_LOCAL_CONSUMED_HOPS),
+        )
+    row = fetch_one(
         f"""
-        SELECT h.interface_id, h.last_heard_at, h.last_path, h.consumed_hops,
-               m.name AS interface_name
-        FROM aprsis_igate_rf_heard AS h
-        JOIN modems AS m ON m.id = h.interface_id
-        WHERE h.station_key = ?
-          AND h.interface_id IN ({placeholders})
-          AND h.last_heard_at >= ?
-          AND h.consumed_hops = ?
-        ORDER BY h.last_heard_at DESC
+        SELECT interface_id, last_heard_at, last_path, consumed_hops
+        FROM aprsis_igate_rf_heard
+        WHERE station_key = ?
+          AND interface_id IN ({placeholders})
+          AND last_heard_at >= ?
+          AND consumed_hops = ?
+        ORDER BY last_heard_at DESC
         LIMIT 1
         """,
-        (
-            station_key,
-            *interface_ids,
-            cutoff.isoformat(),
-            MAX_LOCAL_CONSUMED_HOPS,
-        ),
+        (station_key, *interface_ids, cutoff.isoformat(), MAX_LOCAL_CONSUMED_HOPS),
     )
+    if row is None:
+        return None
+    result = dict(row)
+    result["interface_name"] = interface_names_by_id.get(int(result["interface_id"]), "")
+    return result
 
 
 def _recent_internet_origin(station_key: str, *, cutoff: datetime) -> bool:

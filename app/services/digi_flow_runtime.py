@@ -25,7 +25,7 @@ from app.services.aprsis import (
     record_aprsis_tx_result,
 )
 from app.services.aprsis_tx_dispatcher import AprsIsTxDispatcher
-from app.services.content import get_station_settings, parse_tnc2_frame
+from app.services.content import parse_tnc2_frame
 from app.services.aprsis_rf import (
     ALLOW_RULES_STEP_TYPE,
     APRSIS_FLOW_SOURCE_KIND,
@@ -222,6 +222,7 @@ class DigiFlowRuntimeService:
         self._aprsis_rf_flow_buckets: dict[tuple[int, str], _TokenBucket] = {}
         self._aprsis_rf_source_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
         self._aprsis_rf_recipient_buckets: dict[tuple[int, str, str], _TokenBucket] = {}
+        self._aprsis_rf_stat_tasks: set[asyncio.Task[None]] = set()
         self._latency_metrics: dict[str, dict[str, float | int | None]] = {}
         self._latency_by_source_interface: dict[
             tuple[str, int | None, str], dict[str, dict[str, float | int | None]]
@@ -413,6 +414,7 @@ class DigiFlowRuntimeService:
         for task in cleanup_tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        await self._wait_for_aprsis_rf_stats()
         if self._task is None:
             return
         self._task.cancel()
@@ -447,6 +449,7 @@ class DigiFlowRuntimeService:
         if self._aprsis_tx_dispatcher is not None:
             await self._aprsis_tx_dispatcher.wait_until_idle()
         await self._trace_writer.wait_until_idle()
+        await self._wait_for_aprsis_rf_stats()
 
     def _log_digi_flow_event(self, **event: Any) -> None:
         collector = _active_worker_timing.get()
@@ -782,7 +785,7 @@ class DigiFlowRuntimeService:
             for flow in flows:
                 flow_id = int(flow["id"])
                 if str(frame.get("source_kind") or "") == APRSIS_FLOW_SOURCE_KIND:
-                    record_aprsis_rf_stat(flow_id, "received_from_aprsis")
+                    self._record_aprsis_rf_stat(flow_id, "received_from_aprsis")
                 flow_name = str(flow.get("name") or f"flow-{flow_id}")
                 source_label = f"{frame['source_kind']}:{frame['source_ref']}"
                 self._log_digi_flow_event(
@@ -1019,7 +1022,11 @@ class DigiFlowRuntimeService:
                 stat_counter="dropped_safety_guard",
             )
         if target_kind == "tx_rf":
-            _target, target_reason = validate_aprsis_rf_target(flow.get("target_ref"), require_active=True)
+            _target, target_reason = validate_aprsis_rf_target(
+                flow.get("target_ref"),
+                require_active=True,
+                routing_snapshot=get_digi_flow_routing_snapshot(),
+            )
             if target_reason:
                 return self._drop_aprsis_rf(
                     context,
@@ -1154,6 +1161,7 @@ class DigiFlowRuntimeService:
             context.get("parsed"),
             flow_id=flow_id,
             local_igate=_local_station_identity(),
+            routing_snapshot=get_digi_flow_routing_snapshot(),
         )
         route = str(result.get("route") or "")
         reason = str(result.get("reason") or "message_policy_rejected")
@@ -1181,7 +1189,7 @@ class DigiFlowRuntimeService:
                 if route == "message"
                 else "matched_associated_position"
             )
-            record_aprsis_rf_stat(flow_id, stat_counter)
+            self._record_aprsis_rf_stat(flow_id, stat_counter)
             if route == "message":
                 message = (
                     "APRS-IS Message Delivery Rule passed "
@@ -1245,7 +1253,7 @@ class DigiFlowRuntimeService:
         matched = matches_default_deny_filter(
             context.get("parsed"),
             config,
-            get_station_settings(),
+            get_digi_flow_routing_snapshot().station_settings,
         )
         if not matched:
             context["aprsis_default_deny_filter_matched"] = False
@@ -1257,7 +1265,7 @@ class DigiFlowRuntimeService:
                 event_type="inclusive_allow_rules",
             )
         context["aprsis_default_deny_filter_matched"] = True
-        record_aprsis_rf_stat(flow_id, "matched_allow_rule")
+        self._record_aprsis_rf_stat(flow_id, "matched_allow_rule")
         self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
@@ -1300,7 +1308,7 @@ class DigiFlowRuntimeService:
         event_type: str = "rf_guard",
     ) -> dict[str, str]:
         flow_id = int(context["flow"]["id"])
-        record_aprsis_rf_stat(flow_id, stat_counter)
+        self._record_aprsis_rf_stat(flow_id, stat_counter)
         self._log_digi_flow_event(
             frame_uid=context["frame_uid"],
             flow_id=flow_id,
@@ -2379,7 +2387,11 @@ class DigiFlowRuntimeService:
                 event_type="rf_tx_guard",
             )
         target = str(dict(target_step.get("config") or {}).get("rf_target") or "").strip()
-        _target_row, target_reason = validate_aprsis_rf_target(target, require_active=True)
+        _target_row, target_reason = validate_aprsis_rf_target(
+            target,
+            require_active=True,
+            routing_snapshot=get_digi_flow_routing_snapshot(),
+        )
         if target_reason:
             return self._drop_aprsis_rf(
                 context,
@@ -2479,7 +2491,11 @@ class DigiFlowRuntimeService:
                 return
             target_config = dict(target_step.get("config") or {})
             target_name = str(target_config.get("rf_target") or flow.get("target_ref") or "").strip()
-            target_row, target_reason = validate_aprsis_rf_target(target_name, require_active=True)
+            target_row, target_reason = validate_aprsis_rf_target(
+                target_name,
+                require_active=True,
+                routing_snapshot=get_digi_flow_routing_snapshot(),
+            )
             if target_reason or target_row is None:
                 self._finish_aprsis_rf_pending_drop(
                     entry,
@@ -2586,7 +2602,7 @@ class DigiFlowRuntimeService:
             )
             if not success:
                 reason = str(detail or "target_unavailable")
-                record_aprsis_rf_stat(entry.flow_id, "tx_failed")
+                self._record_aprsis_rf_stat(entry.flow_id, "tx_failed")
                 self._log_digi_flow_event(
                     frame_uid=entry.context["frame_uid"],
                     flow_id=entry.flow_id,
@@ -2604,7 +2620,7 @@ class DigiFlowRuntimeService:
                 return
             seen.queued_at = now
             self._aprsis_rf_seen.move_to_end(entry.packet_hash)
-            record_aprsis_rf_stat(entry.flow_id, "queued_to_rf")
+            self._record_aprsis_rf_stat(entry.flow_id, "queued_to_rf")
             entry.context["current_line"] = tx_line
             route_authorization = str(entry.context.get("aprsis_route_authorization") or "")
             delivery_result = dict(entry.context.get("aprsis_message_delivery_result") or {})
@@ -2645,6 +2661,30 @@ class DigiFlowRuntimeService:
             event_type="rf_tx_guard",
         )
         self._log_pipeline_finished(entry.context, decision="drop")
+
+    def _record_aprsis_rf_stat(self, flow_id: int, counter: str) -> None:
+        task = asyncio.create_task(
+            self._persist_aprsis_rf_stat(flow_id, counter),
+            name=f"aprsbox-aprsis-rf-stat-{flow_id}-{counter}",
+        )
+        self._aprsis_rf_stat_tasks.add(task)
+        task.add_done_callback(self._aprsis_rf_stat_tasks.discard)
+
+    async def _persist_aprsis_rf_stat(self, flow_id: int, counter: str) -> None:
+        try:
+            await asyncio.to_thread(record_aprsis_rf_stat, flow_id, counter)
+        except Exception as exc:
+            error = str(exc).strip() or exc.__class__.__name__
+            await asyncio.to_thread(
+                log_event,
+                "WARNING",
+                "digi_flow_runtime",
+                f"Could not persist APRS-IS to RF statistic {counter} for flow {flow_id}: {error}",
+            )
+
+    async def _wait_for_aprsis_rf_stats(self) -> None:
+        while self._aprsis_rf_stat_tasks:
+            await asyncio.gather(*tuple(self._aprsis_rf_stat_tasks), return_exceptions=True)
 
     def _consume_aprsis_rf_rate_limit(
         self,

@@ -246,23 +246,31 @@ def aprsis_rf_guard_reject_reason(parsed: dict[str, Any] | None) -> str | None:
     return None
 
 
-def validate_aprsis_rf_target(target_name: Any, *, require_active: bool = True) -> tuple[dict[str, Any] | None, str | None]:
+def validate_aprsis_rf_target(
+    target_name: Any,
+    *,
+    require_active: bool = True,
+    routing_snapshot: Any | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
     name = str(target_name or "").strip()
     if not name:
         return None, "target_unavailable"
-    row = fetch_one(
-        """
-        SELECT id, name, modem_type, band, device_path, enabled, tx_blocked
-        FROM modems
-        WHERE name = ?
-        ORDER BY id ASC
-        LIMIT 1
-        """,
-        (name,),
-    )
-    if row is None:
+    if routing_snapshot is None:
+        row = fetch_one(
+            """
+            SELECT id, name, modem_type, band, device_path, enabled, tx_blocked
+            FROM modems
+            WHERE name = ?
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (name,),
+        )
+        target = dict(row) if row is not None else None
+    else:
+        target = dict((getattr(routing_snapshot, "modems_by_name", {}) or {}).get(name) or {})
+    if not target:
         return None, "target_unavailable"
-    target = dict(row)
     modem_type = str(target.get("modem_type") or "").strip().upper()
     if modem_type == "OPENWEBRX_MQTT":
         return None, "target_rx_only"
