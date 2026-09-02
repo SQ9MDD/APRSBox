@@ -3149,6 +3149,10 @@ body {
     --dashboard-kpi-color: var(--warning);
 }
 
+.dashboard-v2-kpi-tile-red {
+    --dashboard-kpi-color: var(--danger);
+}
+
 .dashboard-v2-kpi-icon {
     display: grid;
     place-items: center;
@@ -3195,6 +3199,10 @@ body {
 .dashboard-v2-kpi-value-time {
     font-size: 0.78rem;
     line-height: 1.24;
+}
+
+.dashboard-v2-performance-score {
+    font-size: 1.3rem;
 }
 
 .dashboard-v2-activity-panel .panel-body {

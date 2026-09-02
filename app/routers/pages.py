@@ -183,7 +183,8 @@ from app.services.aprs_device_identification import (
     get_aprs_device_identification_status,
     refresh_aprs_device_identification_cache,
 )
-from app.services.core_client import restart_core_traffic_monitor
+from app.services.core_client import get_core_digi_flow_latency_snapshot, restart_core_traffic_monitor
+from app.services.digi_performance import evaluate_digi_performance
 from app.services.radio_activity import (
     get_dashboard_radio_activity,
     get_traffic_direct_heard_statistics,
@@ -4891,6 +4892,13 @@ def dashboard_radio_activity(
     except ValueError:
         return JSONResponse({"error": "Unsupported range."}, status_code=status.HTTP_400_BAD_REQUEST)
     return JSONResponse(payload)
+
+
+@router.get("/api/dashboard/performance")
+def dashboard_performance(
+    _: UserIdentity = Depends(require_roles("admin")),
+) -> JSONResponse:
+    return JSONResponse(evaluate_digi_performance(get_core_digi_flow_latency_snapshot()))
 
 
 @router.get("/api/statistics/traffic")

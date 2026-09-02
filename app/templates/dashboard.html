@@ -207,6 +207,23 @@
                 <strong class="dashboard-v2-kpi-value">{{ kpi.interfaces }}</strong>
             </span>
         </article>
+        {% if current_user.role == "admin" %}
+        <article
+            class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-violet"
+            id="dashboard-performance"
+            title="{{ t('APRSBox performance assessment for current traffic and configuration. Measures the available time margin on the critical DIGI processing path.') }}"
+        >
+            <span class="dashboard-v2-kpi-icon" aria-hidden="true">
+                <img src="{{ request.scope.root_path }}/static/icons/speedometer.svg" alt="">
+            </span>
+            <span class="dashboard-v2-kpi-copy" aria-live="polite">
+                <span class="dashboard-v2-kpi-label">{{ t("APRSBox Performance") }}</span>
+                <strong class="dashboard-v2-kpi-value dashboard-v2-performance-score" id="dashboard-performance-score">—</strong>
+                <span class="dashboard-v2-kpi-meta" id="dashboard-performance-label">{{ t("Collecting data") }}…</span>
+                <span class="dashboard-v2-kpi-meta" id="dashboard-performance-headroom"></span>
+            </span>
+        </article>
+        {% endif %}
     </section>
 
     <section class="dashboard-v2-middle-grid">
@@ -1009,4 +1026,63 @@
         });
     })();
 </script>
+{% if current_user.role == "admin" %}
+<script>
+    (() => {
+        const tile = document.getElementById("dashboard-performance");
+        if (!(tile instanceof HTMLElement)) return;
+        const score = document.getElementById("dashboard-performance-score");
+        const label = document.getElementById("dashboard-performance-label");
+        const headroom = document.getElementById("dashboard-performance-headroom");
+        const labels = {
+            Excellent: {{ t("Excellent")|tojson }},
+            Good: {{ t("Good")|tojson }},
+            Fair: {{ t("Fair")|tojson }},
+            Marginal: {{ t("Marginal")|tojson }},
+            Insufficient: {{ t("Insufficient")|tojson }},
+        };
+        const collectingDataLabel = {{ t("Collecting data")|tojson }};
+        const realtimeHeadroomLabel = {{ t("Realtime headroom")|tojson }};
+        const performanceUrl = {{ (request.scope.root_path ~ '/api/dashboard/performance')|tojson }};
+
+        const render = (performance) => {
+            const tone = String(performance?.tone || "neutral");
+            const color = tone === "ok" ? "green" : tone === "warn" ? "amber" : tone === "error" ? "red" : "violet";
+            tile.classList.remove(
+                "dashboard-v2-kpi-tile-green",
+                "dashboard-v2-kpi-tile-amber",
+                "dashboard-v2-kpi-tile-red",
+                "dashboard-v2-kpi-tile-violet",
+            );
+            tile.classList.add(`dashboard-v2-kpi-tile-${color}`);
+            if (performance?.status !== "ready" || !Number.isInteger(performance?.score)) {
+                if (score instanceof HTMLElement) score.textContent = "—";
+                if (label instanceof HTMLElement) label.textContent = `${collectingDataLabel}…`;
+                if (headroom instanceof HTMLElement) headroom.textContent = "";
+                return;
+            }
+            if (score instanceof HTMLElement) score.textContent = `${performance.score} / 5`;
+            if (label instanceof HTMLElement) label.textContent = labels[performance.label] || performance.label || "";
+            if (headroom instanceof HTMLElement) {
+                const multiplier = Number(performance.headroom_multiplier);
+                headroom.textContent = Number.isFinite(multiplier)
+                    ? `${realtimeHeadroomLabel}: ${multiplier.toFixed(1)}×`
+                    : "";
+            }
+        };
+        const load = async () => {
+            try {
+                const response = await fetch(performanceUrl, { headers: { Accept: "application/json" } });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                render(await response.json());
+            } catch (_) {
+                render({ status: "collecting", tone: "neutral" });
+            }
+        };
+        void load();
+        const refreshTimer = window.setInterval(() => void load(), 30000);
+        window.addEventListener("beforeunload", () => window.clearInterval(refreshTimer));
+    })();
+</script>
+{% endif %}
 {% endblock %}

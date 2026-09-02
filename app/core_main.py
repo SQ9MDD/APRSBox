@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
 from app import __version__
-from app.db import init_db, log_event
+from app.db import fetch_one, init_db, log_event
 from app.services.aprsis import AprsisClientService
 from app.services.aprsis_tx_dispatcher import AprsIsTxDispatcher
 from app.services.alerts import expire_aprs_alerts
@@ -26,6 +27,29 @@ from app.services.radio_activity import RadioActivityAggregatorService
 from app.services.rf_tx_dispatcher import RfTxDispatcher
 from app.services.traffic import TrafficMonitorService
 from app.services.wx_scheduler import WxSchedulerService
+
+
+DIGI_HOT_PATH_HEALTH_EVENT_WINDOW_SECONDS = 300
+
+
+def _recent_stale_digi_tx_drops() -> int:
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=DIGI_HOT_PATH_HEALTH_EVENT_WINDOW_SECONDS)).replace(
+        microsecond=0
+    ).isoformat()
+    try:
+        row = fetch_one(
+            """
+            SELECT COUNT(*) AS total
+            FROM event_logs
+            WHERE category = 'rf_tx_dispatcher'
+              AND message LIKE 'Dropped stale DIGI TX%'
+              AND created_at >= ?
+            """,
+            (cutoff,),
+        )
+    except Exception:
+        return 0
+    return int(row["total"] or 0) if row is not None else 0
 
 
 @asynccontextmanager
@@ -120,6 +144,9 @@ def traffic_snapshot() -> JSONResponse:
 @app.get("/api/digi-flows/latency")
 def digi_flow_latency_snapshot() -> JSONResponse:
     snapshot = app.state.digi_flow_runtime.latency_snapshot()
+    rf_tx_dispatcher = dict(snapshot.get("rf_tx_dispatcher") or {})
+    rf_tx_dispatcher["recent_stale_digi_tx_drops"] = _recent_stale_digi_tx_drops()
+    snapshot["rf_tx_dispatcher"] = rf_tx_dispatcher
     rx_side_effect_snapshot = app.state.aprsis_uplink.rx_side_effect_snapshot()
     radar_snapshot = radar_notification_dispatcher_snapshot()
     rx_side_effect_snapshot["radar_dispatcher"] = radar_snapshot

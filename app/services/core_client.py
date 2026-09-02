@@ -44,6 +44,39 @@ def get_core_traffic_snapshot() -> dict[str, Any]:
         return unavailable_traffic_snapshot("aprs-core returned invalid JSON.")
 
 
+def unavailable_digi_flow_latency_snapshot(detail: str) -> dict[str, Any]:
+    return {
+        "status": "unavailable",
+        "status_detail": detail,
+        "rf_digi_hot_path_ms": {"sample_count": 0, "p99_ms": None},
+        "digiflow_queue": {"recent_queue_overflows": 0},
+        "rf_tx_dispatcher": {
+            "recent_stale_digi_tx_drops": 0,
+            "recent_queue_overflows": 0,
+        },
+    }
+
+
+def get_core_digi_flow_latency_snapshot() -> dict[str, Any]:
+    try:
+        with urlopen(f"{settings.core_base_url}/api/digi-flows/latency", timeout=1.5) as response:
+            payload = response.read().decode("utf-8")
+    except HTTPError as exc:
+        return unavailable_digi_flow_latency_snapshot(f"aprs-core HTTP error: {exc.code}")
+    except URLError as exc:
+        return unavailable_digi_flow_latency_snapshot(f"aprs-core unavailable: {exc.reason}")
+    except OSError as exc:
+        return unavailable_digi_flow_latency_snapshot(f"aprs-core connection failed: {exc}")
+
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return unavailable_digi_flow_latency_snapshot("aprs-core returned invalid JSON.")
+    if not isinstance(parsed, dict):
+        return unavailable_digi_flow_latency_snapshot("aprs-core returned an invalid latency snapshot.")
+    return parsed
+
+
 def restart_core_traffic_monitor() -> dict[str, Any]:
     request = Request(f"{settings.core_base_url}/api/traffic/restart", method="POST")
     try:

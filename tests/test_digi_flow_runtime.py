@@ -133,6 +133,25 @@ class FakeRfTxDispatcher:
 
 
 class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rf_hot_path_snapshot_excludes_viscous_delay_samples(self) -> None:
+        with temporary_database():
+            runtime = DigiFlowRuntimeService()
+            runtime._record_rf_digi_hot_path(
+                {"source_kind": "receiver_rf", "rx_received_monotonic": time.monotonic() - 0.02},
+                viscous_delay_seconds=0,
+                sent=True,
+            )
+            runtime._record_rf_digi_hot_path(
+                {"source_kind": "receiver_rf", "rx_received_monotonic": time.monotonic() - 1.0},
+                viscous_delay_seconds=1.0,
+                sent=True,
+            )
+
+            snapshot = runtime.latency_snapshot()["rf_digi_hot_path_ms"]
+
+        self.assertEqual(snapshot["sample_count"], 1)
+        self.assertGreater(float(snapshot["p99_ms"] or 0), 0)
+
     async def test_rx_to_log_only_records_runtime_log(self) -> None:
         with temporary_database():
             flow_id = create_flow(

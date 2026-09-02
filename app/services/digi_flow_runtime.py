@@ -6,7 +6,7 @@ import math
 import re
 import time
 import uuid
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -79,6 +79,8 @@ _LOCAL_IDENTITY_MY = "my_station"
 _LOCAL_IDENTITY_WX = "wx_station"
 DIGI_FLOW_QUEUE_MAX_FRAMES = 256
 EVENT_LOOP_LAG_SAMPLE_INTERVAL_SECONDS = 0.1
+DIGI_RF_HOT_PATH_SAMPLE_LIMIT = 256
+DIGI_HOT_PATH_HEALTH_EVENT_WINDOW_SECONDS = 300.0
 
 
 def _monotonic_delta_ms(start: Any, end: Any) -> float | None:
@@ -231,9 +233,12 @@ class DigiFlowRuntimeService:
             tuple[str, int | None, str], dict[str, dict[str, dict[str, float | int | None]]]
         ] = {}
         self._max_queue_depth = 0
+        self._rf_digi_hot_path_samples_ms: deque[float] = deque(maxlen=DIGI_RF_HOT_PATH_SAMPLE_LIMIT)
+        self._recent_digiflow_queue_overflows: deque[float] = deque(maxlen=DIGI_FLOW_QUEUE_MAX_FRAMES)
         reload_digi_flow_routing_snapshot()
 
     def latency_snapshot(self) -> dict[str, Any]:
+        self._prune_hot_path_health_events()
         routing_snapshot = get_digi_flow_routing_snapshot()
         dispatcher_snapshot = (
             self._rf_tx_dispatcher.latency_snapshot()
@@ -271,6 +276,7 @@ class DigiFlowRuntimeService:
                 )
             ],
             "event_loop_lag_ms": dict(self._latency_metrics.get("event_loop_lag", {})),
+            "rf_digi_hot_path_ms": self._rf_digi_hot_path_snapshot(),
             "digiflow_config_cache": {
                 "revision": routing_snapshot.revision,
                 "enabled_flow_count": len(routing_snapshot.flows),
@@ -281,6 +287,7 @@ class DigiFlowRuntimeService:
                 "current_depth": self._queue.qsize(),
                 "max_depth": self._max_queue_depth,
                 "capacity": self._queue.maxsize,
+                "recent_queue_overflows": len(self._recent_digiflow_queue_overflows),
             },
             "rf_tx_dispatcher": dispatcher_snapshot,
             "aprsis_tx_dispatcher": (
@@ -303,6 +310,30 @@ class DigiFlowRuntimeService:
         if value_ms is None:
             return
         self._update_latency_metric(self._latency_metrics, name, value_ms)
+
+    def _rf_digi_hot_path_snapshot(self) -> dict[str, float | int | None]:
+        samples = sorted(self._rf_digi_hot_path_samples_ms)
+        sample_count = len(samples)
+        if not samples:
+            return {"sample_count": 0, "p99_ms": None, "sample_limit": DIGI_RF_HOT_PATH_SAMPLE_LIMIT}
+        p99_index = max(0, math.ceil(sample_count * 0.99) - 1)
+        return {
+            "sample_count": sample_count,
+            "p99_ms": samples[p99_index],
+            "sample_limit": DIGI_RF_HOT_PATH_SAMPLE_LIMIT,
+        }
+
+    def _record_rf_digi_hot_path(self, context: dict[str, Any], *, viscous_delay_seconds: float, sent: bool) -> None:
+        if not sent or viscous_delay_seconds > 0 or str(context.get("source_kind") or "") != "receiver_rf":
+            return
+        elapsed_ms = _monotonic_delta_ms(context.get("rx_received_monotonic"), time.monotonic())
+        if elapsed_ms is not None:
+            self._rf_digi_hot_path_samples_ms.append(elapsed_ms)
+
+    def _prune_hot_path_health_events(self) -> None:
+        cutoff = time.monotonic() - DIGI_HOT_PATH_HEALTH_EVENT_WINDOW_SECONDS
+        while self._recent_digiflow_queue_overflows and self._recent_digiflow_queue_overflows[0] < cutoff:
+            self._recent_digiflow_queue_overflows.popleft()
 
     def _record_source_latency(
         self,
@@ -538,6 +569,7 @@ class DigiFlowRuntimeService:
             )
             if aprsis_targeted:
                 record_aprsis_tx_result(sent=False, frame_line=str(frame["raw_payload"]))
+            self._recent_digiflow_queue_overflows.append(time.monotonic())
             log_event(
                 "WARNING",
                 "digi_flow_runtime",
@@ -2346,9 +2378,16 @@ class DigiFlowRuntimeService:
                 else context.get("enqueue_monotonic"),
                 max_age_seconds=DIGI_TX_BASE_MAX_AGE_SECONDS + viscous_delay_seconds,
             )
+        if not success and "queue is full" in str(detail or "").lower():
+            self._recent_digiflow_queue_overflows.append(time.monotonic())
         self._record_latency(
             "digi_decision_to_rf_tx_enqueue",
             _monotonic_delta_ms(decision_monotonic, time.monotonic()),
+        )
+        self._record_rf_digi_hot_path(
+            context,
+            viscous_delay_seconds=viscous_delay_seconds,
+            sent=success,
         )
         decision = "tx" if success else "drop"
         message = (
