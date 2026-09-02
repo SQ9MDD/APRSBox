@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.17.dev - 02.09.2026
+- `Packet Routing / RF TX / wydajność`: worker DIGI RF korzysta teraz z istniejącego snapshotu konfiguracji modemów zamiast odczytu SQLite dla każdej ramki. Po udanym wysłaniu zapis historii ruchu odbywa się asynchronicznie poza krytyczną ścieżką TX, z zachowaniem zapisu przy kontrolowanym zamknięciu i obsługi błędów. Komunikat kolejkowania ramki DigiFlow ma poziom `DEBUG`, a maintenance uruchamia się co 5 minut zamiast co 30 sekund, co ogranicza konkurencję o SQLite na słabszych CPU.
+
 ## 1.12.15.dev - 01.09.2026
 - `Wydanie stabilne`: zmiany wydajnościowe RX, DigiFlow i radaru z bieżącego cyklu deweloperskiego zostały przeniesione do kanału stabilnego.
 - `RX / wydajność`: ciężkie operacje persistence i projekcji zostały odpięte od realtime DigiFlow i przeniesione do ograniczonej, uporządkowanej kolejki side-effectów z kontrolowanym shutdownem oraz metrykami opóźnień, przepełnień i czasów poszczególnych etapów.

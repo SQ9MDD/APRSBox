@@ -1877,6 +1877,23 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await runtime.stop()
 
+    async def test_enqueued_frames_do_not_write_info_event_logs(self) -> None:
+        with temporary_database():
+            runtime = DigiFlowRuntimeService()
+            try:
+                result = runtime.enqueue_tnc2_frame(
+                    source_kind="receiver_rf",
+                    source_ref="TNC-1",
+                    raw_payload="SP8ABC>APRS:>Queued without an INFO event log",
+                )
+                self.assertTrue(result["accepted"])
+                rows = fetch_all(
+                    "SELECT level, message FROM event_logs WHERE category = 'digi_flow_runtime'"
+                )
+                self.assertFalse(any("Enqueued DIGI Flow frame" in str(row["message"]) for row in rows))
+            finally:
+                await runtime.stop()
+
     async def test_path_rule_uses_cached_identities_and_prepared_path_specs(self) -> None:
         with temporary_database():
             set_local_station_identity()

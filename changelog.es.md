@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.17.dev - 2026-09-02
+- `Packet Routing / RF TX / rendimiento`: el worker DIGI RF utiliza ahora el snapshot existente de la configuración de módems en lugar de leer SQLite para cada trama. Tras un envío correcto, el historial de tráfico se guarda de forma asíncrona fuera del camino crítico de TX, manteniendo la persistencia durante el cierre controlado y la gestión de errores. El mensaje de encolado de trama de DigiFlow pasa a `DEBUG` y el mantenimiento se ejecuta cada 5 minutos en vez de cada 30 segundos, reduciendo la contención de SQLite en CPU menos potentes.
+
 ## 1.12.15.dev - 2026-09-01
 - `Versión estable`: los cambios de rendimiento de RX, DigiFlow y radar del ciclo de desarrollo actual se han trasladado al canal estable.
 - `RX / rendimiento`: las operaciones pesadas de persistencia y proyección se separaron del camino realtime de DigiFlow y se trasladaron a una cola limitada y ordenada de efectos secundarios, con cierre controlado y métricas de latencia, desbordamiento y tiempos por etapa.

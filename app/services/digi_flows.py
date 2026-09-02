@@ -1529,7 +1529,9 @@ def reload_digi_flow_routing_snapshot() -> DigiFlowRoutingSnapshot:
     global _routing_snapshot, _routing_snapshot_revision
     with _routing_snapshot_reload_lock:
         flows = tuple(_prepare_runtime_flow(flow) for flow in list_enabled_digi_flows())
-        modem_rows = fetch_all("SELECT name, modem_type, enabled, tx_blocked FROM modems")
+        modem_rows = fetch_all(
+            "SELECT id, name, modem_type, band, device_path, enabled, tx_blocked FROM modems"
+        )
         modems_by_name = {
             str(row["name"] or "").strip(): dict(row)
             for row in modem_rows

@@ -553,9 +553,8 @@ class DigiFlowRuntimeService:
                 "drop_reason": "routing_queue_full",
             }
         self._max_queue_depth = max(self._max_queue_depth, self._queue.qsize())
-        source_is_aprsis = str(frame["source_kind"]) == APRSIS_FLOW_SOURCE_KIND
         log_event(
-            "DEBUG" if source_is_aprsis else "INFO",
+            "DEBUG",
             "digi_flow_runtime",
             (
                 "Enqueued DIGI Flow frame "

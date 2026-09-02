@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.17.dev - 2026-09-02
+- `Packet Routing / RF TX / Leistung`: Der DIGI-RF-Worker verwendet jetzt den vorhandenen Snapshot der Modemkonfiguration, statt SQLite für jeden Frame zu lesen. Nach erfolgreichem Senden wird der Verkehrsverlauf asynchron außerhalb des kritischen TX-Pfads gespeichert; die Speicherung beim kontrollierten Herunterfahren und die Fehlerbehandlung bleiben erhalten. Die DigiFlow-Meldung beim Einreihen eines Frames hat nun die Stufe `DEBUG`, und die Wartung läuft alle 5 statt alle 30 Sekunden, was die SQLite-Konkurrenz auf schwächerer Hardware verringert.
+
 ## 1.12.15.dev - 2026-09-01
 - `Stabile Version`: Die Leistungsverbesserungen für RX, DigiFlow und Radar aus dem aktuellen Entwicklungszyklus wurden in den stabilen Kanal übernommen.
 - `RX / Leistung`: aufwendige Persistenz- und Projektionsarbeiten wurden vom Echtzeitpfad von DigiFlow getrennt und in eine begrenzte, geordnete Side-Effect-Warteschlange mit kontrolliertem Herunterfahren sowie Metriken für Latenz, Überlauf und einzelne Verarbeitungsschritte verschoben.

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.17.dev - 2026-09-02
+- `Packet Routing / RF TX / performance`: the DIGI RF worker now uses the existing modem-configuration snapshot instead of reading SQLite for every frame. After a successful send, traffic history is persisted asynchronously outside the critical TX path while retaining controlled-shutdown persistence and error handling. The DigiFlow frame-enqueue message is now `DEBUG`, and maintenance runs every 5 minutes rather than every 30 seconds, reducing SQLite contention on lower-powered CPUs.
+
 ## 1.12.15.dev - 2026-09-01
 - `Stable release`: the RX, DigiFlow, and radar performance changes from the current development cycle have been promoted to the stable channel.
 - `RX / performance`: heavy persistence and projection work was detached from the realtime DigiFlow path and moved to a bounded, ordered side-effect queue with controlled shutdown and metrics for latency, overflow, and individual processing stages.

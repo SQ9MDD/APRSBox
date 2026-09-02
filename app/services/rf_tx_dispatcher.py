@@ -6,7 +6,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from app.db import fetch_all, fetch_one, log_event
+from app.db import log_event
+from app.services.digi_flows import get_digi_flow_routing_snapshot, reload_digi_flow_routing_snapshot
 from app.services.outbound import build_tnc2_kiss_frame, persist_outbound_frame
 
 
@@ -40,6 +41,7 @@ class RfTxDispatcher:
         self._known_targets: set[str] = set()
         self._queues: dict[str, asyncio.Queue[_RfTxJob]] = {}
         self._workers: dict[str, asyncio.Task[None]] = {}
+        self._history_tasks: set[asyncio.Task[None]] = set()
         self._last_tx_monotonic: dict[str, float] = {}
         self._running = False
         self._max_queue_depth = 0
@@ -48,14 +50,12 @@ class RfTxDispatcher:
     async def start(self) -> None:
         if self._running:
             return
-        rows = fetch_all(
-            """
-            SELECT name
-            FROM modems
-            WHERE modem_type IN ('TCP', 'SERIALL', 'SERIAL')
-            """
-        )
-        self._known_targets = {str(row["name"] or "").strip() for row in rows if str(row["name"] or "").strip()}
+        snapshot = reload_digi_flow_routing_snapshot()
+        self._known_targets = {
+            name
+            for name, modem in snapshot.modems_by_name.items()
+            if str(modem.get("modem_type") or "").strip().upper() in {"TCP", "SERIALL", "SERIAL"}
+        }
         self._running = True
 
     async def stop(self) -> None:
@@ -69,6 +69,7 @@ class RfTxDispatcher:
         self._workers.clear()
         self._queues.clear()
         self._last_tx_monotonic.clear()
+        await self._wait_for_history_persistence()
 
     def enqueue_digi_tx(
         self,
@@ -122,6 +123,7 @@ class RfTxDispatcher:
 
     async def wait_until_idle(self) -> None:
         await asyncio.gather(*(queue.join() for queue in list(self._queues.values())))
+        await self._wait_for_history_persistence()
 
     def latency_snapshot(self) -> dict[str, Any]:
         depths = {name: queue.qsize() for name, queue in self._queues.items()}
@@ -153,20 +155,9 @@ class RfTxDispatcher:
                 f"Dropped stale DIGI TX via {job.interface_name}: age={age_seconds:.1f}s limit={job.max_age_seconds:.1f}s",
             )
             return
-        modem_row = await asyncio.to_thread(
-            fetch_one,
-            """
-            SELECT id, name, modem_type, band, device_path, enabled, tx_blocked
-            FROM modems
-            WHERE name = ?
-            ORDER BY id ASC
-            LIMIT 1
-            """,
-            (job.interface_name,),
-        )
-        if modem_row is None:
+        modem = dict(get_digi_flow_routing_snapshot().modems_by_name.get(job.interface_name) or {})
+        if not modem:
             raise RuntimeError("Selected interface no longer exists.")
-        modem = dict(modem_row)
         if int(modem.get("enabled") or 0) != 1:
             raise RuntimeError("Selected interface is disabled.")
         if int(modem.get("tx_blocked") or 0) == 1:
@@ -207,15 +198,67 @@ class RfTxDispatcher:
             raise RuntimeError("Active shared KISS runtime could not send the frame.")
 
         self._last_tx_monotonic[job.interface_name] = time.monotonic()
-        await asyncio.to_thread(
-            persist_outbound_frame,
+        self._schedule_history_persistence(
             source=job.interface_name,
             interface_id=interface_id,
             band=str(modem.get("band") or "").strip(),
             line=job.line,
             payload_hex=frame.hex(" ").upper(),
-            source_kind="rf",
         )
+
+    def _schedule_history_persistence(
+        self,
+        *,
+        source: str,
+        interface_id: int,
+        band: str,
+        line: str,
+        payload_hex: str,
+    ) -> None:
+        task = asyncio.create_task(
+            self._persist_sent_frame(
+                source=source,
+                interface_id=interface_id,
+                band=band,
+                line=line,
+                payload_hex=payload_hex,
+            ),
+            name=f"aprsbox-rf-tx-history-{source}",
+        )
+        self._history_tasks.add(task)
+        task.add_done_callback(self._history_tasks.discard)
+
+    async def _persist_sent_frame(
+        self,
+        *,
+        source: str,
+        interface_id: int,
+        band: str,
+        line: str,
+        payload_hex: str,
+    ) -> None:
+        try:
+            await asyncio.to_thread(
+                persist_outbound_frame,
+                source=source,
+                interface_id=interface_id,
+                band=band,
+                line=line,
+                payload_hex=payload_hex,
+                source_kind="rf",
+            )
+        except Exception as exc:
+            error = str(exc).strip() or exc.__class__.__name__
+            await asyncio.to_thread(
+                log_event,
+                "WARNING",
+                "rf_tx_dispatcher",
+                f"Could not persist sent DIGI TX via {source}: {error}",
+            )
+
+    async def _wait_for_history_persistence(self) -> None:
+        while self._history_tasks:
+            await asyncio.gather(*tuple(self._history_tasks), return_exceptions=True)
 
     @staticmethod
     def _parse_endpoint(value: str) -> tuple[str, int] | None:
