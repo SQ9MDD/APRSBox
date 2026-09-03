@@ -40,7 +40,7 @@
   "Collecting data": "Daten werden gesammelt",
   "APRSBox Performance": "APRSBox-Leistung",
   "Excellent": "Ausgezeichnet",
-  "Fair": "Ausreichend",
+  "Sufficient": "Ausreichend",
   "Marginal": "Grenzwertig",
   "Insufficient": "Unzureichend",
   "Realtime headroom": "Echtzeitreserve",

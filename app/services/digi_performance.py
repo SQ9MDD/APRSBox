@@ -56,7 +56,7 @@ def evaluate_digi_performance(snapshot: Mapping[str, Any] | None) -> dict[str, A
     elif headroom >= 5.0:
         score, label, tone = 4, "Good", "ok"
     elif headroom >= 2.0:
-        score, label, tone = 3, "Fair", "neutral"
+        score, label, tone = 3, "Sufficient", "neutral"
     elif headroom >= 1.0:
         score, label, tone = 2, "Marginal", "warn"
     else:

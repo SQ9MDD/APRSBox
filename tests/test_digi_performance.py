@@ -26,7 +26,7 @@ class DigiPerformanceTests(unittest.TestCase):
         cases = (
             (10.0, 5, "Excellent"),
             (5.0, 4, "Good"),
-            (2.0, 3, "Fair"),
+            (2.0, 3, "Sufficient"),
             (1.0, 2, "Marginal"),
             (0.99, 1, "Insufficient"),
         )
