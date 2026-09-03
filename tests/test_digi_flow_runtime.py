@@ -1863,7 +1863,9 @@ class DigiFlowRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 await runtime.stop()
 
             self.assertGreaterEqual(int(lag["count"]), 1)
+            self.assertGreaterEqual(int(lag["sample_count"]), 1)
             self.assertGreaterEqual(float(lag["max_ms"]), 0.0)
+            self.assertIsNotNone(lag["p95_ms"])
 
     async def test_runtime_routing_snapshot_avoids_sqlite_reads_per_frame(self) -> None:
         with temporary_database():

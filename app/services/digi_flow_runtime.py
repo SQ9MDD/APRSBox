@@ -79,6 +79,7 @@ _LOCAL_IDENTITY_MY = "my_station"
 _LOCAL_IDENTITY_WX = "wx_station"
 DIGI_FLOW_QUEUE_MAX_FRAMES = 256
 EVENT_LOOP_LAG_SAMPLE_INTERVAL_SECONDS = 0.1
+EVENT_LOOP_LAG_SAMPLE_LIMIT = 3_000
 DIGI_RF_HOT_PATH_SAMPLE_LIMIT = 256
 DIGI_HOT_PATH_HEALTH_EVENT_WINDOW_SECONDS = 300.0
 
@@ -233,6 +234,7 @@ class DigiFlowRuntimeService:
             tuple[str, int | None, str], dict[str, dict[str, dict[str, float | int | None]]]
         ] = {}
         self._max_queue_depth = 0
+        self._event_loop_lag_samples_ms: deque[float] = deque(maxlen=EVENT_LOOP_LAG_SAMPLE_LIMIT)
         self._rf_digi_hot_path_samples_ms: deque[float] = deque(maxlen=DIGI_RF_HOT_PATH_SAMPLE_LIMIT)
         self._recent_digiflow_queue_overflows: deque[float] = deque(maxlen=DIGI_FLOW_QUEUE_MAX_FRAMES)
         reload_digi_flow_routing_snapshot()
@@ -275,7 +277,7 @@ class DigiFlowRuntimeService:
                     key=lambda key: (key[0], key[2], key[1] or 0),
                 )
             ],
-            "event_loop_lag_ms": dict(self._latency_metrics.get("event_loop_lag", {})),
+            "event_loop_lag_ms": self._event_loop_lag_snapshot(),
             "rf_digi_hot_path_ms": self._rf_digi_hot_path_snapshot(),
             "digiflow_config_cache": {
                 "revision": routing_snapshot.revision,
@@ -322,6 +324,39 @@ class DigiFlowRuntimeService:
             "p99_ms": samples[p99_index],
             "sample_limit": DIGI_RF_HOT_PATH_SAMPLE_LIMIT,
         }
+
+    def _event_loop_lag_snapshot(self) -> dict[str, float | int | None]:
+        """Return a bounded recent view, not a lifetime average or maximum.
+
+        The loop is sampled independently of RF traffic, so it is suitable for
+        showing whether a small host is keeping up even when every TNC is idle.
+        """
+        samples = sorted(self._event_loop_lag_samples_ms)
+        snapshot = dict(self._latency_metrics.get("event_loop_lag", {}))
+        sample_count = len(samples)
+        if not samples:
+            snapshot.update(
+                {
+                    "sample_count": 0,
+                    "sample_limit": EVENT_LOOP_LAG_SAMPLE_LIMIT,
+                    "p95_ms": None,
+                    "p99_ms": None,
+                }
+            )
+            return snapshot
+
+        def percentile(percent: float) -> float:
+            return samples[max(0, math.ceil(sample_count * percent) - 1)]
+
+        snapshot.update(
+            {
+                "sample_count": sample_count,
+                "sample_limit": EVENT_LOOP_LAG_SAMPLE_LIMIT,
+                "p95_ms": percentile(0.95),
+                "p99_ms": percentile(0.99),
+            }
+        )
+        return snapshot
 
     def _record_rf_digi_hot_path(self, context: dict[str, Any], *, viscous_delay_seconds: float, sent: bool) -> None:
         if not sent or viscous_delay_seconds > 0 or str(context.get("source_kind") or "") != "receiver_rf":
@@ -464,7 +499,9 @@ class DigiFlowRuntimeService:
         while not self._stop_event.is_set():
             await asyncio.sleep(max(0.0, expected - time.monotonic()))
             observed = time.monotonic()
-            self._record_latency("event_loop_lag", max(0.0, (observed - expected) * 1000.0))
+            lag_ms = max(0.0, (observed - expected) * 1000.0)
+            self._event_loop_lag_samples_ms.append(lag_ms)
+            self._record_latency("event_loop_lag", lag_ms)
             expected += self._event_loop_lag_sample_interval
             if expected < observed:
                 expected = observed + self._event_loop_lag_sample_interval

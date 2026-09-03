@@ -211,7 +211,7 @@
         <article
             class="dashboard-v2-kpi-tile dashboard-v2-kpi-tile-violet"
             id="dashboard-performance"
-            title="{{ t('APRSBox performance assessment for current traffic and configuration. Measures the available time margin on the critical DIGI processing path.') }}"
+            title="{{ t('APRSBox performance assessment for the running installation. Uses scheduler delay and queue pressure, so inactive radio interfaces do not prevent an assessment.') }}"
         >
             <span class="dashboard-v2-kpi-icon" aria-hidden="true">
                 <img src="{{ request.scope.root_path }}/static/icons/speedometer.svg" alt="">
@@ -219,7 +219,7 @@
             <span class="dashboard-v2-kpi-copy" aria-live="polite">
                 <span class="dashboard-v2-kpi-label">{{ t("APRSBox Performance") }}</span>
                 <strong class="dashboard-v2-kpi-value dashboard-v2-performance-score" id="dashboard-performance-score">—</strong>
-                <span class="dashboard-v2-kpi-meta" id="dashboard-performance-label">{{ t("Collecting data") }}…</span>
+                <span class="dashboard-v2-kpi-meta" id="dashboard-performance-label">{{ t("Starting measurement") }}…</span>
                 <span class="dashboard-v2-kpi-meta" id="dashboard-performance-headroom"></span>
             </span>
         </article>
@@ -1041,8 +1041,9 @@
             Marginal: {{ t("Marginal")|tojson }},
             Insufficient: {{ t("Insufficient")|tojson }},
         };
-        const collectingDataLabel = {{ t("Collecting data")|tojson }};
-        const realtimeHeadroomLabel = {{ t("Realtime headroom")|tojson }};
+        const startingMeasurementLabel = {{ t("Starting measurement")|tojson }};
+        const coreUnavailableLabel = {{ t("APRS core unavailable")|tojson }};
+        const eventLoopP95Label = {{ t("Event-loop P95")|tojson }};
         const performanceUrl = {{ (request.scope.root_path ~ '/api/dashboard/performance')|tojson }};
 
         const render = (performance) => {
@@ -1057,31 +1058,43 @@
             tile.classList.add(`dashboard-v2-kpi-tile-${color}`);
             if (performance?.status !== "ready" || !Number.isInteger(performance?.score)) {
                 if (score instanceof HTMLElement) score.textContent = "—";
-                if (label instanceof HTMLElement) label.textContent = `${collectingDataLabel}…`;
+                if (label instanceof HTMLElement) {
+                    label.textContent = performance?.status === "unavailable"
+                        ? coreUnavailableLabel
+                        : `${startingMeasurementLabel}…`;
+                }
                 if (headroom instanceof HTMLElement) headroom.textContent = "";
                 return;
             }
             if (score instanceof HTMLElement) score.textContent = `${performance.score} / 5`;
             if (label instanceof HTMLElement) label.textContent = labels[performance.label] || performance.label || "";
             if (headroom instanceof HTMLElement) {
-                const multiplier = Number(performance.headroom_multiplier);
-                headroom.textContent = Number.isFinite(multiplier)
-                    ? `${realtimeHeadroomLabel}: ${multiplier.toFixed(1)}×`
+                const p95 = Number(performance.event_loop_p95_ms);
+                headroom.textContent = Number.isFinite(p95)
+                    ? `${eventLoopP95Label}: ${p95.toFixed(1)} ms`
                     : "";
             }
         };
+        let refreshTimer = null;
         const load = async () => {
+            let performance;
             try {
                 const response = await fetch(performanceUrl, { headers: { Accept: "application/json" } });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                render(await response.json());
+                performance = await response.json();
             } catch (_) {
-                render({ status: "collecting", tone: "neutral" });
+                performance = { status: "unavailable", tone: "error" };
             }
+            render(performance);
+            refreshTimer = window.setTimeout(
+                () => void load(),
+                performance?.status === "warming" ? 1000 : 30000,
+            );
         };
         void load();
-        const refreshTimer = window.setInterval(() => void load(), 30000);
-        window.addEventListener("beforeunload", () => window.clearInterval(refreshTimer));
+        window.addEventListener("beforeunload", () => {
+            if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+        });
     })();
 </script>
 {% endif %}

@@ -131,6 +131,12 @@ class RfTxDispatcher:
             "queue_depth_by_interface": depths,
             "max_queue_depth_by_interface": dict(self._max_queue_depth_by_interface),
             "current_queue_depth": sum(depths.values()),
+            "queue_capacity": self._queue_max_frames * len(self._queues),
+            "max_queue_utilisation": (
+                max(depths.values(), default=0) / self._queue_max_frames
+                if self._queues
+                else 0.0
+            ),
             "max_queue_depth": self._max_queue_depth,
             "worker_count": len(self._workers),
         }
