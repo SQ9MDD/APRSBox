@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.19.dev - 04.09.2026
+- `Panel główny / kondycja instalacji`: kafelek Wydajność APRSBox ocenia teraz całą działającą instalację, a nie tylko ostatnie transmisje DIGI. Pomiar działa także przy nieaktywnych interfejsach, wykorzystuje pięciominutowe P95 czasu reakcji APRSBox, bieżące obciążenie kolejek oraz świeże przepełnienia i odrzucone ramki. Progi dostrojono dla małych hostów: 46 ms daje 4/5, a 132–191 ms 3/5.
+- `Instalator i aktualizator`: `uvloop` i `httptools` są opcjonalnymi akceleratorami instalowanymi wyłącznie z gotowych wheel'i. Brak kompatybilnego wheel'a nie blokuje już instalacji ani aktualizacji — Uvicorn używa wtedy standardowych `asyncio` i `h11`, bez kompilacji ze źródeł. Updater w razie braku podstawowych narzędzi systemowych doinstalowuje je przez `apt-get update` i `apt-get install` albo `apk add`, bez wykonywania aktualizacji całego systemu.
+
 ## 1.12.17.dev - 02.09.2026
 - `Packet Routing / RF TX / wydajność`: worker DIGI RF korzysta teraz z istniejącego snapshotu konfiguracji modemów zamiast odczytu SQLite dla każdej ramki. Po udanym wysłaniu zapis historii ruchu odbywa się asynchronicznie poza krytyczną ścieżką TX, z zachowaniem zapisu przy kontrolowanym zamknięciu i obsługi błędów. Komunikat kolejkowania ramki DigiFlow ma poziom `DEBUG`, a maintenance uruchamia się co 5 minut zamiast co 30 sekund, co ogranicza konkurencję o SQLite na słabszych CPU.
 

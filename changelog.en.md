@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.19.dev - 2026-09-04
+- `Dashboard / installation health`: the APRSBox Performance tile now assesses the running installation rather than only recent DIGI transmissions. It works while radio interfaces are idle, using a five-minute P95 APRSBox response time, current queue pressure, and recent overflows or dropped frames. Thresholds are tuned for small hosts: 46 ms scores 4/5, while 132–191 ms scores 3/5.
+- `Installer and updater`: `uvloop` and `httptools` are optional accelerators installed from prebuilt wheels only. A missing compatible wheel no longer blocks an installation or update; Uvicorn then uses standard `asyncio` and `h11` without compiling from source. When core system tools are missing, the updater installs them with `apt-get update` plus `apt-get install`, or `apk add`, without performing a whole-system upgrade.
+
 ## 1.12.17.dev - 2026-09-02
 - `Packet Routing / RF TX / performance`: the DIGI RF worker now uses the existing modem-configuration snapshot instead of reading SQLite for every frame. After a successful send, traffic history is persisted asynchronously outside the critical TX path while retaining controlled-shutdown persistence and error handling. The DigiFlow frame-enqueue message is now `DEBUG`, and maintenance runs every 5 minutes rather than every 30 seconds, reducing SQLite contention on lower-powered CPUs.
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.19.dev - 2026-09-04
+- `Panel / estado de la instalación`: el recuadro Rendimiento de APRSBox evalúa ahora la instalación en ejecución, no solo las últimas transmisiones DIGI. Funciona incluso con interfaces de radio inactivas y usa el tiempo de respuesta P95 de APRSBox de los últimos cinco minutos, la presión actual de las colas y los desbordamientos o tramas descartadas recientes. Los umbrales están ajustados para equipos pequeños: 46 ms obtiene 4/5 y 132–191 ms obtiene 3/5.
+- `Instalador y actualizador`: `uvloop` y `httptools` son aceleradores opcionales que se instalan solo desde wheels ya compilados. La falta de un wheel compatible ya no bloquea la instalación ni la actualización; Uvicorn usa entonces `asyncio` y `h11` estándar sin compilar desde código fuente. Cuando faltan herramientas básicas del sistema, el actualizador las instala con `apt-get update` y `apt-get install`, o `apk add`, sin realizar una actualización completa del sistema.
+
 ## 1.12.17.dev - 2026-09-02
 - `Packet Routing / RF TX / rendimiento`: el worker DIGI RF utiliza ahora el snapshot existente de la configuración de módems en lugar de leer SQLite para cada trama. Tras un envío correcto, el historial de tráfico se guarda de forma asíncrona fuera del camino crítico de TX, manteniendo la persistencia durante el cierre controlado y la gestión de errores. El mensaje de encolado de trama de DigiFlow pasa a `DEBUG` y el mantenimiento se ejecuta cada 5 minutos en vez de cada 30 segundos, reduciendo la contención de SQLite en CPU menos potentes.
 
