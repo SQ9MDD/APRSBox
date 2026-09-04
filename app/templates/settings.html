@@ -90,6 +90,17 @@
                     {% endfor %}
                 </select>
             </label>
+            <label class="settings-compact-number-field">
+                <span>{{ t("Hide station labels at zoom ≤") }}</span>
+                <input
+                    type="number"
+                    name="map_station_label_hide_at_zoom"
+                    min="0"
+                    max="30"
+                    step="1"
+                    value="{{ map_station_label_hide_at_zoom }}"
+                >
+            </label>
             <label class="full checkbox-row">
                 <input type="checkbox" name="event_log_debug_enabled" value="1" {% if event_log_debug_enabled %}checked{% endif %}>
                 <span>{{ t("Enable DEBUG logs") }}</span>
@@ -109,6 +120,8 @@
             <dd>{{ t(current_ui_palette_label) }}</dd>
             <dt>{{ t("Minimum stored log level") }}</dt>
             <dd><code>{{ event_log_min_level }}</code></dd>
+            <dt>{{ t("Hide station labels at zoom ≤") }}</dt>
+            <dd><code>{{ map_station_label_hide_at_zoom }}</code></dd>
             <dt>{{ t("Enable DEBUG logs") }}</dt>
             <dd>{{ t("Yes") if event_log_debug_enabled else t("No") }}</dd>
         </dl>
@@ -177,18 +190,6 @@
                     max="100"
                     step="1"
                     value="{{ map_marker_spiderfy_nearby_distance_px }}"
-                    {% if can_manage_global_settings %}form="global-settings-form"{% else %}disabled{% endif %}
-                >
-            </label>
-            <label>
-                <span>{{ t("Hide station labels at zoom ≤") }}</span>
-                <input
-                    type="number"
-                    name="map_station_label_hide_at_zoom"
-                    min="0"
-                    max="30"
-                    step="1"
-                    value="{{ map_station_label_hide_at_zoom }}"
                     {% if can_manage_global_settings %}form="global-settings-form"{% else %}disabled{% endif %}
                 >
             </label>

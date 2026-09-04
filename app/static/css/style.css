@@ -6183,6 +6183,10 @@ select:focus-visible,
     align-items: start;
 }
 
+.settings-compact-number-field input {
+    width: 5.5rem;
+}
+
 .settings-primary-grid > #settings-panel-global,
 .settings-primary-grid > .settings-primary-side {
     align-self: stretch;

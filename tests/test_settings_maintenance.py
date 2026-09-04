@@ -220,6 +220,16 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('{% if coverage_fill_opacity == value %}selected{% endif %}', template_source)
         self.assertNotIn("aprsbox-map-coverage-fill-opacity", template_source)
         self.assertIn("set_app_setting(COVERAGE_FILL_OPACITY_SETTING_KEY", router_source)
+        self.assertLess(
+            template_source.index('{{ t("Minimum stored log level") }}'),
+            template_source.index('{{ t("Hide station labels at zoom ≤") }}'),
+        )
+        self.assertLess(
+            template_source.index('{{ t("Hide station labels at zoom ≤") }}'),
+            template_source.index('{{ t("Enable DEBUG logs") }}'),
+        )
+        stylesheet_source = Path("app/static/css/style.css").read_text(encoding="utf-8")
+        self.assertIn(".settings-compact-number-field input", stylesheet_source)
 
     @unittest.skipUnless(FASTAPI_AVAILABLE, "fastapi is not installed in this environment")
     def test_global_settings_save_persists_coverage_fill_opacity(self) -> None:
