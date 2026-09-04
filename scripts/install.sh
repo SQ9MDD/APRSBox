@@ -323,6 +323,9 @@ sync_application_files() {
     else
         cp -R "$REPO_ROOT/app" "$STAGING_APP_DIR/"
         cp "$REPO_ROOT/requirements.txt" "$STAGING_APP_DIR/"
+        if [ -f "$REPO_ROOT/requirements-accelerators.txt" ]; then
+            cp "$REPO_ROOT/requirements-accelerators.txt" "$STAGING_APP_DIR/"
+        fi
         cp -R "$REPO_ROOT/scripts" "$STAGING_APP_DIR/"
         cp -R "$REPO_ROOT/deploy" "$STAGING_APP_DIR/"
         cp "$REPO_ROOT/README.md" "$STAGING_APP_DIR/"
@@ -344,6 +347,19 @@ setup_venv() {
     python3 -m venv "$VENV_DIR"
     "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel
     "$VENV_DIR/bin/pip" install -r "$STAGING_APP_DIR/requirements.txt"
+}
+
+install_optional_accelerators() {
+    accelerator_requirements="$STAGING_APP_DIR/requirements-accelerators.txt"
+    if [ ! -f "$accelerator_requirements" ]; then
+        return
+    fi
+    log "Installing optional Uvicorn accelerators from prebuilt wheels when available."
+    if "$VENV_DIR/bin/pip" install --only-binary=:all: -r "$accelerator_requirements"; then
+        log "Optional Uvicorn accelerators are enabled."
+    else
+        log "WARNING: No compatible prebuilt uvloop/httptools wheel is available; using standard asyncio and h11."
+    fi
 }
 
 verify_python_runtime() {
@@ -583,6 +599,7 @@ main() {
     prepare_staging_installation
     sync_application_files
     setup_venv
+    install_optional_accelerators
     verify_python_runtime
     stop_services
     backup_database

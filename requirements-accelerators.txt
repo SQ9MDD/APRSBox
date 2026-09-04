@@ -1,0 +1,6 @@
+# Optional Uvicorn accelerators.  Installers request wheels only: an older
+# host remains fully supported with asyncio and h11 when no compatible wheel
+# exists, rather than failing an application install while compiling C code.
+# Docker targets: linux/amd64 -> x86_64, linux/arm64 -> aarch64.
+uvloop==0.22.1 ; (platform_system == "Linux" and (platform_machine == "x86_64" or platform_machine == "aarch64")) or (platform_system == "Darwin" and (platform_machine == "x86_64" or platform_machine == "arm64"))
+httptools==0.6.4 ; (platform_system == "Linux" and (platform_machine == "x86_64" or platform_machine == "aarch64")) or (platform_system == "Darwin" and (platform_machine == "x86_64" or platform_machine == "arm64"))

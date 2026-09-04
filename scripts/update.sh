@@ -86,6 +86,49 @@ fail() {
     exit 1
 }
 
+system_prerequisites_available() {
+    command -v python3 >/dev/null 2>&1 \
+        && command -v git >/dev/null 2>&1 \
+        && command -v rsync >/dev/null 2>&1 \
+        && python3 -m venv --help >/dev/null 2>&1
+}
+
+ensure_system_prerequisites() {
+    if system_prerequisites_available; then
+        return
+    fi
+    if [ ! -f /etc/os-release ]; then
+        fail "Missing required system tools and cannot detect the operating system."
+    fi
+    . /etc/os-release
+    update_os_id="${ID:-unknown}"
+    update_os_like="${ID_LIKE:-}"
+    log "Installing missing system prerequisites for the updater."
+    case "$update_os_id" in
+        alpine)
+            apk add --no-cache python3 py3-pip py3-virtualenv git rsync ca-certificates
+            ;;
+        debian|raspbian)
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip git rsync ca-certificates
+            ;;
+        *)
+            case "$update_os_like" in
+                *debian*)
+                    apt-get update
+                    DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip git rsync ca-certificates
+                    ;;
+                *)
+                    fail "Missing required system tools on unsupported operating system: $update_os_id"
+                    ;;
+            esac
+            ;;
+    esac
+    if ! system_prerequisites_available; then
+        fail "System prerequisites are still missing after package installation."
+    fi
+}
+
 cleanup() {
     if [ -d "$WORKDIR" ]; then
         rm -rf "$WORKDIR"
@@ -255,6 +298,20 @@ verify_runtime_dependencies() {
     "$VENV_DIR/bin/python" -c "import uvicorn"
 }
 
+install_optional_accelerators() {
+    runtime_venv_dir="$1"
+    accelerator_requirements="$STAGING_APP_DIR/requirements-accelerators.txt"
+    if [ ! -f "$accelerator_requirements" ]; then
+        return
+    fi
+    log "Installing optional Uvicorn accelerators from prebuilt wheels when available."
+    if "$runtime_venv_dir/bin/pip" install --only-binary=:all: -r "$accelerator_requirements"; then
+        log "Optional Uvicorn accelerators are enabled."
+    else
+        log "WARNING: No compatible prebuilt uvloop/httptools wheel is available; using standard asyncio and h11."
+    fi
+}
+
 resolve_update_channel() {
     update_channel_source="environment"
     if [ -n "$GIT_BRANCH_CLI" ]; then
@@ -319,6 +376,7 @@ parse_args() {
 }
 
 parse_args "$@"
+ensure_system_prerequisites
 resolve_update_channel
 log "Starting application update from $GIT_URL ($GIT_BRANCH)"
 job_update "running" "Starting application update." "" "2" "starting"
@@ -358,16 +416,29 @@ if [ ! -x "$VENV_DIR/bin/python" ]; then
     REQUIREMENTS_CHANGED="1"
 fi
 
-if [ "$REQUIREMENTS_CHANGED" = "1" ]; then
+ACCELERATOR_REQUIREMENTS_CHANGED="1"
+if [ -f "$APP_DIR/requirements-accelerators.txt" ] \
+    && [ -f "$STAGING_APP_DIR/requirements-accelerators.txt" ] \
+    && cmp -s "$APP_DIR/requirements-accelerators.txt" "$STAGING_APP_DIR/requirements-accelerators.txt"; then
+    ACCELERATOR_REQUIREMENTS_CHANGED="0"
+fi
+
+VENV_REBUILD_REQUIRED="$REQUIREMENTS_CHANGED"
+if [ "$ACCELERATOR_REQUIREMENTS_CHANGED" = "1" ]; then
+    VENV_REBUILD_REQUIRED="1"
+fi
+
+if [ "$VENV_REBUILD_REQUIRED" = "1" ]; then
     job_update "running" "Preparing Python dependencies." "" "45" "preparing-dependencies"
     NEW_VENV_DIR="$INSTALL_ROOT/venv.new.$$"
     rm -rf "$NEW_VENV_DIR"
     python3 -m venv "$NEW_VENV_DIR"
     "$NEW_VENV_DIR/bin/pip" install --upgrade pip setuptools wheel
     "$NEW_VENV_DIR/bin/pip" install -r "$STAGING_APP_DIR/requirements.txt"
+    install_optional_accelerators "$NEW_VENV_DIR"
     log "Prepared updated Python virtual environment."
 else
-    log "requirements.txt unchanged. Reusing existing virtual environment."
+    log "Python dependency files unchanged. Reusing existing virtual environment."
 fi
 job_update "running" "Application dependencies are ready." "" "60" "preparing-dependencies"
 
@@ -408,7 +479,7 @@ if ! mv "$STAGING_APP_DIR" "$APP_DIR"; then
 fi
 STAGING_APP_DIR=""
 
-if [ "$REQUIREMENTS_CHANGED" = "1" ]; then
+if [ "$VENV_REBUILD_REQUIRED" = "1" ]; then
     if [ -d "$VENV_DIR" ]; then
         PREVIOUS_VENV_DIR="$INSTALL_ROOT/venv.old.$$"
         rm -rf "$PREVIOUS_VENV_DIR"

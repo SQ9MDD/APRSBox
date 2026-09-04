@@ -36,19 +36,33 @@ class AlpineInstallerTests(unittest.TestCase):
             self.assertIn('APRSBOX_PRIVILEGED_RUNNER="doas -n"', service_source)
             self.assertNotIn('APRSBOX_PRIVILEGED_RUNNER="sudo -n"', service_source)
 
-    def test_installer_and_updater_install_and_verify_uvloop_dependencies(self) -> None:
+    def test_installer_and_updater_treat_uvicorn_accelerators_as_optional_wheels(self) -> None:
         requirements = Path("requirements.txt").read_text(encoding="utf-8")
+        accelerator_requirements = Path("requirements-accelerators.txt").read_text(encoding="utf-8")
         installer_source = Path("scripts/install.sh").read_text(encoding="utf-8")
         updater_source = Path("scripts/update.sh").read_text(encoding="utf-8")
+        dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
 
-        self.assertIn("uvloop==0.22.1", requirements)
-        self.assertIn("httptools==0.6.4", requirements)
+        self.assertNotIn("uvloop", requirements)
+        self.assertNotIn("httptools", requirements)
+        self.assertIn("uvloop==0.22.1", accelerator_requirements)
+        self.assertIn("httptools==0.6.4", accelerator_requirements)
         self.assertIn('"$VENV_DIR/bin/pip" install -r "$STAGING_APP_DIR/requirements.txt"', installer_source)
-        self.assertIn("import uvicorn, uvloop, httptools", installer_source)
+        self.assertIn('"$VENV_DIR/bin/pip" install --only-binary=:all: -r "$accelerator_requirements"', installer_source)
         self.assertIn('"$NEW_VENV_DIR/bin/pip" install -r "$STAGING_APP_DIR/requirements.txt"', updater_source)
-        self.assertIn('"$VENV_DIR/bin/python" -c "import uvloop, httptools"', updater_source)
+        self.assertIn('"$runtime_venv_dir/bin/pip" install --only-binary=:all: -r "$accelerator_requirements"', updater_source)
+        self.assertIn('pip install --only-binary=:all: -r /opt/aprsbox/app/requirements-accelerators.txt', dockerfile)
         self.assertIn("BACKUP_RETENTION_COUNT", updater_source)
         self.assertIn('prune_database_backups "$backup_path"', updater_source)
+
+    def test_updater_installs_missing_system_prerequisites_without_upgrading_the_host(self) -> None:
+        updater_source = Path("scripts/update.sh").read_text(encoding="utf-8")
+
+        self.assertIn("ensure_system_prerequisites", updater_source)
+        self.assertIn("apt-get update", updater_source)
+        self.assertIn("python3 python3-venv python3-pip git rsync ca-certificates", updater_source)
+        self.assertIn("apk add --no-cache python3 py3-pip py3-virtualenv git rsync ca-certificates", updater_source)
+        self.assertNotIn("apt-get upgrade", updater_source)
 
 
 if __name__ == "__main__":

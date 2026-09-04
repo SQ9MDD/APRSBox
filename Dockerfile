@@ -21,11 +21,16 @@ RUN apk add --no-cache \
 
 WORKDIR /opt/aprsbox/app
 
-COPY requirements.txt /opt/aprsbox/app/requirements.txt
+COPY requirements.txt requirements-accelerators.txt /opt/aprsbox/app/
 
 RUN python3 -m venv /opt/aprsbox/venv && \
     /opt/aprsbox/venv/bin/pip install --upgrade pip setuptools wheel && \
-    /opt/aprsbox/venv/bin/pip install -r /opt/aprsbox/app/requirements.txt
+    /opt/aprsbox/venv/bin/pip install -r /opt/aprsbox/app/requirements.txt && \
+    if /opt/aprsbox/venv/bin/pip install --only-binary=:all: -r /opt/aprsbox/app/requirements-accelerators.txt; then \
+        :; \
+    else \
+        echo "[APRSBox] Optional Uvicorn accelerators unavailable; using asyncio and h11."; \
+    fi
 
 COPY . /opt/aprsbox/app
 

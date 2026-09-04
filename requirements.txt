@@ -3,9 +3,5 @@ jinja2==3.1.6
 itsdangerous==2.2.0
 python-multipart==0.0.20
 uvicorn==0.37.0
-# Docker targets: linux/amd64 -> x86_64, linux/arm64 -> aarch64.
-# Keep Uvicorn's optional accelerators off unsupported 32-bit ARM targets.
-uvloop==0.22.1 ; (platform_system == "Linux" and (platform_machine == "x86_64" or platform_machine == "aarch64")) or (platform_system == "Darwin" and (platform_machine == "x86_64" or platform_machine == "arm64"))
-httptools==0.6.4 ; (platform_system == "Linux" and (platform_machine == "x86_64" or platform_machine == "aarch64")) or (platform_system == "Darwin" and (platform_machine == "x86_64" or platform_machine == "arm64"))
 gunicorn==23.0.0
 paho-mqtt==2.1.0
