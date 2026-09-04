@@ -2,6 +2,7 @@
 
 ## 1.12.20.dev - 2026-09-04
 - `Karte / Stationsbeschriftungen`: Bei Zoom `10` und kleiner blendet die Karte die Rufzeichen neben Stationsmarkern aus; APRS-Symbole und Hover-Details bleiben sichtbar. Der Schwellenwert ist eine globale Einstellung und kann über ein kompaktes Feld in den globalen Einstellungen geändert werden; der Standardwert ist `10`.
+- `Karte / Stationsspuren`: Gleichzeitig sichtbare Spuren erhalten jetzt unterschiedliche, kontrastreiche Farben aus einer Palette, die die vorherrschenden Straßen-, Wasser- und Vegetationsfarben üblicher Kartenkacheln vermeidet. Eine Spur behält ihre Farbe beim Aktualisieren.
 
 ## 1.12.19.dev - 2026-09-04
 - `Dashboard / Installationszustand`: Die Kachel „APRSBox-Leistung“ bewertet nun die laufende Installation statt nur der letzten DIGI-Übertragungen. Sie funktioniert auch bei inaktiven Funkschnittstellen und verwendet die P95-Reaktionszeit von APRSBox über fünf Minuten, aktuelle Warteschlangenlast sowie aktuelle Überläufe oder verworfene Frames. Die Schwellenwerte sind für kleine Hosts abgestimmt: 46 ms ergeben 4/5, 132–191 ms ergeben 3/5.

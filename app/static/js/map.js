@@ -2457,6 +2457,18 @@
         { hueShift: 6, saturationShift: -5, lightnessShift: 7 },
         { hueShift: -7, saturationShift: 5, lightnessShift: -6 },
     ]);
+    // These bright hues deliberately avoid the dominant road, water, and
+    // vegetation colors used by common map tiles. A dark halo keeps them
+    // legible on both light and dark map themes.
+    const trackColorPalette = Object.freeze([
+        "#ff2da3", "#00d7ff", "#a77bff", "#ff7a00",
+        "#f7e600", "#00e6b8", "#ff5c7c", "#6acaff",
+        "#d946ef", "#ffad1f", "#22e8d1", "#ff4fb8",
+        "#8f7cff", "#ff8755", "#34cfff", "#ec5cff",
+        "#ffe15b", "#4bf0be", "#ff76ad", "#b794ff",
+        "#00b7eb", "#ff9d3d", "#e91e9b", "#62e9ff",
+    ]);
+    const trackColorAssignmentsByKey = new Map();
 
     function clampNumber(value, minValue, maxValue) {
         return Math.max(minValue, Math.min(maxValue, value));
@@ -2481,6 +2493,58 @@
         const saturation = clampNumber(base.saturation + variant.saturationShift, 86, 100);
         const lightness = clampNumber(base.lightness + variant.lightnessShift, 44, 72);
         return `hsl(${hue} ${saturation}% ${lightness}%)`;
+    }
+
+    function assignDistinctTrackColors(tracks) {
+        const visibleKeys = Array.from(new Set(
+            (tracks || [])
+                .filter((track) => (track.points || []).filter((point) => (
+                    Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
+                )).length >= 2)
+                .map((track) => String(track.display_callsign || "").trim())
+                .filter((key) => Boolean(key))
+        )).sort((left, right) => left.localeCompare(right));
+        const visibleKeySet = new Set(visibleKeys);
+        const usedColorIndexes = new Set();
+
+        for (const [key, colorIndex] of trackColorAssignmentsByKey.entries()) {
+            if (!visibleKeySet.has(key) || usedColorIndexes.has(colorIndex)) {
+                trackColorAssignmentsByKey.delete(key);
+                continue;
+            }
+            usedColorIndexes.add(colorIndex);
+        }
+
+        for (const key of visibleKeys) {
+            if (trackColorAssignmentsByKey.has(key)) {
+                continue;
+            }
+            const preferredIndex = hashCallsign(key) % trackColorPalette.length;
+            let colorIndex = preferredIndex;
+            let foundPaletteColor = false;
+            for (let attempt = 0; attempt < trackColorPalette.length; attempt += 1) {
+                const candidate = (preferredIndex + attempt) % trackColorPalette.length;
+                if (!usedColorIndexes.has(candidate)) {
+                    colorIndex = candidate;
+                    foundPaletteColor = true;
+                    break;
+                }
+            }
+            if (!foundPaletteColor) {
+                colorIndex = trackColorPalette.length + usedColorIndexes.size;
+            }
+            usedColorIndexes.add(colorIndex);
+            trackColorAssignmentsByKey.set(key, colorIndex);
+        }
+    }
+
+    function trackColorForKey(key) {
+        const colorIndex = trackColorAssignmentsByKey.get(key);
+        if (!Number.isInteger(colorIndex) || colorIndex < trackColorPalette.length) {
+            return trackColorPalette[Number.isInteger(colorIndex) ? colorIndex : 0];
+        }
+        const hue = (colorIndex * 137.508) % 360;
+        return `hsl(${hue} 100% 62%)`;
     }
 
     function overlayContrastColor() {
@@ -2658,10 +2722,11 @@
         ].join("|");
     }
 
-    function trackSignature(track) {
+    function trackSignature(track, trackColor) {
         return [
             String(track.display_callsign || ""),
             String(currentThemeName()),
+            String(trackColor || ""),
             (track.points || []).map((point) => (
                 `${point.interface_id || ""}:${point.latitude}:${point.longitude}:${point.heard_at || ""}`
             )).join(";"),
@@ -2707,7 +2772,7 @@
         }
     }
 
-    function buildTrackLayer(track) {
+    function buildTrackLayer(track, trackColor) {
         const group = window.L.layerGroup();
         const points = (track.points || []).filter((point) => (
             Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
@@ -2715,7 +2780,6 @@
         if (points.length < 2) {
             return group;
         }
-        const trackColor = colorForCallsign(track.display_callsign || "");
         const haloPolyline = window.L.polyline(
             points.map((point) => ([point.latitude, point.longitude])),
             {
@@ -2946,6 +3010,7 @@
     function reconcileTracks(mobileTracks) {
         const nextKeys = new Set();
         if (tracksVisible) {
+            assignDistinctTrackColors(mobileTracks);
             for (const track of mobileTracks || []) {
                 const points = (track.points || []).filter((point) => (
                     Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
@@ -2958,7 +3023,8 @@
                     continue;
                 }
                 nextKeys.add(key);
-                const nextTrackSignature = trackSignature(track);
+                const trackColor = trackColorForKey(key);
+                const nextTrackSignature = trackSignature(track, trackColor);
                 const existing = trackLayersByKey.get(key);
                 if (existing && existing.signature === nextTrackSignature) {
                     continue;
@@ -2967,7 +3033,7 @@
                     trackLayerGroup.removeLayer(existing.layer);
                     trackLayersByKey.delete(key);
                 }
-                const layer = buildTrackLayer(track);
+                const layer = buildTrackLayer(track, trackColor);
                 trackLayerGroup.addLayer(layer);
                 trackLayersByKey.set(key, {
                     layer,

@@ -2,6 +2,7 @@
 
 ## 1.12.20.dev - 04.09.2026
 - `Mapa / etykiety stacji`: przy zoomie `10` i mniejszym mapa ukrywa callsigny przy znacznikach, pozostawiając widoczne ikony APRS oraz podpowiedzi. Próg jest globalnym ustawieniem i można go zmienić w kompaktowym polu Ustawień globalnych; wartość domyślna to `10`.
+- `Mapa / ślady stacji`: jednocześnie widoczne ślady dostają teraz różne, kontrastowe kolory z palety niezdominowanej przez typowe barwy dróg, wody i roślinności na mapach. Kolor pozostaje stabilny podczas odświeżania śladu.
 
 ## 1.12.19.dev - 04.09.2026
 - `Panel główny / kondycja instalacji`: kafelek Wydajność APRSBox ocenia teraz całą działającą instalację, a nie tylko ostatnie transmisje DIGI. Pomiar działa także przy nieaktywnych interfejsach, wykorzystuje pięciominutowe P95 czasu reakcji APRSBox, bieżące obciążenie kolejek oraz świeże przepełnienia i odrzucone ramki. Progi dostrojono dla małych hostów: 46 ms daje 4/5, a 132–191 ms 3/5.

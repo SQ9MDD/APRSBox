@@ -64,6 +64,15 @@ class StationDistanceUiTests(unittest.TestCase):
         self.assertIn("function overlayContrastColor()", script_source)
         self.assertIn("const haloPolyline = window.L.polyline(", script_source)
 
+    def test_map_script_assigns_distinct_contrast_track_colors(self) -> None:
+        script_source = Path("app/static/js/map.js").read_text(encoding="utf-8")
+        self.assertIn("const trackColorPalette = Object.freeze([", script_source)
+        self.assertIn("const trackColorAssignmentsByKey = new Map()", script_source)
+        self.assertIn("function assignDistinctTrackColors", script_source)
+        self.assertIn("if (!usedColorIndexes.has(candidate))", script_source)
+        self.assertIn("assignDistinctTrackColors(mobileTracks)", script_source)
+        self.assertIn("buildTrackLayer(track, trackColor)", script_source)
+
     def test_map_template_renders_track_toggle_button(self) -> None:
         template_source = Path("app/templates/map.html").read_text(encoding="utf-8")
         self.assertIn("data-map-tile-events-endpoint", template_source)
