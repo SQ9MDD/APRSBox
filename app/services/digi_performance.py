@@ -9,10 +9,10 @@ MIN_EVENT_LOOP_LAG_SAMPLES = 10
 # airtime.  They therefore work when no interface is currently carrying
 # traffic and provide a useful signal for modest hardware.
 EVENT_LOOP_SCORE_LIMITS_MS = (
-    (15.0, 5, "Excellent", "ok"),
-    (40.0, 4, "Good", "ok"),
-    (100.0, 3, "Sufficient", "neutral"),
-    (250.0, 2, "Marginal", "warn"),
+    (20.0, 5, "Excellent", "ok"),
+    (75.0, 4, "Good", "ok"),
+    (200.0, 3, "Sufficient", "neutral"),
+    (500.0, 2, "Marginal", "warn"),
 )
 
 

@@ -47,7 +47,7 @@
   "APRSBox performance assessment for current traffic and configuration. Measures the available time margin on the critical DIGI processing path.": "Evaluación del rendimiento de APRSBox para el tráfico y la configuración actuales. Mide el margen de tiempo disponible en la ruta crítica de procesamiento DIGI.",
   "Starting measurement": "Iniciando medición",
   "APRS core unavailable": "El núcleo APRS no está disponible",
-  "Event-loop P95": "Bucle de eventos P95",
+  "APRSBox response time": "Tiempo de respuesta de APRSBox",
   "APRSBox performance assessment for the running installation. Uses scheduler delay and queue pressure, so inactive radio interfaces do not prevent an assessment.": "Evaluación del rendimiento de la instalación APRSBox en ejecución. Usa el retraso del planificador y la presión de las colas, por lo que las interfaces de radio inactivas no impiden la evaluación.",
   "Model data": "Datos del modelo",
   "Service data": "Datos de servicio",

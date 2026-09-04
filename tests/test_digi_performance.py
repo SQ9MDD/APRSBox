@@ -36,11 +36,13 @@ class DigiPerformanceTests(unittest.TestCase):
 
     def test_classifies_event_loop_responsiveness_bands(self) -> None:
         cases = (
-            (15.0, 5, "Excellent"),
-            (40.0, 4, "Good"),
-            (100.0, 3, "Sufficient"),
-            (250.0, 2, "Marginal"),
-            (250.1, 1, "Insufficient"),
+            (20.0, 5, "Excellent"),
+            (46.0, 4, "Good"),
+            (75.0, 4, "Good"),
+            (132.0, 3, "Sufficient"),
+            (191.2, 3, "Sufficient"),
+            (500.0, 2, "Marginal"),
+            (500.1, 1, "Insufficient"),
         )
 
         for p95_ms, expected_score, expected_label in cases:

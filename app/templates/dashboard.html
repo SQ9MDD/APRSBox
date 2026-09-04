@@ -1043,7 +1043,7 @@
         };
         const startingMeasurementLabel = {{ t("Starting measurement")|tojson }};
         const coreUnavailableLabel = {{ t("APRS core unavailable")|tojson }};
-        const eventLoopP95Label = {{ t("Event-loop P95")|tojson }};
+        const responseTimeLabel = {{ t("APRSBox response time")|tojson }};
         const performanceUrl = {{ (request.scope.root_path ~ '/api/dashboard/performance')|tojson }};
 
         const render = (performance) => {
@@ -1071,7 +1071,7 @@
             if (headroom instanceof HTMLElement) {
                 const p95 = Number(performance.event_loop_p95_ms);
                 headroom.textContent = Number.isFinite(p95)
-                    ? `${eventLoopP95Label}: ${p95.toFixed(1)} ms`
+                    ? `${responseTimeLabel}: ${p95.toFixed(1)} ms`
                     : "";
             }
         };
