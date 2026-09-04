@@ -44,6 +44,7 @@ CONFIG_BACKUP_APP_SETTING_KEYS: tuple[str, ...] = (
     "map_marker_spiderfy_enabled",
     "map_marker_spiderfy_zoom_levels_before_max",
     "map_marker_spiderfy_nearby_distance_px",
+    "map_station_label_hide_at_zoom",
     "gui_update_branch",
     "aprsis_server",
     "aprsis_port",
@@ -71,6 +72,7 @@ CONFIG_BACKUP_OPTIONAL_APP_SETTING_DEFAULTS: dict[str, str | None] = {
     "map_marker_spiderfy_enabled": "0",
     "map_marker_spiderfy_zoom_levels_before_max": "2",
     "map_marker_spiderfy_nearby_distance_px": "20",
+    "map_station_label_hide_at_zoom": "10",
     # Older backups predate separate RF and APRS-IS message groups.  None
     # preserves the first-use fallback to the saved RF group list.
     "messages.aprsis_target_groups": None,

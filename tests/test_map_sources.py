@@ -14,6 +14,7 @@ from app.services.map_service import (
     get_map_marker_spiderfy_enabled,
     get_map_marker_spiderfy_nearby_distance_px,
     get_map_marker_spiderfy_zoom_levels,
+    get_map_station_label_hide_at_zoom,
     get_map_source,
     list_map_sources,
     move_map_source,
@@ -253,23 +254,28 @@ class MapSourcesTests(unittest.TestCase):
             self.assertFalse(get_map_marker_spiderfy_enabled())
             self.assertEqual(get_map_marker_spiderfy_zoom_levels(), 2)
             self.assertEqual(get_map_marker_spiderfy_nearby_distance_px(), 20)
+            self.assertEqual(get_map_station_label_hide_at_zoom(), 10)
 
             set_app_setting("map_marker_spiderfy_enabled", "1")
             set_app_setting("map_marker_spiderfy_zoom_levels_before_max", "4")
             set_app_setting("map_marker_spiderfy_nearby_distance_px", "32")
+            set_app_setting("map_station_label_hide_at_zoom", "8")
 
             config = get_map_page_config()
             self.assertTrue(config["marker_spiderfy_enabled"])
             self.assertEqual(config["marker_spiderfy_zoom_levels_before_max"], 4)
             self.assertEqual(config["marker_spiderfy_nearby_distance_px"], 32)
+            self.assertEqual(config["station_label_hide_at_zoom"], 8)
 
     def test_map_marker_spiderfy_invalid_numbers_use_defaults(self) -> None:
         with temporary_database():
             set_app_setting("map_marker_spiderfy_zoom_levels_before_max", "11")
             set_app_setting("map_marker_spiderfy_nearby_distance_px", "0")
+            set_app_setting("map_station_label_hide_at_zoom", "31")
 
             self.assertEqual(get_map_marker_spiderfy_zoom_levels(), 2)
             self.assertEqual(get_map_marker_spiderfy_nearby_distance_px(), 20)
+            self.assertEqual(get_map_station_label_hide_at_zoom(), 10)
 
     def test_clear_map_source_cache_removes_files_and_resets_stats(self) -> None:
         with temporary_database():

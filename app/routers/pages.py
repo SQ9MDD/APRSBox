@@ -212,13 +212,16 @@ from app.services.map_service import (
     DEFAULT_COVERAGE_FILL_OPACITY_PERCENT,
     DEFAULT_MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_PX,
     DEFAULT_MAP_MARKER_SPIDERFY_ZOOM_LEVELS,
+    DEFAULT_MAP_STATION_LABEL_HIDE_AT_ZOOM,
     MAP_MARKER_SPIDERFY_ENABLED_SETTING_KEY,
     MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY,
     MAP_MARKER_SPIDERFY_ZOOM_LEVELS_SETTING_KEY,
+    MAP_STATION_LABEL_HIDE_AT_ZOOM_SETTING_KEY,
     get_map_marker_clustering_enabled,
     get_map_marker_spiderfy_enabled,
     get_map_marker_spiderfy_nearby_distance_px,
     get_map_marker_spiderfy_zoom_levels,
+    get_map_station_label_hide_at_zoom,
     get_map_source,
     list_map_sources,
     get_coverage_fill_opacity_percent,
@@ -238,6 +241,7 @@ from app.services.map_service import (
     normalize_coverage_fill_opacity_percent,
     normalize_map_marker_spiderfy_nearby_distance_px,
     normalize_map_marker_spiderfy_zoom_levels,
+    normalize_map_station_label_hide_at_zoom,
     save_map_marker_clustering_enabled,
 )
 from app.services.map_station_state import read_map_station_rf_snapshots, read_map_station_state
@@ -1077,6 +1081,7 @@ def _settings_page_context(
     map_marker_spiderfy_enabled = get_map_marker_spiderfy_enabled()
     map_marker_spiderfy_zoom_levels = get_map_marker_spiderfy_zoom_levels()
     map_marker_spiderfy_nearby_distance_px = get_map_marker_spiderfy_nearby_distance_px()
+    map_station_label_hide_at_zoom = get_map_station_label_hide_at_zoom()
     selected_update_channel = str(update_channels.get("selected_channel") or current_update_channel())
     stable_update_channel = str(update_channels.get("stable_channel") or request.app.state.settings.gui_update_branch)
     update_channel_options = [
@@ -1154,6 +1159,7 @@ def _settings_page_context(
         map_marker_spiderfy_enabled=map_marker_spiderfy_enabled,
         map_marker_spiderfy_zoom_levels=map_marker_spiderfy_zoom_levels,
         map_marker_spiderfy_nearby_distance_px=map_marker_spiderfy_nearby_distance_px,
+        map_station_label_hide_at_zoom=map_station_label_hide_at_zoom,
         database_vacuum_blocked=database_vacuum_blocked,
         database_maintenance_snapshot=db_maintenance_snapshot,
         database_path=str(db_maintenance_snapshot.get("database_path") or ""),
@@ -2091,6 +2097,7 @@ def settings_update_global(
     map_marker_spiderfy_enabled: str | None = Form(None),
     map_marker_spiderfy_zoom_levels: str = Form(str(DEFAULT_MAP_MARKER_SPIDERFY_ZOOM_LEVELS)),
     map_marker_spiderfy_nearby_distance_px: str = Form(str(DEFAULT_MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_PX)),
+    map_station_label_hide_at_zoom: str = Form(str(DEFAULT_MAP_STATION_LABEL_HIDE_AT_ZOOM)),
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> object:
     raw_language = str(language or "").strip().lower()
@@ -2116,6 +2123,10 @@ def settings_update_global(
     raw_map_marker_spiderfy_nearby_distance_px = str(map_marker_spiderfy_nearby_distance_px or "").strip()
     selected_map_marker_spiderfy_nearby_distance_px = normalize_map_marker_spiderfy_nearby_distance_px(
         raw_map_marker_spiderfy_nearby_distance_px
+    )
+    raw_map_station_label_hide_at_zoom = str(map_station_label_hide_at_zoom or "").strip()
+    selected_map_station_label_hide_at_zoom = normalize_map_station_label_hide_at_zoom(
+        raw_map_station_label_hide_at_zoom
     )
     station_settings = get_station_settings()
     current_default_units = station_settings.get("default_units", "metric")
@@ -2149,6 +2160,11 @@ def settings_update_global(
             {"ok": False, "error": _translate("Unsupported overlapping marker distance.")},
             status_code=status.HTTP_400_BAD_REQUEST,
         )
+    if raw_map_station_label_hide_at_zoom != str(selected_map_station_label_hide_at_zoom):
+        return JSONResponse(
+            {"ok": False, "error": _translate("Unsupported station label zoom threshold.")},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
 
     station_payload = dict(station_settings)
     station_payload["default_units"] = selected_default_units
@@ -2173,6 +2189,7 @@ def settings_update_global(
         MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY,
         str(selected_map_marker_spiderfy_nearby_distance_px),
     )
+    set_app_setting(MAP_STATION_LABEL_HIDE_AT_ZOOM_SETTING_KEY, str(selected_map_station_label_hide_at_zoom))
     return JSONResponse(
         {
             "ok": True,
@@ -2189,6 +2206,7 @@ def settings_update_global(
             "map_marker_spiderfy_enabled": selected_map_marker_spiderfy_enabled,
             "map_marker_spiderfy_zoom_levels": selected_map_marker_spiderfy_zoom_levels,
             "map_marker_spiderfy_nearby_distance_px": selected_map_marker_spiderfy_nearby_distance_px,
+            "map_station_label_hide_at_zoom": selected_map_station_label_hide_at_zoom,
             "reload": True,
         }
     )

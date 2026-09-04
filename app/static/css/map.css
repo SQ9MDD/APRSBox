@@ -764,6 +764,10 @@
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
 }
 
+.map-page.map-station-labels-hidden .map-station-label {
+    display: none;
+}
+
 :root[data-aprs-symbol-set="modern"] .map-station-label {
     left: 34px;
 }

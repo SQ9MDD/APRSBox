@@ -53,8 +53,10 @@ MAP_MARKER_CLUSTERING_ENABLED_SETTING_KEY = "map_marker_clustering_enabled"
 MAP_MARKER_SPIDERFY_ENABLED_SETTING_KEY = "map_marker_spiderfy_enabled"
 MAP_MARKER_SPIDERFY_ZOOM_LEVELS_SETTING_KEY = "map_marker_spiderfy_zoom_levels_before_max"
 MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY = "map_marker_spiderfy_nearby_distance_px"
+MAP_STATION_LABEL_HIDE_AT_ZOOM_SETTING_KEY = "map_station_label_hide_at_zoom"
 DEFAULT_MAP_MARKER_SPIDERFY_ZOOM_LEVELS = 2
 DEFAULT_MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_PX = 20
+DEFAULT_MAP_STATION_LABEL_HIDE_AT_ZOOM = 10
 
 
 def normalize_coverage_fill_opacity_percent(value: Any) -> int:
@@ -124,6 +126,22 @@ def normalize_map_marker_spiderfy_nearby_distance_px(value: Any) -> int:
 def get_map_marker_spiderfy_nearby_distance_px() -> int:
     return normalize_map_marker_spiderfy_nearby_distance_px(
         get_app_setting(MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY)
+    )
+
+
+def normalize_map_station_label_hide_at_zoom(value: Any) -> int:
+    try:
+        normalized = int(str(value).strip())
+    except (TypeError, ValueError):
+        return DEFAULT_MAP_STATION_LABEL_HIDE_AT_ZOOM
+    if normalized < MAP_SOURCE_ZOOM_MIN or normalized > MAP_SOURCE_ZOOM_MAX:
+        return DEFAULT_MAP_STATION_LABEL_HIDE_AT_ZOOM
+    return normalized
+
+
+def get_map_station_label_hide_at_zoom() -> int:
+    return normalize_map_station_label_hide_at_zoom(
+        get_app_setting(MAP_STATION_LABEL_HIDE_AT_ZOOM_SETTING_KEY)
     )
 
 
@@ -765,6 +783,7 @@ def get_map_page_config(
                 MAP_MARKER_SPIDERFY_ENABLED_SETTING_KEY,
                 MAP_MARKER_SPIDERFY_ZOOM_LEVELS_SETTING_KEY,
                 MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY,
+                MAP_STATION_LABEL_HIDE_AT_ZOOM_SETTING_KEY,
             )
         )
         enabled_values = {"1", "true", "yes", "on"}
@@ -792,6 +811,9 @@ def get_map_page_config(
             ),
             "marker_spiderfy_nearby_distance_px": normalize_map_marker_spiderfy_nearby_distance_px(
                 map_settings.get(MAP_MARKER_SPIDERFY_NEARBY_DISTANCE_SETTING_KEY)
+            ),
+            "station_label_hide_at_zoom": normalize_map_station_label_hide_at_zoom(
+                map_settings.get(MAP_STATION_LABEL_HIDE_AT_ZOOM_SETTING_KEY)
             ),
         }
 

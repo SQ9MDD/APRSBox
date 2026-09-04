@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.20.dev - 04.09.2026
+- `Mapa / etykiety stacji`: przy zoomie `10` i mniejszym mapa ukrywa callsigny przy znacznikach, pozostawiając widoczne ikony APRS oraz podpowiedzi. Próg jest globalnym ustawieniem i można go zmienić w kompaktowym polu Ustawień globalnych; wartość domyślna to `10`.
+
 ## 1.12.19.dev - 04.09.2026
 - `Panel główny / kondycja instalacji`: kafelek Wydajność APRSBox ocenia teraz całą działającą instalację, a nie tylko ostatnie transmisje DIGI. Pomiar działa także przy nieaktywnych interfejsach, wykorzystuje pięciominutowe P95 czasu reakcji APRSBox, bieżące obciążenie kolejek oraz świeże przepełnienia i odrzucone ramki. Progi dostrojono dla małych hostów: 46 ms daje 4/5, a 132–191 ms 3/5.
 - `Instalator i aktualizator`: `uvloop` i `httptools` są opcjonalnymi akceleratorami instalowanymi wyłącznie z gotowych wheel'i. Brak kompatybilnego wheel'a nie blokuje już instalacji ani aktualizacji — Uvicorn używa wtedy standardowych `asyncio` i `h11`, bez kompilacji ze źródeł. Updater w razie braku podstawowych narzędzi systemowych doinstalowuje je przez `apt-get update` i `apt-get install` albo `apk add`, bez wykonywania aktualizacji całego systemu.

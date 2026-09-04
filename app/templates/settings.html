@@ -180,6 +180,18 @@
                     {% if can_manage_global_settings %}form="global-settings-form"{% else %}disabled{% endif %}
                 >
             </label>
+            <label>
+                <span>{{ t("Hide station labels at zoom ≤") }}</span>
+                <input
+                    type="number"
+                    name="map_station_label_hide_at_zoom"
+                    min="0"
+                    max="30"
+                    step="1"
+                    value="{{ map_station_label_hide_at_zoom }}"
+                    {% if can_manage_global_settings %}form="global-settings-form"{% else %}disabled{% endif %}
+                >
+            </label>
         </div>
         {% if can_manage_global_settings %}
         <div class="form-actions">

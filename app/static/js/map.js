@@ -39,6 +39,13 @@
     const markerSpiderfyNearbyDistancePx = Number.isInteger(configuredMarkerSpiderfyNearbyDistance)
         ? Math.min(100, Math.max(1, configuredMarkerSpiderfyNearbyDistance))
         : 20;
+    const configuredStationLabelHideAtZoom = Number.parseInt(
+        root.dataset.stationLabelHideAtZoom || "10",
+        10
+    );
+    const stationLabelHideAtZoom = Number.isInteger(configuredStationLabelHideAtZoom)
+        ? Math.min(30, Math.max(0, configuredStationLabelHideAtZoom))
+        : 10;
 
     const centerOutput = document.getElementById("map-center");
     const zoomOutput = document.getElementById("map-zoom");
@@ -669,6 +676,13 @@
         zoomControl: true,
         worldCopyJump: true,
     });
+
+    function syncStationLabelVisibility() {
+        root.classList.toggle(
+            "map-station-labels-hidden",
+            map.getZoom() <= stationLabelHideAtZoom
+        );
+    }
     window.aprsboxCenterMapOn = function (latitude, longitude) {
         if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
             return;
@@ -790,8 +804,10 @@
     coverageLayerGroup.addTo(map);
     trackLayerGroup.addTo(map);
     markerLayerGroup.addTo(map);
+    syncStationLabelVisibility();
     syncMarkerSpiderfierActivation();
     map.on("zoomend", syncMarkerSpiderfierActivation);
+    map.on("zoomend", syncStationLabelVisibility);
     rulerLayer.addTo(map);
     maidenheadGridLayer.addTo(map);
 

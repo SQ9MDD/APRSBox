@@ -24,5 +24,6 @@ This panel controls application-wide display, retention, and logging defaults. A
 - `Enable spreading overlapping markers` spreads overlapping individual markers on mouse hover near the maximum zoom; clicking a spread icon opens station details, while moving the pointer outside the group collapses it again. On touch devices, the first tap spreads the group and the second opens the selected station.
 - `Activate X levels before maximum zoom` sets the activation threshold relative to the active map source's maximum zoom. The default `2` activates at zoom 14, 16, or 18 when the maximum is 16, 18, or 20 respectively.
 - `Overlapping marker distance [px]` controls how close visible marker centers may be before they are treated as overlapping. The default is `20` px.
+- `Hide station labels at zoom ≤` hides station callsigns while the map zoom is at or below the selected value. Icons and their hover details remain visible. The default is `10`.
 
 Use `Save Global Settings` to apply globally stored values.

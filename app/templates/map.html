@@ -33,6 +33,7 @@
             data-marker-spiderfy-enabled="{{ 'true' if map_config.marker_spiderfy_enabled else 'false' }}"
             data-marker-spiderfy-zoom-levels-before-max="{{ map_config.marker_spiderfy_zoom_levels_before_max }}"
             data-marker-spiderfy-nearby-distance-px="{{ map_config.marker_spiderfy_nearby_distance_px }}"
+            data-station-label-hide-at-zoom="{{ map_config.station_label_hide_at_zoom }}"
             data-static-root="{{ request.scope.root_path }}/static/"
             data-root-path="{{ request.scope.root_path }}"
             data-i18n-aprs-client="{{ t('APRS client') }}"
@@ -223,5 +224,5 @@
 {% endif %}
 <script src="{{ request.scope.root_path }}/static/js/map-latest-overlay.js?v={{ app_version }}-live-frame-1"></script>
 <script src="{{ request.scope.root_path }}/static/js/map-scroller-overlay.js?v={{ app_version }}-live-frame-1"></script>
-<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-marker-spiderfy-hover-1"></script>
+<script src="{{ request.scope.root_path }}/static/js/map.js?v={{ app_version }}-station-label-zoom-1"></script>
 {% endblock %}

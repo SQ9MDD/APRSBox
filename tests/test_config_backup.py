@@ -198,6 +198,7 @@ class ConfigBackupTests(unittest.TestCase):
             del payload["app_settings"]["map_marker_spiderfy_enabled"]
             del payload["app_settings"]["map_marker_spiderfy_zoom_levels_before_max"]
             del payload["app_settings"]["map_marker_spiderfy_nearby_distance_px"]
+            del payload["app_settings"]["map_station_label_hide_at_zoom"]
 
             ok, error = safe_import_configuration_backup(json.dumps(payload).encode("utf-8"))
 
@@ -205,6 +206,7 @@ class ConfigBackupTests(unittest.TestCase):
             self.assertEqual(get_app_setting("map_marker_spiderfy_enabled"), "0")
             self.assertEqual(get_app_setting("map_marker_spiderfy_zoom_levels_before_max"), "2")
             self.assertEqual(get_app_setting("map_marker_spiderfy_nearby_distance_px"), "20")
+            self.assertEqual(get_app_setting("map_station_label_hide_at_zoom"), "10")
 
     def test_export_and_import_restores_messages_and_notification_configuration(self) -> None:
         with temporary_database():

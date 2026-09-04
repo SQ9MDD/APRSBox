@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.20.dev - 2026-09-04
+- `Map / station labels`: at zoom `10` and below, the map hides callsigns beside station markers while retaining APRS icons and hover details. The threshold is a global setting, editable through a compact Global Settings field; the default is `10`.
+
 ## 1.12.19.dev - 2026-09-04
 - `Dashboard / installation health`: the APRSBox Performance tile now assesses the running installation rather than only recent DIGI transmissions. It works while radio interfaces are idle, using a five-minute P95 APRSBox response time, current queue pressure, and recent overflows or dropped frames. Thresholds are tuned for small hosts: 46 ms scores 4/5, while 132–191 ms scores 3/5.
 - `Installer and updater`: `uvloop` and `httptools` are optional accelerators installed from prebuilt wheels only. A missing compatible wheel no longer blocks an installation or update; Uvicorn then uses standard `asyncio` and `h11` without compiling from source. When core system tools are missing, the updater installs them with `apt-get update` plus `apt-get install`, or `apk add`, without performing a whole-system upgrade.

@@ -211,9 +211,11 @@ class SettingsMaintenanceTests(unittest.TestCase):
         self.assertIn('name="map_marker_spiderfy_enabled"', template_source)
         self.assertIn('name="map_marker_spiderfy_zoom_levels"', template_source)
         self.assertIn('name="map_marker_spiderfy_nearby_distance_px"', template_source)
+        self.assertIn('name="map_station_label_hide_at_zoom"', template_source)
         self.assertIn('{{ t("Enable spreading overlapping markers") }}', template_source)
         self.assertIn('{{ t("Activate X levels before maximum zoom") }}', template_source)
         self.assertIn('{{ t("Overlapping marker distance [px]") }}', template_source)
+        self.assertIn('{{ t("Hide station labels at zoom ≤") }}', template_source)
         self.assertIn('{{ t("Group overlapping station icons on the map") }}', template_source)
         self.assertIn('{% if coverage_fill_opacity == value %}selected{% endif %}', template_source)
         self.assertNotIn("aprsbox-map-coverage-fill-opacity", template_source)
@@ -239,6 +241,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
                 map_marker_spiderfy_enabled="1",
                 map_marker_spiderfy_zoom_levels="2",
                 map_marker_spiderfy_nearby_distance_px="20",
+                map_station_label_hide_at_zoom="10",
                 current_user=UserIdentity(id=1, username="admin", role="admin", is_active=True),
             )
 
@@ -248,6 +251,7 @@ class SettingsMaintenanceTests(unittest.TestCase):
             self.assertEqual(get_app_setting("map_marker_spiderfy_enabled"), "1")
             self.assertEqual(get_app_setting("map_marker_spiderfy_zoom_levels_before_max"), "2")
             self.assertEqual(get_app_setting("map_marker_spiderfy_nearby_distance_px"), "20")
+            self.assertEqual(get_app_setting("map_station_label_hide_at_zoom"), "10")
 
     def test_settings_template_contains_danger_zone_actions(self) -> None:
         template_source = Path("app/templates/settings.html").read_text(encoding="utf-8")
