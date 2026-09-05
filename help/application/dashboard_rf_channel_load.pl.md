@@ -1,8 +1,21 @@
-# Szacowane obciążenie kanału APRS RF
+# Wykresy aktywności i obciążenie kanału APRS RF
 
-Wykres pokazuje szacowane obciążenie kanału APRS RF na podstawie ramek poprawnie odebranych i zdekodowanych przez APRSBox oraz transmisji RF zapisanych przez APRSBox. Jest to narzędzie diagnostyczne dla obserwowanego ruchu APRS, a nie pomiar rzeczywistego zajęcia medium radiowego.
+Ten blok zawiera dwa wykresy dla tego samego zakresu czasu, bucketów i zoomu. Górny pokazuje liczbę zdarzeń ruchu APRS. Dolny pokazuje szacowane obciążenie kanału APRS RF. Zakres wybierasz w prawym górnym rogu bloku; przeciągnięcie po wykresie przybliża wybrany fragment, a podwójne kliknięcie przywraca pełny zakres.
 
-## Co przedstawia wykres
+## Górny wykres: aktywność APRS
+
+Górny wykres pokazuje liczbę zdarzeń w każdym przedziale:
+
+- **RX** — ramki odebrane przez APRSBox,
+- **TX** — lokalnie zapisane transmisje RF,
+- **repeats** — transmisje oznaczone jako digipeat,
+- **APRS-IS uplink** — ramki wysłane z APRSBox do APRS-IS.
+
+To liczba ramek, więc nie opisuje bezpośrednio zajętości kanału: krótkie i długie ramki mają tę samą wartość. APRS-IS uplink jest ruchem internetowym i nie zajmuje kanału RF.
+
+## Dolny wykres: obciążenie kanału RF
+
+Dolny wykres pokazuje szacowane obciążenie kanału APRS RF na podstawie ramek poprawnie odebranych i zdekodowanych przez APRSBox oraz transmisji RF zapisanych przez APRSBox. Jest to narzędzie diagnostyczne dla obserwowanego ruchu APRS, a nie pomiar rzeczywistego zajęcia medium radiowego.
 
 Każdy punkt jest udziałem oszacowanego czasu nadawania RF w czasie całego przedziału. Na przykład suma `60 s` airtime w przedziale `5 min` daje obciążenie `20%`.
 

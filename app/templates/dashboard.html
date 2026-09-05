@@ -238,19 +238,29 @@
                             <h2>{{ t("Activity Charts") }}</h2>
                         </div>
                     </div>
-                    <div class="dashboard-activity-controls">
-                        <label class="dashboard-activity-range-label" for="dashboard-activity-range">{{ t("Range") }}</label>
-                        <select id="dashboard-activity-range" name="dashboard_activity_range">
-                            <option value="1h">1h</option>
-                            <option value="3h">3h</option>
-                            <option value="6h">6h</option>
-                            <option value="12h">12h</option>
-                            <option value="24h" selected>24h</option>
-                            <option value="7d">7d</option>
-                            <option value="30d">30d</option>
-                            <option value="365d">365d</option>
-                        </select>
-                        <span class="muted small dashboard-activity-zoom-hint">{{ t("Drag to zoom, double click to reset.") }}</span>
+                    <div class="dashboard-activity-panel-actions">
+                        <div class="dashboard-activity-controls">
+                            <label class="dashboard-activity-range-label" for="dashboard-activity-range">{{ t("Range") }}</label>
+                            <select id="dashboard-activity-range" name="dashboard_activity_range">
+                                <option value="1h">1h</option>
+                                <option value="3h">3h</option>
+                                <option value="6h">6h</option>
+                                <option value="12h">12h</option>
+                                <option value="24h" selected>24h</option>
+                                <option value="7d">7d</option>
+                                <option value="30d">30d</option>
+                                <option value="365d">365d</option>
+                            </select>
+                        </div>
+                        <button
+                            class="help-icon-button"
+                            type="button"
+                            data-help-page="application/dashboard_rf_channel_load"
+                            title="{{ t('Help') }}"
+                            aria-label="{{ t('Help') }} — {{ t('Activity Charts') }}"
+                        >
+                            <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
+                        </button>
                     </div>
                 </div>
                 <div class="dashboard-v2-chart-header">
@@ -267,15 +277,6 @@
                     <h3>{{ t("RF channel load") }}</h3>
                     <label for="dashboard-rf-interface">{{ t("Interface") }}</label>
                     <select id="dashboard-rf-interface"></select>
-                    <button
-                        class="help-icon-button"
-                        type="button"
-                        data-help-page="application/dashboard_rf_channel_load"
-                        title="{{ t('Help') }}"
-                        aria-label="{{ t('Help') }} — {{ t('RF channel load') }}"
-                    >
-                        <img src="{{ request.scope.root_path }}/static/icons/help-circle-outline.svg" alt="">
-                    </button>
                 </div>
                 <div class="dashboard-activity-canvas dashboard-rf-load-canvas">
                     <canvas id="dashboard-rf-load-chart"></canvas>

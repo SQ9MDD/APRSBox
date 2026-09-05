@@ -1,8 +1,21 @@
-# Estimated APRS RF channel load
+# Activity charts and estimated APRS RF channel load
 
-This chart estimates APRS RF channel load from frames APRSBox successfully receives and decodes, plus locally logged RF transmissions. It is a diagnostic view of observed APRS traffic, not a measurement of actual physical channel occupancy.
+This block contains two charts that share the same time range, buckets, and zoom. The upper chart shows APRS traffic event counts. The lower chart estimates APRS RF channel load. Choose a range at the block's upper right; drag on a chart to zoom and double-click to restore the full range.
 
-## Reading the chart
+## Upper chart: APRS activity
+
+The upper chart shows the number of events in each bucket:
+
+- **RX** — frames received by APRSBox,
+- **TX** — locally logged RF transmissions,
+- **repeats** — transmissions marked as digipeated,
+- **APRS-IS uplink** — frames sent from APRSBox to APRS-IS.
+
+These are frame counts, so they do not directly express channel occupancy: short and long frames have the same value. APRS-IS uplink is Internet traffic and does not consume RF airtime.
+
+## Lower chart: RF channel load
+
+The lower chart estimates APRS RF channel load from frames APRSBox successfully receives and decodes, plus locally logged RF transmissions. It is a diagnostic view of observed APRS traffic, not a measurement of actual physical channel occupancy.
 
 Each point is estimated RF airtime divided by the full bucket duration. For example, `60 s` of airtime in a `5 min` bucket produces `20%` load.
 

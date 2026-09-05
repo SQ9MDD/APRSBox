@@ -2182,6 +2182,12 @@ body {
     gap: 0.45rem;
 }
 
+.dashboard-activity-panel-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
 .dashboard-activity-range-label {
     display: inline;
     color: var(--muted);
@@ -2192,10 +2198,6 @@ body {
 .dashboard-activity-controls select {
     width: auto;
     min-width: 6.2rem;
-}
-
-.dashboard-activity-zoom-hint {
-    margin-left: 0.15rem;
 }
 
 .dashboard-activity-grid {
