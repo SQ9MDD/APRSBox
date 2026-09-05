@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.21.dev - 2026-09-05
+- `Dashboard / estimated APRS RF channel load`: added a separate channel-load chart based on estimated AX.25 airtime per RF interface. It uses the same time range, buckets, and zoom as activity charts, shows diagnostic `normal` (<20%), `busy` (20–<40%), and `congested` (≥40%) states, and clearly identifies the result as an estimate from decoded APRS traffic rather than physical DCD/channel utilization.
+- `Interfaces / RF bitrate`: KISS serial and TCP interfaces use the fixed default RF modem bitrate of `1200 bit/s`, independent of UART baud rate. Airtime uses raw AX.25 length where available, includes FCS, flags, and a deterministic HDLC bit-stuffing approximation, while excluding KISS framing and unknown TX delay/preamble. The bitrate is intentionally not exposed in the interface form; incomplete history is shown as unavailable data rather than a false zero.
+- `Statistics / performance`: airtime is calculated only by the existing closed-bucket aggregator; RX, DigiFlow, RF TX, and APRS-IS dispatch paths remain unchanged. Historical traffic is not backfilled automatically.
+
 ## 1.12.20.dev - 2026-09-04
 - `Map / station labels`: at zoom `10` and below, the map hides callsigns beside station markers while retaining APRS icons and hover details. The threshold is a global setting, editable through a compact Global Settings field; the default is `10`.
 - `Map / station tracks`: simultaneously visible tracks now receive distinct, high-contrast colors from a palette that avoids the dominant road, water, and vegetation colors of common map tiles. A track keeps its color while it is refreshed.

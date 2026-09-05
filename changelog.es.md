@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.21.dev - 2026-09-05
+- `Panel / carga estimada del canal APRS RF`: se añadió un gráfico independiente de tiempo de transmisión AX.25 estimado por interfaz RF. Usa el mismo rango temporal, buckets y zoom que los gráficos de actividad, muestra los estados diagnósticos `normal` (<20%), `busy` (20–<40%) y `congested` (≥40%), y deja claro que el resultado es una estimación del tráfico APRS decodificado, no una medición DCD ni de utilización física del canal.
+- `Interfaces / tasa de bits RF`: las interfaces KISS serie y TCP usan la tasa de bits fija del módem RF de `1200 bit/s`, independiente de la velocidad UART. El tiempo de transmisión usa la longitud AX.25 raw cuando está disponible, incluye FCS, flags y una aproximación determinista de bit stuffing HDLC, y excluye el framing KISS y TXDELAY/preámbulo desconocidos. La tasa no se muestra intencionadamente en el formulario de interfaz; el historial incompleto se muestra como datos no disponibles, no como un cero falso.
+- `Estadísticas / rendimiento`: el tiempo de transmisión se calcula únicamente en el agregador existente de buckets cerrados; las rutas RX, DigiFlow, RF TX y APRS-IS no cambian. No se ejecuta un backfill automático del historial de tráfico.
+
 ## 1.12.20.dev - 2026-09-04
 - `Mapa / etiquetas de estaciones`: con zoom `10` o inferior, el mapa oculta los indicativos junto a los marcadores de estación, manteniendo los iconos APRS y los detalles al pasar el cursor. El umbral es un ajuste global editable mediante un campo compacto en Ajustes globales; el valor predeterminado es `10`.
 - `Mapa / recorridos de estaciones`: los recorridos visibles simultáneamente reciben ahora colores distintos y de alto contraste de una paleta que evita los tonos predominantes de carreteras, agua y vegetación de los mapas habituales. Un recorrido conserva su color durante las actualizaciones.

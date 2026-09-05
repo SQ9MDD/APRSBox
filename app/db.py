@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS modems (
     band TEXT NOT NULL DEFAULT '',
     device_path TEXT,
     baud_rate INTEGER,
-    rf_bitrate INTEGER CHECK (rf_bitrate > 0),
+    rf_bitrate INTEGER DEFAULT 1200 CHECK (rf_bitrate > 0),
     serial_rx_silence_reconnect_seconds INTEGER NOT NULL DEFAULT 150
         CHECK (serial_rx_silence_reconnect_seconds IN (0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 450, 480, 510, 540, 570, 600)),
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
@@ -1448,7 +1448,17 @@ def init_db() -> None:
                 """
             )
         if "rf_bitrate" not in modem_columns:
-            connection.execute("ALTER TABLE modems ADD COLUMN rf_bitrate INTEGER CHECK (rf_bitrate > 0)")
+            connection.execute(
+                "ALTER TABLE modems ADD COLUMN rf_bitrate INTEGER DEFAULT 1200 CHECK (rf_bitrate > 0)"
+            )
+        connection.execute(
+            """
+            UPDATE modems
+            SET rf_bitrate = 1200
+            WHERE rf_bitrate IS NULL
+              AND UPPER(modem_type) IN ('SERIALL', 'TCP')
+            """
+        )
         for column, sql_type in (
             ("rf_rx_airtime_seconds", "REAL"),
             ("rf_tx_airtime_seconds", "REAL"),

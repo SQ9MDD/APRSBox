@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.db import execute, fetch_one, get_connection, init_db, set_app_setting
-from app.services.content import _normalize_modem_payload, create_section_row, update_section_row
+from app.services.content import create_section_row, update_section_row
 from app.services.outbound import build_tnc2_kiss_frame
 from app.services.radio_activity import (
     _collect_bucket_source_rows,
@@ -97,19 +97,15 @@ class RfAirtimeTests(unittest.TestCase):
             self.assertIsNone(_logged_rf_ax25_length({'direction': 'tx', 'command': command, 'hex': value, 'length': 100}))
         self.assertIsNone(_logged_rf_ax25_length({'direction': 'rx', 'command': 'MQTT', 'length': 4096}))
 
-    def test_uart_is_independent_of_rf_bitrate(self):
+    def test_uart_baudrate_is_not_used_for_default_rf_bitrate(self):
         with temporary_database():
             first = insert_modem(bitrate=1200, uart=9600)
             insert_frame(first)
             second = insert_modem(name='RF9600', bitrate=9600, uart=1200)
             insert_frame(second)
-            third = insert_modem(name='Unknown RF', bitrate=None, uart=1200)
-            insert_frame(third)
             buckets = {row['interface_id']: row for row in collect()}
             self.assertAlmostEqual(buckets[first]['rf_rx_airtime_seconds'], estimate_rf_airtime_seconds(100, 1200))
             self.assertAlmostEqual(buckets[second]['rf_rx_airtime_seconds'], estimate_rf_airtime_seconds(100, 9600))
-            self.assertEqual(buckets[third]['rf_frames_total'], 0)
-            self.assertEqual(buckets[third]['rf_unestimated_frames_total'], 1)
 
     def test_rx_and_repeat_are_two_transmissions_aprsis_and_skips_are_not(self):
         with temporary_database():
@@ -163,17 +159,15 @@ class RfAirtimeTests(unittest.TestCase):
             aggregate()
             self.assertEqual(load()['interfaces'][0]['series']['rf_channel_occupancy_pct'], [0, 0, 0])
 
-    def test_unknown_bitrate_and_unverified_proxy_are_gaps(self):
+    def test_unverified_proxy_is_a_gap(self):
         with temporary_database():
-            modem = insert_modem(bitrate=None)
-            insert_frame(modem)
             proxy = insert_modem(name='Proxy')
             insert_frame(proxy, direction='tx', command='TX-PROXY')
             aggregate()
-            for interface in load()['interfaces']:
-                self.assertIsNone(interface['series']['rf_channel_state'][0])
-                self.assertIsNone(interface['series']['rf_channel_occupancy_pct'][0])
-                self.assertEqual(interface['series']['rf_unestimated_frames_total'][0], 1)
+            series = load()['interfaces'][0]['series']
+            self.assertIsNone(series['rf_channel_state'][0])
+            self.assertIsNone(series['rf_channel_occupancy_pct'][0])
+            self.assertEqual(series['rf_unestimated_frames_total'][0], 1)
 
     def test_legacy_history_is_not_backfilled_and_null_is_not_zero(self):
         with temporary_database():
@@ -262,25 +256,19 @@ class RfAirtimeTests(unittest.TestCase):
             before = dict(fetch_one('SELECT * FROM traffic_frames'))
             init_db()
             self.assertEqual(dict(fetch_one('SELECT * FROM traffic_frames')), before)
-            self.assertIsNone(fetch_one('SELECT rf_bitrate FROM modems')['rf_bitrate'])
+            self.assertEqual(fetch_one('SELECT rf_bitrate FROM modems')['rf_bitrate'], 1200)
 
 
 class RfBitrateConfigurationTests(unittest.TestCase):
-    def test_optional_rf_bitrate_roundtrips_through_existing_configuration(self):
+    def test_interface_configuration_uses_hidden_default_rf_bitrate(self):
         with temporary_database():
             payload = {'name': 'KISS', 'modem_type': 'TCP', 'device_path': '127.0.0.1:8001', 'rf_bitrate': '9600'}
             create_section_row('modems', payload)
             row = fetch_one("SELECT * FROM modems WHERE name = 'KISS'")
-            self.assertEqual(row['rf_bitrate'], 9600)
+            self.assertEqual(row['rf_bitrate'], 1200)
             self.assertIsNone(row['baud_rate'])
-            update_section_row('modems', row['id'], dict(payload, rf_bitrate='1200'))
+            update_section_row('modems', row['id'], payload)
             self.assertEqual(fetch_one('SELECT rf_bitrate FROM modems')['rf_bitrate'], 1200)
-            self.assertIsNone(_normalize_modem_payload(dict(payload, rf_bitrate=''))['rf_bitrate'])
-
-    def test_rf_bitrate_validation(self):
-        for value in ('-1', '0', '1.5', 'nan', '10000001'):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                _normalize_modem_payload({'modem_type': 'TCP', 'rf_bitrate': value})
 
 
 if __name__ == '__main__':

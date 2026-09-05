@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.21.dev - 05.09.2026
+- `Panel główny / szacowane obciążenie kanału APRS RF`: dodano osobny wykres obciążenia kanału oparty na szacowanym czasie transmisji AX.25 dla każdego interfejsu RF. Używa tego samego zakresu czasu, bucketów i zoomu co wykresy aktywności; pokazuje stany diagnostyczne `normal` (<20%), `busy` (20–<40%) i `congested` (≥40%) oraz jasno zaznacza, że jest to estymacja z dekodowanego ruchu APRS, a nie pomiar DCD ani fizycznego wykorzystania kanału.
+- `Interfejsy / prędkość RF`: interfejsy KISS serial i TCP używają stałej domyślnej prędkości modemu RF `1200 bit/s`, niezależnej od prędkości UART. Airtime korzysta z długości raw AX.25, gdy jest dostępna, uwzględnia FCS, flagi oraz deterministyczne przybliżenie bit stuffing HDLC, a pomija framing KISS i nieznane TXDELAY/preambułę. Prędkość celowo nie jest widoczna w formularzu interfejsu; niepełna historia jest pokazywana jako brak danych, nie fałszywe zero.
+- `Statystyki / wydajność`: airtime jest liczony wyłącznie przez istniejący agregator zamkniętych bucketów; ścieżki RX, DigiFlow, RF TX i APRS-IS pozostają bez zmian. Nie uruchamiamy automatycznego backfillu historii ruchu.
+
 ## 1.12.20.dev - 04.09.2026
 - `Mapa / etykiety stacji`: przy zoomie `10` i mniejszym mapa ukrywa callsigny przy znacznikach, pozostawiając widoczne ikony APRS oraz podpowiedzi. Próg jest globalnym ustawieniem i można go zmienić w kompaktowym polu Ustawień globalnych; wartość domyślna to `10`.
 - `Mapa / ślady stacji`: jednocześnie widoczne ślady dostają teraz różne, kontrastowe kolory z palety niezdominowanej przez typowe barwy dróg, wody i roślinności na mapach. Kolor pozostaje stabilny podczas odświeżania śladu.

@@ -5134,11 +5134,9 @@ def _normalize_modem_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if modem_type not in supported_modem_types:
         raise ValueError("Unsupported interface type.")
 
-    # This is RF modem bitrate, never the serial UART baud_rate.
-    rf_bitrate = str(payload.get("rf_bitrate") or "").strip()
-    if rf_bitrate and (not rf_bitrate.isascii() or not rf_bitrate.isdecimal() or not 1 <= int(rf_bitrate) <= 10000000):
-        raise ValueError("RF bitrate must be a positive integer up to 10000000 bit/s.")
-    normalized["rf_bitrate"] = int(rf_bitrate) if rf_bitrate and modem_type in TX_CAPABLE_MODEM_TYPES else None
+    # This is RF modem bitrate, never the serial UART baud_rate.  APRS KISS
+    # interfaces use the fixed, conservative application default for now.
+    normalized["rf_bitrate"] = 1200 if modem_type in {"SERIALL", "TCP"} else None
     normalized["modem_type"] = modem_type
     normalized["name"] = str(payload.get("name") or "").strip()
     normalized["band"] = str(payload.get("band") or "").strip().lower()

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.21.dev - 2026-09-05
+- `Dashboard / geschätzte APRS-RF-Kanalauslastung`: ein separates Diagramm zeigt die geschätzte AX.25-Sendezeit je RF-Schnittstelle. Es verwendet denselben Zeitraum, dieselben Buckets und denselben Zoom wie die Aktivitätsdiagramme, zeigt die Diagnosezustände `normal` (<20%), `busy` (20–<40%) und `congested` (≥40%) und kennzeichnet das Ergebnis klar als Schätzung aus dekodiertem APRS-Verkehr, nicht als DCD- oder physische Kanalmessung.
+- `Schnittstellen / RF-Bitrate`: serielle und TCP-KISS-Schnittstellen verwenden die feste RF-Modembitrate `1200 bit/s`, getrennt von der UART-Baudrate. Die Sendezeit nutzt verfügbare rohe AX.25-Längen, berücksichtigt FCS, Flags und eine deterministische HDLC-Bit-Stuffing-Näherung, aber kein KISS-Framing sowie keine unbekannte TXDELAY/Präambel. Die Bitrate wird absichtlich nicht im Schnittstellenformular angezeigt; unvollständige Historie wird als nicht verfügbare Messung angezeigt, nicht als falsche Null.
+- `Statistiken / Leistung`: die Sendezeit wird ausschließlich im vorhandenen Aggregator für geschlossene Buckets berechnet; RX-, DigiFlow-, RF-TX- und APRS-IS-Pfade bleiben unverändert. Ein automatisches Backfill der Verkehrshistorie findet nicht statt.
+
 ## 1.12.20.dev - 2026-09-04
 - `Karte / Stationsbeschriftungen`: Bei Zoom `10` und kleiner blendet die Karte die Rufzeichen neben Stationsmarkern aus; APRS-Symbole und Hover-Details bleiben sichtbar. Der Schwellenwert ist eine globale Einstellung und kann über ein kompaktes Feld in den globalen Einstellungen geändert werden; der Standardwert ist `10`.
 - `Karte / Stationsspuren`: Gleichzeitig sichtbare Spuren erhalten jetzt unterschiedliche, kontrastreiche Farben aus einer Palette, die die vorherrschenden Straßen-, Wasser- und Vegetationsfarben üblicher Kartenkacheln vermeidet. Eine Spur behält ihre Farbe beim Aktualisieren.

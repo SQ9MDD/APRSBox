@@ -4,13 +4,6 @@
 {% set tnc_device_path = stored_device_path if selected_modem_type in ['SERIALL', 'TCP'] else '' %}
 {% set openwebrx_device_path = stored_device_path if selected_modem_type == 'OPENWEBRX_MQTT' else '' %}
 {% set aprsis_receive_filter = stored_device_path if selected_modem_type == 'APRSIS' else 'm/20' %}
-{% macro rf_bitrate_field() -%}
-<label>
-    <span>{{ t("RF bitrate (bit/s)") }}</span>
-    <input type="number" name="rf_bitrate" min="1" max="10000000" step="1" value="{{ modem_values.get('rf_bitrate') or '' }}">
-    <small class="muted">{{ t("Radio modem bitrate, e.g. 1200 or 9600; not UART baud rate. Leave blank if unknown.") }}</small>
-</label>
-{%- endmacro %}
 {% macro rx_silence_reconnect_field() -%}
 <label>
     <span>{{ t("RX Silence Reconnect Timeout (s)") }}</span>
@@ -60,7 +53,6 @@
                 <span>{{ t("Baud Rate") }}</span>
                 <input type="number" name="baud_rate" value="{{ modem_values.get('baud_rate') or '' }}" required>
             </label>
-            {{ rf_bitrate_field() }}
             {{ rx_silence_reconnect_field() }}
         </div>
         <div class="modem-capability-block">
@@ -114,7 +106,6 @@
                     <option value="70cm" {% if modem_values.get('band') == '70cm' %}selected{% endif %}>{{ t("70cm — assess propagation") }}</option>
                 </select>
             </label>
-            {{ rf_bitrate_field() }}
             {{ rx_silence_reconnect_field() }}
         </div>
         <div class="modem-capability-block">

@@ -5,10 +5,10 @@ and locally logged RF TX. It shares the existing activity API, five-minute
 aggregation, range/downsampling and bidirectional mouse zoom. It uses Chart.js,
 which was already shipped by APRSBox.
 
-Set **RF bitrate (bit/s)** in a serial KISS or TCP KISS interface's settings.
-`rf_bitrate` is optional and defaults to unknown (`NULL`) on existing and new
-interfaces. Typical values are 1200 and 9600. The UART `baud_rate` is never used
-for RF estimates. Unsupported/non-KISS transports have no inferred bitrate.
+Serial KISS and TCP KISS interfaces use the fixed default RF bitrate of
+`1200 bit/s`. It is intentionally not exposed in interface settings. The UART
+`baud_rate` is never used for RF estimates. Unsupported/non-KISS transports have
+no inferred bitrate.
 
 ## Model
 
@@ -89,8 +89,9 @@ whose airtime could not be estimated. Fully processed empty buckets are zero.
 Older empty periods before the feature boundary are gaps. This also does not
 claim that a disconnected or silent receiver actually observed an empty channel.
 
-The additive migration adds nullable `modems.rf_bitrate` and four nullable
-columns to `radio_activity_5m` (RX/TX seconds, estimated/unestimated frame counts).
+The additive migration adds `modems.rf_bitrate` with a default of `1200 bit/s`
+for serial and TCP KISS interfaces, and four nullable columns to
+`radio_activity_5m` (RX/TX seconds, estimated/unestimated frame counts).
 An `app_settings` feature boundary distinguishes old empty periods. It does not
 scan, update or backfill traffic logs or reset the existing aggregation cursor.
 Old bucket rows remain NULL. Existing retention is unchanged.
@@ -183,7 +184,7 @@ Changed/added files:
 - `app/services/radio_activity.py`: aggregation, airtime model and existing API payload.
 - `app/db.py`: additive schema and feature boundary.
 - `app/services/content.py`, `app/sections.py`, `app/routers/pages.py`,
-  `app/templates/partials/modem_form_fields.html`: optional RF bitrate settings.
+  `app/templates/partials/modem_form_fields.html`: fixed hidden RF bitrate default.
 - `app/templates/dashboard.html`, `app/static/css/style.css`,
   `app/templates/base.html`: chart, synchronized interactions and CSS cache key.
 - `app/languages/{en,pl,de,es,tlh}.json`: PL/EN/DE/ES translations; new English

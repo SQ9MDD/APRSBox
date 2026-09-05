@@ -2100,7 +2100,7 @@
   "Estimated RF airtime": "Geschätzte RF-Sendezeit",
   "Estimated APRS RF load from decoded RX and logged TX per interface. Collisions and undecoded signals may be invisible; this is not a DCD measurement. TX delay and preamble are excluded.": "Geschätzte APRS-RF-Auslastung aus dekodierten RX und protokollierten TX je Schnittstelle. Kollisionen und nicht dekodierte Signale können unsichtbar bleiben; keine DCD-Messung. Ohne TXDELAY und Präambel.",
   "Interfaces and KISS ports must represent one RF channel. Separate interfaces are never summed. Thresholds are diagnostic, not physical limits.": "Die Schnittstelle und ihre KISS-Ports müssen einen RF-Kanal abbilden. Separate Schnittstellen werden nie summiert. Die Schwellen sind diagnostisch, keine physikalischen Grenzen.",
-  "RF load unavailable: configure RF bitrate for a KISS interface and wait for a complete bucket. Gaps indicate missing data.": "RF-Auslastung nicht verfügbar: RF-Bitrate einer KISS-Schnittstelle einstellen und ein vollständiges Zeitfenster abwarten. Lücken bedeuten fehlende Daten.",
+  "RF load unavailable: wait for a complete bucket. Gaps indicate missing data.": "RF-Auslastung nicht verfügbar: ein vollständiges Zeitfenster abwarten. Lücken bedeuten fehlende Daten.",
   "Busy": "Erhöht",
   "Congested": "Überlastet",
   "s": "s"
