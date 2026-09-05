@@ -262,6 +262,19 @@
                 <div class="dashboard-activity-canvas">
                     <canvas id="dashboard-direction-activity-chart"></canvas>
                 </div>
+                <div class="dashboard-rf-load-block">
+                <div class="dashboard-v2-chart-header">
+                    <h3>{{ t("RF channel load") }}</h3>
+                    <label for="dashboard-rf-interface">{{ t("Interface") }}</label>
+                    <select id="dashboard-rf-interface"></select>
+                </div>
+                <p class="muted small">{{ t("Estimated APRS RF load from decoded RX and logged TX per interface. Collisions and undecoded signals may be invisible; this is not a DCD measurement. TX delay and preamble are excluded.") }}</p>
+                <div class="dashboard-activity-canvas dashboard-rf-load-canvas">
+                    <canvas id="dashboard-rf-load-chart"></canvas>
+                </div>
+                <p class="muted small" id="dashboard-rf-load-status" role="status"></p>
+                <p class="muted small">{{ t("Interfaces and KISS ports must represent one RF channel. Separate interfaces are never summed. Thresholds are diagnostic, not physical limits.") }}</p>
+                </div>
                 <div class="dashboard-activity-totals dashboard-v2-activity-totals">
                     <span><small>{{ t("All frames") }}</small><strong id="dashboard-total-frames">{{ dashboard_home.activity_chart.totals.total }}</strong></span>
                     <span><small>{{ t("Received (RX)") }}</small><strong id="dashboard-total-rx">{{ dashboard_home.activity_chart.totals.rx }}</strong></span>
@@ -369,6 +382,21 @@
         const mainCanvas = document.getElementById("dashboard-main-activity-chart");
         const directionCanvas = document.getElementById("dashboard-direction-activity-chart");
         const rangeSelect = document.getElementById("dashboard-activity-range");
+        const rfCanvas = document.getElementById("dashboard-rf-load-chart");
+        const rfInterfaceSelect = document.getElementById("dashboard-rf-interface");
+        const rfStatusNode = document.getElementById("dashboard-rf-load-status");
+        const rfLabels = {
+            load: {{ t("Estimated APRS RF channel load")|tojson }},
+            airtime: {{ t("Estimated RF airtime")|tojson }},
+            window: {{ t("Window")|tojson }},
+            frames: {{ t("Frames")|tojson }},
+            normal: {{ t("Normal")|tojson }},
+            busy: {{ t("Busy")|tojson }},
+            congested: {{ t("Congested")|tojson }},
+            seconds: {{ t("s")|tojson }},
+            minutes: {{ t("min")|tojson }},
+            unavailable: {{ t("RF load unavailable: configure RF bitrate for a KISS interface and wait for a complete bucket. Gaps indicate missing data.")|tojson }},
+        };
         const mainWindowNode = document.getElementById("dashboard-main-activity-window");
         const stepNode = document.getElementById("dashboard-direction-activity-step");
         const totalFramesNode = document.getElementById("dashboard-total-frames");
@@ -547,6 +575,7 @@
                 outputBucketMinutes: Number(rawPayload?.output_bucket_minutes || 5),
                 points: Number(rawPayload?.points || labels.length || 0),
                 labels,
+                rfChannelLoad: rawPayload?.rf_channel_load || {},
                 series: {
                     total: totalSeries,
                     mobile: mobileSeries,
@@ -572,6 +601,7 @@
 
         let mainChart = null;
         let directionChart = null;
+        let rfChart = null;
         let zoomBounds = null;
         let lastRenderedPayload = null;
         let activeRange = readStoredRange();
@@ -638,7 +668,7 @@
         };
 
         const applyZoomBoundsToCharts = () => {
-            const charts = [mainChart, directionChart];
+            const charts = [mainChart, directionChart, rfChart];
             for (const chart of charts) {
                 if (!chart) {
                     continue;
@@ -788,6 +818,67 @@
             });
         };
 
+        const renderRfChart = (chartPayload) => {
+            if (!(rfCanvas instanceof HTMLCanvasElement) || !(rfInterfaceSelect instanceof HTMLSelectElement)) return;
+            if (rfChart) rfChart.destroy();
+            const interfaces = chartPayload.rfChannelLoad?.interfaces || [];
+            const selectedId = rfInterfaceSelect.value;
+            rfInterfaceSelect.replaceChildren(...interfaces.map((item) => {
+                const option = document.createElement("option");
+                option.value = String(item.interface_id);
+                option.textContent = item.name;
+                return option;
+            }));
+            if (interfaces.some((item) => String(item.interface_id) === selectedId)) rfInterfaceSelect.value = selectedId;
+            rfInterfaceSelect.disabled = !interfaces.length;
+            const selected = interfaces.find((item) => String(item.interface_id) === rfInterfaceSelect.value);
+            const labels = chartPayload.labels || [];
+            const series = selected?.series || {};
+            const values = series.rf_channel_occupancy_pct || labels.map(() => null);
+            const thresholds = chartPayload.rfChannelLoad?.thresholds_pct;
+            const options = buildSharedOptions();
+            options.scales.y.min = 0;
+            options.scales.y.max = 100;
+            options.scales.y.ticks.callback = (value) => `${value}%`;
+            options.elements.line.tension = 0;
+            options.plugins.legend.display = false;
+            options.plugins.tooltip = {
+                filter: (item) => item.datasetIndex === 0 && values[item.dataIndex] != null,
+                callbacks: {
+                    label: (item) => {
+                        const index = item.dataIndex;
+                        const value = values[index];
+                        return [
+                            `${rfLabels.load}: ${Number(value).toFixed(1)}% (${rfLabels[series.rf_channel_state?.[index]] || ""})`,
+                            `${rfLabels.airtime}: ${Number(series.rf_airtime_seconds?.[index]).toFixed(1)} ${rfLabels.seconds}`,
+                            `${rfLabels.window}: ${chartPayload.outputBucketMinutes} ${rfLabels.minutes}`,
+                            `${rfLabels.frames}: ${series.rf_frames_total?.[index] || 0}`,
+                        ];
+                    },
+                },
+            };
+            const datasets = [{
+                label: rfLabels.load, data: values,
+                borderColor: chartPalette.trafficColorDefault,
+                backgroundColor: withAlpha(chartPalette.trafficColorDefault, 0.14),
+                fill: true, spanGaps: false,
+            }];
+            if (thresholds) {
+                for (const [key, color] of [["busy", chartPalette.trafficColorOwnWxTx], ["congested", chartPalette.trafficColorRepeatedTx]]) {
+                    datasets.push({label: rfLabels[key], data: labels.map(() => thresholds[key]),
+                        borderColor: color, borderDash: [5, 4], borderWidth: 1, pointRadius: 0, pointHoverRadius: 0, fill: false});
+                }
+            }
+            rfChart = new window.Chart(rfCanvas.getContext("2d"), {type: "line", data: {labels, datasets}, options});
+            if (rfStatusNode) {
+                const hasData = values.some((value) => value != null);
+                const diagnostic = thresholds
+                    ? `${rfLabels.normal}: <${thresholds.busy}% · ${rfLabels.busy}: ${thresholds.busy}–<${thresholds.congested}% · ${rfLabels.congested}: ≥${thresholds.congested}%`
+                    : "";
+                rfStatusNode.textContent = hasData ? diagnostic : `${rfLabels.unavailable} ${diagnostic}`;
+            }
+        };
+
         const renderCharts = (chartPayload) => {
             chartPalette = readChartPalette();
             lastRenderedPayload = chartPayload;
@@ -887,6 +978,7 @@
                 });
             }
 
+            renderRfChart(chartPayload);
             applyZoomBoundsToCharts();
 
             if (mainWindowNode) {
@@ -938,6 +1030,13 @@
             bindMouseZoomForCanvas(mainCanvas, () => mainChart);
         }
         bindMouseZoomForCanvas(directionCanvas, () => directionChart);
+        if (rfCanvas instanceof HTMLCanvasElement) bindMouseZoomForCanvas(rfCanvas, () => rfChart);
+        if (rfInterfaceSelect instanceof HTMLSelectElement) {
+            rfInterfaceSelect.addEventListener("change", () => {
+                renderRfChart(lastRenderedPayload);
+                applyZoomBoundsToCharts();
+            });
+        }
 
         const loadRangePayload = async (rangeValue) => {
             const normalizedRange = normalizeRangeValue(rangeValue);

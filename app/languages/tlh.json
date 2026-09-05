@@ -2091,5 +2091,17 @@
   "mDNS name": "mDNS name",
   "Local mDNS resolve": "Local mDNS resolve",
   "Web UI URL": "Web UI URL",
-  "Inactive": "Inactive"
+  "Inactive": "Inactive",
+  "RF bitrate (bit/s)": "RF bitrate (bit/s)",
+  "Radio modem bitrate, e.g. 1200 or 9600; not UART baud rate. Leave blank if unknown.": "Radio modem bitrate, e.g. 1200 or 9600; not UART baud rate. Leave blank if unknown.",
+  "RF bitrate must be a positive integer up to 10000000 bit/s.": "RF bitrate must be a positive integer up to 10000000 bit/s.",
+  "RF channel load": "RF channel load",
+  "Estimated APRS RF channel load": "Estimated APRS RF channel load",
+  "Estimated RF airtime": "Estimated RF airtime",
+  "Estimated APRS RF load from decoded RX and logged TX per interface. Collisions and undecoded signals may be invisible; this is not a DCD measurement. TX delay and preamble are excluded.": "Estimated APRS RF load from decoded RX and logged TX per interface. Collisions and undecoded signals may be invisible; this is not a DCD measurement. TX delay and preamble are excluded.",
+  "Interfaces and KISS ports must represent one RF channel. Separate interfaces are never summed. Thresholds are diagnostic, not physical limits.": "Interfaces and KISS ports must represent one RF channel. Separate interfaces are never summed. Thresholds are diagnostic, not physical limits.",
+  "RF load unavailable: configure RF bitrate for a KISS interface and wait for a complete bucket. Gaps indicate missing data.": "RF load unavailable: configure RF bitrate for a KISS interface and wait for a complete bucket. Gaps indicate missing data.",
+  "Busy": "Busy",
+  "Congested": "Congested",
+  "s": "s"
 }

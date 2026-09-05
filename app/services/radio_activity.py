@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from app.db import fetch_all, fetch_one, get_connection, log_event, utc_now
+from app.db import fetch_all, fetch_one, get_app_setting, get_connection, log_event, utc_now
 from app.services.aprs_device_identification import get_aprs_device_identification_database, lookup_aprs_device_identification
 from app.services.band_condition import (
     aggregate_band_condition_parsed_bucket,
@@ -14,6 +14,81 @@ from app.services.band_condition import (
 )
 from app.services.content import parse_tnc2_frame
 from app.services.traffic_source import STATISTICS_TRAFFIC_SQL_PREDICATE
+
+
+# Diagnostic thresholds, not physical channel capacity limits (no ALOHA model).
+RF_CHANNEL_BUSY_PCT = 20.0
+RF_CHANNEL_CONGESTED_PCT = 40.0
+RF_AIRTIME_MODEL = "ax25_length_fcs_flags_random_stuffing_v1"
+
+
+def estimate_rf_airtime_seconds(ax25_length: int, rf_bitrate: int) -> float:
+    """Estimate APRS/AX.25 frame airtime, outside the RX/DIGI/TX hot path.
+
+    Length includes addresses, control, PID and information, but not FCS.
+    Standard KISS strips FCS/HDLC flags; KISS framing is NOT RF airtime.
+    Add 2 FCS bytes and 2 delimiter flags. Approximate stuffing by 1/62
+    extra bits (expected rate for independent equiprobable bits); APRS data
+    is not random, so this is deterministic diagnostics, not exact airtime.
+    No simulation, guessed TXDELAY, preamble or tail. UART baudrate != RF
+    bitrate. Without DCD we cannot measure physical occupancy: collisions,
+    undecoded transmissions and interference may be invisible.
+    See APRS-SPEC/IK2PIH_APRS-Performance_and_limits-rev_1_02.pdf, section 2.1.
+    """
+    if ax25_length <= 0 or rf_bitrate <= 0:
+        raise ValueError("AX.25 length and RF bitrate must be positive.")
+    return ((ax25_length + 2) * 8 * (63.0 / 62.0) + 16) / rf_bitrate
+
+
+def rf_channel_occupancy_pct(airtime_seconds: float, bucket_seconds: float) -> float:
+    # Keep values above 100% for diagnosis; the chart alone clips its Y axis.
+    return airtime_seconds / bucket_seconds * 100.0
+
+
+def rf_channel_state(occupancy_pct: float) -> str:
+    if occupancy_pct >= RF_CHANNEL_CONGESTED_PCT:
+        return "congested"
+    if occupancy_pct >= RF_CHANNEL_BUSY_PCT:
+        return "busy"
+    return "normal"
+
+
+def _logged_rf_ax25_length(row: Any) -> int | None:
+    """Use existing raw metadata only; never infer RF bytes from TNC2 text.
+
+    RX length is unescaped AX.25 only for KISS (command 0x0). MQTT length
+    is JSON size. TX length is TNC2 size, so count the stored KISS bytes,
+    removing delimiters, command and escape expansion in the aggregator.
+    No AX.25 reparse, frame re-encoding or new packet logging is needed.
+    """
+    direction = str(row["direction"] or "").upper()
+    command = str(row["command"] or "").upper()
+    if direction == "RX" and command == "0X0":
+        length = int(row["length"] or 0)
+        return length if length >= 16 else None
+    if direction != "TX" or command != "TX":
+        # TX-PROXY is logged on ingress, without a successful-send receipt.
+        return None
+    try:
+        kiss = bytes.fromhex(str(row["hex"] or ""))
+    except ValueError:
+        return None
+    if len(kiss) < 19 or kiss[0] != 0xC0 or kiss[-1] != 0xC0 or kiss[1] & 0x0F:
+        return None
+    length = 0
+    escaped = False
+    for byte in kiss[2:-1]:
+        if escaped:
+            if byte not in (0xDC, 0xDD):
+                return None
+            escaped = False
+        elif byte == 0xDB:
+            escaped = True
+            continue
+        elif byte == 0xC0:
+            return None
+        length += 1
+    return length if not escaped and length >= 16 else None
 
 
 RADIO_ACTIVITY_BUCKET_MINUTES = 5
@@ -408,11 +483,97 @@ def get_dashboard_radio_activity(*, range_value: str = RADIO_ACTIVITY_RANGE_24H)
         "points": output_bucket_count,
         "series": series,
         "totals": totals,
+        "rf_channel_load": _dashboard_rf_channel_load(
+            bucket_starts=bucket_starts, bucket_minutes=output_bucket_minutes,
+            window_start_utc=window_start_utc, window_end_utc=window_end_utc,
+        ),
         "kpis": {
             "heard_stations": len(heard_station_keys),
             "aprs_frames": int(totals.get("rx_total") or 0),
         },
     }
+
+
+def _dashboard_rf_channel_load(
+    *, bucket_starts: list[str], bucket_minutes: int,
+    window_start_utc: datetime, window_end_utc: datetime,
+) -> dict[str, Any]:
+    bucket_seconds = bucket_minutes * 60
+    rows = fetch_all(
+        """
+        SELECT CAST((CAST(strftime('%s', bucket_start_utc) AS INTEGER) / ?) AS INTEGER) * ? AS bucket_epoch,
+               interface_id, MAX(source_name) AS source_name,
+               SUM(rf_rx_airtime_seconds) AS rx_seconds, SUM(rf_tx_airtime_seconds) AS tx_seconds,
+               SUM(rf_frames_total) AS frames, SUM(rf_unestimated_frames_total) AS missing,
+               SUM(CASE WHEN rf_frames_total IS NULL THEN 1 ELSE 0 END) AS legacy_rows
+        FROM radio_activity_5m
+        WHERE bucket_start_utc >= ? AND bucket_start_utc < ? AND interface_id IS NOT NULL
+        GROUP BY bucket_epoch, interface_id
+        """,
+        (bucket_seconds, bucket_seconds, window_start_utc.isoformat(), window_end_utc.isoformat()),
+    )
+    modems = {int(row["id"]): dict(row) for row in fetch_all(
+        "SELECT id, name, rf_bitrate, created_at FROM modems WHERE modem_type IN ('TCP', 'SERIALL')"
+    )}
+    by_interface: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        interface_id = int(row["interface_id"])
+        # Retain observations after an interface is deleted, but do not invent
+        # zero-airtime history for an interface whose configuration is unknown.
+        if interface_id not in modems and int(row["frames"] or 0) > 0:
+            modems[interface_id] = {"id": interface_id, "name": row["source_name"], "rf_bitrate": None}
+        start = datetime.fromtimestamp(int(row["bucket_epoch"]), tz=timezone.utc).isoformat()
+        by_interface.setdefault(interface_id, {})[start] = dict(row)
+
+    available_since = _parse_iso_timestamp_utc(get_app_setting("rf_load_available_since") or "")
+    state = _get_aggregator_state(RADIO_ACTIVITY_STATE_KEY_DEFAULT) or {}
+    processed = _parse_iso_timestamp_utc(state.get("last_processed_bucket_start_utc") or "")
+    processed_end = processed + timedelta(minutes=RADIO_ACTIVITY_BUCKET_MINUTES) if processed else None
+    if processed_end is None and not state.get("last_error"):
+        # Before the first RF packet there is no oldest bucket/watermark.
+        # A successful empty aggregation run still establishes a closed window.
+        last_run = _parse_iso_timestamp_utc(state.get("last_run_utc") or "")
+        if last_run:
+            processed_end = _floor_to_bucket_start(last_run - timedelta(seconds=45), bucket_minutes=RADIO_ACTIVITY_BUCKET_MINUTES)
+    interfaces = []
+    for interface_id, modem in modems.items():
+        data: dict[str, list[Any]] = {key: [] for key in (
+            "rf_airtime_seconds", "rf_rx_airtime_seconds", "rf_tx_airtime_seconds",
+            "rf_channel_occupancy_pct", "rf_channel_state", "rf_frames_total", "rf_unestimated_frames_total",
+        )}
+        created_at = _parse_iso_timestamp_utc(modem.get("created_at") or "")
+        for start in bucket_starts:
+            row = by_interface.get(interface_id, {}).get(start)
+            start_dt = _parse_iso_timestamp_utc(start)
+            end_dt = start_dt + timedelta(minutes=bucket_minutes)
+            # A fully processed empty bucket is zero. Legacy/unprocessed windows
+            # and windows containing unestimated frames remain gaps, not NORMAL.
+            covered = bool(available_since and start_dt >= available_since and processed_end and end_dt <= processed_end)
+            if created_at and start_dt < created_at:
+                covered = False
+            known = covered and (bool(not row["legacy_rows"] and not row["missing"])
+                                 if row else bool(modem.get("rf_bitrate")))
+            # A partially aggregated downsampled window must not look complete.
+            if row and (not processed_end or end_dt > processed_end):
+                known = False
+            rx = float((row or {}).get("rx_seconds") or 0)
+            tx = float((row or {}).get("tx_seconds") or 0)
+            occupancy = rf_channel_occupancy_pct(rx + tx, bucket_seconds) if known else None
+            for key, value in {
+                "rf_airtime_seconds": rx + tx if known else None,
+                "rf_rx_airtime_seconds": rx if known else None,
+                "rf_tx_airtime_seconds": tx if known else None,
+                "rf_channel_occupancy_pct": occupancy,
+                "rf_channel_state": rf_channel_state(occupancy) if occupancy is not None else None,
+                "rf_frames_total": int((row or {}).get("frames") or 0),
+                "rf_unestimated_frames_total": int((row or {}).get("missing") or 0),
+            }.items():
+                data[key].append(value)
+        interfaces.append({"interface_id": interface_id, "name": modem["name"],
+                           "configured_rf_bitrate": modem.get("rf_bitrate"), "series": data})
+    return {"measurement": "estimated_aprs_rf_channel_load", "airtime_model": RF_AIRTIME_MODEL,
+            "thresholds_pct": {"busy": RF_CHANNEL_BUSY_PCT, "congested": RF_CHANNEL_CONGESTED_PCT},
+            "interfaces": interfaces}
 
 
 def _dashboard_heard_station_keys(
@@ -1560,11 +1721,13 @@ def _collect_bucket_source_rows(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     frame_rows = fetch_all(
         f"""
-        SELECT source, interface_id, direction, format, line, command
+        SELECT source, source_kind, interface_id, direction, format, line, command, length,
+               CASE WHEN LOWER(direction) = 'tx' THEN hex ELSE '' END AS hex
         FROM traffic_frames
         WHERE created_at >= ?
           AND created_at < ?
-          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
+          AND ({STATISTICS_TRAFFIC_SQL_PREDICATE}
+               OR (LOWER(source_kind) = 'aprsis_to_rf' AND LOWER(direction) = 'tx'))
         ORDER BY created_at ASC, id ASC
         """,
         (bucket_start_utc.isoformat(), bucket_end_utc.isoformat()),
@@ -1572,6 +1735,15 @@ def _collect_bucket_source_rows(
     if not frame_rows:
         return [], []
 
+    # One configuration snapshot per bucket, never a lookup on packet reception.
+    # No bitrate history is stored: conservatively leave buckets preceding the
+    # latest interface edit unestimated instead of applying today's rate to them.
+    rf_bitrates = {
+        int(modem["id"]): int(modem["rf_bitrate"])
+        if modem["rf_bitrate"] and (_parse_iso_timestamp_utc(modem["updated_at"]) or bucket_start_utc) <= bucket_start_utc
+        else None
+        for modem in fetch_all("SELECT id, rf_bitrate, updated_at FROM modems WHERE modem_type IN ('TCP', 'SERIALL')")
+    }
     station_source_key, station_callsign, wx_source_key = _station_identity_keys()
     grouped: dict[str, dict[str, Any]] = {}
     band_frame_rows: list[dict[str, Any]] = []
@@ -1591,6 +1763,20 @@ def _collect_bucket_source_rows(
         command = str(row["command"] or "").strip().upper()
         is_skipped_tx = direction == "TX" and command.startswith("TX-SKIP")
 
+        if (str(row["source_kind"] or "rf").lower() in {"rf", "aprsis_to_rf"}
+                and str(row["format"] or "").upper().startswith("TNC2")
+                and direction in {"RX", "TX"} and not is_skipped_tx):
+            length = _logged_rf_ax25_length(row)
+            bitrate = rf_bitrates.get(interface_id)
+            if length is None or bitrate is None:
+                source_bucket["rf_unestimated_frames_total"] += 1
+            else:
+                source_bucket["rf_frames_total"] += 1
+                source_bucket[f"rf_{direction.lower()}_airtime_seconds"] += estimate_rf_airtime_seconds(length, bitrate)
+
+        # Preserve all previous activity/device/band statistics for APRS-IS.
+        if str(row["source_kind"] or "rf").lower() == "aprsis_to_rf":
+            continue
         if direction == "RX":
             source_bucket["rx_total"] += 1
         elif direction == "TX" and not is_skipped_tx:
@@ -1714,6 +1900,7 @@ def _upsert_radio_activity_bucket_rows(
                 """
                 INSERT INTO radio_activity_5m (
                     bucket_start_utc, bucket_end_utc, interface_id, source_name,
+                    rf_rx_airtime_seconds, rf_tx_airtime_seconds, rf_frames_total, rf_unestimated_frames_total,
                     rx_total, tx_total, digipeated_total, own_frames_total,
                     messages_total, queries_total, objects_total, wx_total,
                     position_total, mobile_total, fixed_total, unique_stations_total,
@@ -1731,6 +1918,7 @@ def _upsert_radio_activity_bucket_rows(
                     ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?, ?,
+                    ?, ?, ?, ?,
                     ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?, ?,
@@ -1741,6 +1929,10 @@ def _upsert_radio_activity_bucket_rows(
                 ON CONFLICT(bucket_start_utc, source_name) DO UPDATE SET
                     bucket_end_utc = excluded.bucket_end_utc,
                     interface_id = excluded.interface_id,
+                    rf_rx_airtime_seconds = excluded.rf_rx_airtime_seconds,
+                    rf_tx_airtime_seconds = excluded.rf_tx_airtime_seconds,
+                    rf_frames_total = excluded.rf_frames_total,
+                    rf_unestimated_frames_total = excluded.rf_unestimated_frames_total,
                     rx_total = excluded.rx_total,
                     tx_total = excluded.tx_total,
                     digipeated_total = excluded.digipeated_total,
@@ -1779,6 +1971,10 @@ def _upsert_radio_activity_bucket_rows(
                     bucket_end_iso,
                     row.get("interface_id"),
                     str(row.get("source_name") or "").strip() or "Unknown source",
+                    row.get("rf_rx_airtime_seconds"),
+                    row.get("rf_tx_airtime_seconds"),
+                    row.get("rf_frames_total"),
+                    row.get("rf_unestimated_frames_total"),
                     int(row.get("rx_total") or 0),
                     int(row.get("tx_total") or 0),
                     int(row.get("digipeated_total") or 0),
@@ -1871,7 +2067,8 @@ def _oldest_closed_bucket_start(
         SELECT created_at
         FROM traffic_frames
         WHERE created_at < ?
-          AND {STATISTICS_TRAFFIC_SQL_PREDICATE}
+          AND ({STATISTICS_TRAFFIC_SQL_PREDICATE}
+               OR (LOWER(source_kind) = 'aprsis_to_rf' AND LOWER(direction) = 'tx'))
         ORDER BY created_at ASC, id ASC
         LIMIT 1
         """,
@@ -1977,6 +2174,8 @@ def _split_path_tokens(path: str) -> list[str]:
 def _new_source_bucket(source_name: str) -> dict[str, Any]:
     row: dict[str, Any] = {"source_name": source_name, "interface_id": None}
     row.update({key: value for key, value in _SOURCE_BUCKET_DEFAULTS.items()})
+    row.update(rf_rx_airtime_seconds=0.0, rf_tx_airtime_seconds=0.0,
+               rf_frames_total=0, rf_unestimated_frames_total=0)
     row["_unique_station_keys"] = set()
     row["_hop_count_total"] = 0
     row["_hop_samples"] = 0

@@ -84,6 +84,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
             },
             {"name": "device_path", "label": "Path / Address / Filter", "type": "text", "required": False},
             {"name": "baud_rate", "label": "Baud Rate", "type": "number", "required": False},
+            {"name": "rf_bitrate", "label": "RF bitrate (bit/s)", "type": "number", "required": False},
             {
                 "name": "serial_rx_silence_reconnect_seconds",
                 "label": "RX Silence Reconnect Timeout (s)",

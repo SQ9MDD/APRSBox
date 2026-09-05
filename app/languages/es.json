@@ -2093,5 +2093,17 @@
   "mDNS name": "Nombre mDNS",
   "Local mDNS resolve": "Resolución mDNS local",
   "Web UI URL": "URL de la interfaz web",
-  "Inactive": "Inactivo"
+  "Inactive": "Inactivo",
+  "RF bitrate (bit/s)": "Tasa de bits RF (bit/s)",
+  "Radio modem bitrate, e.g. 1200 or 9600; not UART baud rate. Leave blank if unknown.": "Tasa de bits del módem de radio, p. ej. 1200 o 9600; no la velocidad UART. Dejar en blanco si se desconoce.",
+  "RF bitrate must be a positive integer up to 10000000 bit/s.": "La tasa de bits RF debe ser un entero positivo de hasta 10000000 bit/s.",
+  "RF channel load": "Carga del canal RF",
+  "Estimated APRS RF channel load": "Carga estimada del canal APRS RF",
+  "Estimated RF airtime": "Tiempo de transmisión RF estimado",
+  "Estimated APRS RF load from decoded RX and logged TX per interface. Collisions and undecoded signals may be invisible; this is not a DCD measurement. TX delay and preamble are excluded.": "Carga APRS RF estimada a partir de RX decodificadas y TX registradas por interfaz. Las colisiones y señales no decodificadas pueden ser invisibles; no es una medición DCD. Sin TXDELAY ni preámbulo.",
+  "Interfaces and KISS ports must represent one RF channel. Separate interfaces are never summed. Thresholds are diagnostic, not physical limits.": "La interfaz y sus puertos KISS deben representar un solo canal RF. Nunca se suman interfaces distintas. Los umbrales son diagnósticos, no límites físicos.",
+  "RF load unavailable: configure RF bitrate for a KISS interface and wait for a complete bucket. Gaps indicate missing data.": "Carga RF no disponible: configure la tasa de bits RF de una interfaz KISS y espere un intervalo completo. Los huecos indican datos faltantes.",
+  "Busy": "Ocupado",
+  "Congested": "Congestionado",
+  "s": "s"
 }

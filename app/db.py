@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS modems (
     band TEXT NOT NULL DEFAULT '',
     device_path TEXT,
     baud_rate INTEGER,
+    rf_bitrate INTEGER CHECK (rf_bitrate > 0),
     serial_rx_silence_reconnect_seconds INTEGER NOT NULL DEFAULT 150
         CHECK (serial_rx_silence_reconnect_seconds IN (0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 450, 480, 510, 540, 570, 600)),
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
@@ -980,6 +981,11 @@ CREATE TABLE IF NOT EXISTS band_condition_hourly (
 );
 
 CREATE TABLE IF NOT EXISTS radio_activity_5m (
+    rf_rx_airtime_seconds REAL,
+    rf_tx_airtime_seconds REAL,
+    rf_frames_total INTEGER,
+    rf_unestimated_frames_total INTEGER,
+
     bucket_start_utc TEXT NOT NULL,
     bucket_end_utc TEXT NOT NULL,
     interface_id INTEGER,
@@ -1441,6 +1447,21 @@ def init_db() -> None:
                 ADD COLUMN longitude TEXT NOT NULL DEFAULT ''
                 """
             )
+        if "rf_bitrate" not in modem_columns:
+            connection.execute("ALTER TABLE modems ADD COLUMN rf_bitrate INTEGER CHECK (rf_bitrate > 0)")
+        for column, sql_type in (
+            ("rf_rx_airtime_seconds", "REAL"),
+            ("rf_tx_airtime_seconds", "REAL"),
+            ("rf_frames_total", "INTEGER"),
+            ("rf_unestimated_frames_total", "INTEGER"),
+        ):
+            if column not in radio_activity_columns:
+                connection.execute(f"ALTER TABLE radio_activity_5m ADD COLUMN {column} {sql_type}")
+        # Only a feature boundary; never scan or backfill traffic history on upgrade.
+        connection.execute(
+            "INSERT OR IGNORE INTO app_settings(key, value, updated_at) VALUES ('rf_load_available_since', ?, ?)",
+            (utc_now(), utc_now()),
+        )
         if "band" not in modem_columns:
             connection.execute(
                 """

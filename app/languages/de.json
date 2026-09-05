@@ -2091,5 +2091,17 @@
   "mDNS name": "mDNS-Name",
   "Local mDNS resolve": "Lokale mDNS-Auflösung",
   "Web UI URL": "Web-UI-URL",
-  "Inactive": "Inaktiv"
+  "Inactive": "Inaktiv",
+  "RF bitrate (bit/s)": "RF-Bitrate (bit/s)",
+  "Radio modem bitrate, e.g. 1200 or 9600; not UART baud rate. Leave blank if unknown.": "Bitrate des Funkmodems, z. B. 1200 oder 9600; nicht die UART-Baudrate. Bei unbekannter Bitrate leer lassen.",
+  "RF bitrate must be a positive integer up to 10000000 bit/s.": "Die RF-Bitrate muss eine positive ganze Zahl bis 10000000 bit/s sein.",
+  "RF channel load": "RF-Kanalauslastung",
+  "Estimated APRS RF channel load": "Geschätzte APRS-RF-Kanalauslastung",
+  "Estimated RF airtime": "Geschätzte RF-Sendezeit",
+  "Estimated APRS RF load from decoded RX and logged TX per interface. Collisions and undecoded signals may be invisible; this is not a DCD measurement. TX delay and preamble are excluded.": "Geschätzte APRS-RF-Auslastung aus dekodierten RX und protokollierten TX je Schnittstelle. Kollisionen und nicht dekodierte Signale können unsichtbar bleiben; keine DCD-Messung. Ohne TXDELAY und Präambel.",
+  "Interfaces and KISS ports must represent one RF channel. Separate interfaces are never summed. Thresholds are diagnostic, not physical limits.": "Die Schnittstelle und ihre KISS-Ports müssen einen RF-Kanal abbilden. Separate Schnittstellen werden nie summiert. Die Schwellen sind diagnostisch, keine physikalischen Grenzen.",
+  "RF load unavailable: configure RF bitrate for a KISS interface and wait for a complete bucket. Gaps indicate missing data.": "RF-Auslastung nicht verfügbar: RF-Bitrate einer KISS-Schnittstelle einstellen und ein vollständiges Zeitfenster abwarten. Lücken bedeuten fehlende Daten.",
+  "Busy": "Erhöht",
+  "Congested": "Überlastet",
+  "s": "s"
 }

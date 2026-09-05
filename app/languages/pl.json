@@ -2147,5 +2147,17 @@
   "mDNS name": "Nazwa mDNS",
   "Local mDNS resolve": "Lokalne rozwiązywanie mDNS",
   "Web UI URL": "URL interfejsu WWW",
-  "Inactive": "Nieaktywne"
+  "Inactive": "Nieaktywne",
+  "RF bitrate (bit/s)": "Prędkość RF (bit/s)",
+  "Radio modem bitrate, e.g. 1200 or 9600; not UART baud rate. Leave blank if unknown.": "Prędkość modemu radiowego, np. 1200 lub 9600; nie prędkość UART. Pozostaw puste, jeśli nieznana.",
+  "RF bitrate must be a positive integer up to 10000000 bit/s.": "Prędkość RF musi być dodatnią liczbą całkowitą do 10000000 bit/s.",
+  "RF channel load": "Obciążenie kanału RF",
+  "Estimated APRS RF channel load": "Szacowane obciążenie kanału APRS RF",
+  "Estimated RF airtime": "Szacowany czas transmisji RF",
+  "Estimated APRS RF load from decoded RX and logged TX per interface. Collisions and undecoded signals may be invisible; this is not a DCD measurement. TX delay and preamble are excluded.": "Szacowane obciążenie APRS RF z dekodowanych RX i zapisanych TX dla interfejsu. Kolizje i niedekodowane sygnały mogą być niewidoczne; to nie pomiar DCD. Bez TXDELAY i preambuły.",
+  "Interfaces and KISS ports must represent one RF channel. Separate interfaces are never summed. Thresholds are diagnostic, not physical limits.": "Interfejs i jego porty KISS muszą odpowiadać jednemu kanałowi RF. Oddzielne interfejsy nie są sumowane. Progi są diagnostyczne, nie są limitami fizycznymi.",
+  "RF load unavailable: configure RF bitrate for a KISS interface and wait for a complete bucket. Gaps indicate missing data.": "Obciążenie RF niedostępne: ustaw prędkość RF interfejsu KISS i poczekaj na pełny przedział. Przerwy oznaczają brak danych.",
+  "Busy": "Podwyższone",
+  "Congested": "Przeciążony",
+  "s": "s"
 }

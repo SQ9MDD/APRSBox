@@ -2494,7 +2494,7 @@ body {
     }
 
     .dashboard-v2-activity-panel .panel-body {
-        grid-template-rows: auto auto minmax(8rem, 1fr) auto auto;
+        grid-template-rows: auto auto minmax(8rem, 1fr) auto auto auto;
         height: 100%;
     }
 
@@ -9590,4 +9590,19 @@ button.message-delivery-badge {
     opacity: 0.6;
     margin-top: 2rem;
     font-size: 0.875rem;
+}
+
+/* Share activity time/zoom controls while keeping RF diagnostics compact. */
+.dashboard-v2 .dashboard-v2-activity-panel .dashboard-rf-load-canvas {
+    height: 180px;
+    min-height: 180px;
+}
+
+/* Two charts need natural page height at the dashboard's desktop breakpoint. */
+.dashboard-v2:has(.dashboard-rf-load-block) {
+    height: auto;
+}
+.dashboard-v2:has(.dashboard-rf-load-block) .dashboard-v2-activity-panel > .panel-body {
+    grid-template-rows: auto auto 255px auto auto auto;
+    height: auto;
 }
