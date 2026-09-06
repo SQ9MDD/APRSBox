@@ -845,7 +845,7 @@
             options.scales.y.min = 0;
             const occupancyValues = values.filter((value) => value != null).map(Number).filter(Number.isFinite);
             const maxOccupancy = occupancyValues.length ? Math.max(...occupancyValues) : null;
-            const paddedMaximum = maxOccupancy == null ? 100 : maxOccupancy * 1.15;
+            const paddedMaximum = maxOccupancy == null ? 100 : maxOccupancy + 15;
             const gridStep = maxOccupancy != null && maxOccupancy <= 50 ? 5 : 10;
             options.scales.y.max = maxOccupancy == null ? 100 : Math.max(gridStep, Math.ceil(paddedMaximum / gridStep) * gridStep);
             delete options.scales.y.ticks.precision;
