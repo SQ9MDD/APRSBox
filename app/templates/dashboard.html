@@ -843,7 +843,9 @@
             const thresholds = chartPayload.rfChannelLoad?.thresholds_pct;
             const options = buildSharedOptions();
             options.scales.y.min = 0;
-            options.scales.y.max = 100;
+            const maxOccupancy = values.reduce((max, value) => Number.isFinite(value) ? Math.max(max, value) : max, 0);
+            options.scales.y.max = maxOccupancy > 0 ? maxOccupancy * 1.15 : 1;
+            delete options.scales.y.ticks.precision;
             options.scales.y.ticks.callback = (value) => `${value}%`;
             options.elements.line.tension = 0;
             options.plugins.legend.display = false;
