@@ -7976,7 +7976,10 @@ code {
 }
 
 .object-group-row td {
-    background: var(--panel-alt);
+    padding: 0.28rem 0.34rem;
+    background: color-mix(in srgb, var(--panel-alt) 82%, var(--panel));
+    overflow: visible;
+    text-overflow: clip;
 }
 
 .object-group-icon {
@@ -7985,26 +7988,87 @@ code {
     filter: var(--icon-filter);
 }
 
-.object-group-open-icon {
-    width: 1.1rem;
-    height: 1.1rem;
+.object-group-toggle {
+    width: 100%;
+    min-height: 2.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.52rem;
+    padding: 0.34rem 0.46rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.object-group-toggle:hover {
+    border-color: var(--border-hover);
+    background: var(--accent-soft);
+}
+
+.object-group-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.object-group-chevron {
+    width: 0.92rem;
+    height: 0.92rem;
+    flex: 0 0 auto;
     filter: var(--icon-filter);
+    transition: transform var(--transition-fast);
 }
 
-.object-tree-branch {
-    display: inline-block;
-    width: 1.7rem;
+.object-group-toggle[aria-expanded="true"] .object-group-chevron {
+    transform: rotate(90deg);
+}
+
+.object-group-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.object-group-count {
+    min-width: 1.7rem;
+    margin-left: auto;
+    padding: 0.12rem 0.48rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel);
     color: var(--muted);
-    font-family: var(--font-mono);
-    font-weight: 500;
+    font-size: 0.74rem;
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: center;
 }
 
-.object-tree-branch-child {
-    width: 3.1rem;
+.object-group-child-row[hidden] {
+    display: none;
 }
 
-.object-tree-child-row .prepared-entity-col-icon {
-    padding-left: 0.78rem;
+.object-group-child-row td {
+    background: color-mix(in srgb, var(--panel-alt) 40%, transparent);
+}
+
+.object-group-child-name {
+    padding-left: 1.65rem !important;
+}
+
+.object-group-child-name::before {
+    content: "";
+    display: inline-block;
+    width: 0.78rem;
+    height: 0.58rem;
+    margin-right: 0.48rem;
+    border-left: 1px solid var(--border-hover);
+    border-bottom: 1px solid var(--border-hover);
+    vertical-align: 0.22rem;
 }
 
 .object-technical-details code {

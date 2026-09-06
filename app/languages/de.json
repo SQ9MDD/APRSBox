@@ -2112,5 +2112,7 @@
   "No group": "Keine Gruppe",
   "Schedule / Mode": "Zeitplan / Modus",
   "Technical details": "Technische Details",
-  "What": "Was"
+  "What": "Was",
+  "Expand group": "Gruppe aufklappen",
+  "Collapse group": "Gruppe zuklappen"
 }

@@ -476,22 +476,23 @@ def _section_template_context_scoped(
             {"name": name, "count": len(group_rows), "rows": group_rows}
             for name, group_rows in sorted(grouped_rows.items(), key=lambda item: item[0].casefold())
         ]
-        for group in object_groups:
-            object_tree_rows.append({"row_type": "group", **group})
-            for index, group_row in enumerate(group["rows"]):
+        for group_index, group in enumerate(object_groups):
+            group_key = f"object-group-{group_index}"
+            group_rows = group["rows"]
+            object_tree_rows.append({"row_type": "group", "group_key": group_key, **group})
+            for group_row in group_rows:
                 object_tree_rows.append(
                     {
                         "row_type": "object",
-                        "tree_prefix": "│  " + ("└─" if index == len(group["rows"]) - 1 else "├─"),
                         "tree_child": True,
+                        "group_key": group_key,
                         **group_row,
                     }
                 )
-        for index, root_row in enumerate(root_rows):
+        for root_row in root_rows:
             object_tree_rows.append(
                 {
                     "row_type": "object",
-                    "tree_prefix": "└─" if index == len(root_rows) - 1 else "├─",
                     "tree_child": False,
                     **root_row,
                 }
