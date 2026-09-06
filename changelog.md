@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.23.dev - 06.09.2026
+- `Obiekty`: dodano kompaktową listę z rozwijanymi folderami, szybką aktywacją/dezaktywacją oraz polem grupy z podpowiedziami.
+- `Biuletyny`: dodano analogiczne foldery i osobne pole `Folder`; protokołowa `Grupa APRS` zachowuje dotychczasowe znaczenie.
+
 ## 1.12.21.dev - 05.09.2026
 - `Panel główny / szacowane obciążenie kanału APRS RF`: dodano osobny wykres obciążenia kanału oparty na szacowanym czasie transmisji AX.25 dla każdego interfejsu RF. Używa tego samego zakresu czasu, bucketów i zoomu co wykresy aktywności; pokazuje stany diagnostyczne `normal` (<20%), `busy` (20–<40%) i `congested` (≥40%) oraz jasno zaznacza, że jest to estymacja z dekodowanego ruchu APRS, a nie pomiar DCD ani fizycznego wykorzystania kanału.
 - `Interfejsy / prędkość RF`: interfejsy KISS serial i TCP używają stałej domyślnej prędkości modemu RF `1200 bit/s`, niezależnej od prędkości UART. Airtime korzysta z długości raw AX.25, gdy jest dostępna, uwzględnia FCS, flagi oraz deterministyczne przybliżenie bit stuffing HDLC, a pomija framing KISS i nieznane TXDELAY/preambułę. Prędkość celowo nie jest widoczna w formularzu interfejsu; niepełna historia jest pokazywana jako brak danych, nie fałszywe zero.

@@ -2159,5 +2159,22 @@
   "RF load unavailable: wait for a complete bucket. Gaps indicate missing data.": "Obciążenie RF niedostępne: poczekaj na pełny przedział. Przerwy oznaczają brak danych.",
   "Busy": "Podwyższone",
   "Congested": "Przeciążony",
-  "s": "s"
+  "s": "s",
+  "Object count": "Liczba obiektów",
+  "Object status updated.": "Status obiektu zaktualizowany.",
+  "Back to object list": "Wróć do listy obiektów",
+  "Disable object": "Dezaktywuj obiekt",
+  "Enable object": "Aktywuj obiekt",
+  "No group": "Brak grupy",
+  "Schedule / Mode": "Harmonogram / tryb",
+  "Technical details": "Szczegóły techniczne",
+  "What": "Co",
+  "Expand group": "Rozwiń grupę",
+  "Collapse group": "Zwiń grupę",
+  "Bulletin count": "Liczba biuletynów",
+  "Folder": "Folder",
+  "No folder": "Brak folderu",
+  "APRS Group": "Grupa APRS",
+  "Folder name must be 80 characters or fewer.": "Nazwa folderu może mieć najwyżej 80 znaków.",
+  "Folder name may not contain control characters.": "Nazwa folderu nie może zawierać znaków sterujących."
 }

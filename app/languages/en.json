@@ -2137,5 +2137,22 @@
   "RF load unavailable: wait for a complete bucket. Gaps indicate missing data.": "RF load unavailable: wait for a complete bucket. Gaps indicate missing data.",
   "Busy": "Busy",
   "Congested": "Congested",
-  "s": "s"
+  "s": "s",
+  "Object count": "Object count",
+  "Object status updated.": "Object status updated.",
+  "Back to object list": "Back to object list",
+  "Disable object": "Disable object",
+  "Enable object": "Enable object",
+  "No group": "No group",
+  "Schedule / Mode": "Schedule / Mode",
+  "Technical details": "Technical details",
+  "What": "What",
+  "Expand group": "Expand group",
+  "Collapse group": "Collapse group",
+  "Bulletin count": "Bulletin count",
+  "Folder": "Folder",
+  "No folder": "No folder",
+  "APRS Group": "APRS Group",
+  "Folder name must be 80 characters or fewer.": "Folder name must be 80 characters or fewer.",
+  "Folder name may not contain control characters.": "Folder name may not contain control characters."
 }

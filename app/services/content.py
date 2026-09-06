@@ -214,6 +214,7 @@ def get_section_rows(
                    recurrence_duration_minutes, recurrence_interval_value,
                    recurrence_interval_unit, recurrence_until_utc,
                    latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment
+                   {', group_name' if slug == 'objects' else ''}
                    {', lifetime' if slug == 'objects' else ''}
             FROM {definition.table_name}
             ORDER BY id DESC
@@ -550,6 +551,25 @@ def set_modem_enabled(row_id: int, enabled: bool) -> None:
     reload_digi_flow_routing_snapshot()
     state = "enabled" if enabled else "disabled"
     log_event("INFO", "config", f"Interface {row_id} {state}")
+
+
+def set_object_enabled(row_id: int, enabled: bool) -> None:
+    """Change only the user-controlled object enabled flag.
+
+    Activation windows and lifetime remain data evaluated by the existing
+    scheduler, so this action deliberately does not recalculate or overwrite
+    any schedule fields.
+    """
+    timestamp = utc_now()
+    with get_connection() as connection:
+        cursor = connection.execute(
+            "UPDATE aprs_objects SET is_enabled = ?, updated_at = ? WHERE id = ?",
+            (int(enabled), timestamp, row_id),
+        )
+        if cursor.rowcount == 0:
+            raise ValueError("Object not found.")
+    state = "enabled" if enabled else "disabled"
+    log_event("INFO", "config", f"Object {row_id} {state}")
 
 
 def get_station_settings(*, include_tx_runtime: bool = True) -> dict[str, Any]:
@@ -5221,6 +5241,12 @@ def _normalize_aprs_entity_payload(kind: str, payload: dict[str, Any]) -> dict[s
         if lifetime not in {"temporary", "permanent"}:
             raise ValueError("Object lifetime must be temporary or permanent.")
         normalized["lifetime"] = lifetime
+        group_name = str(payload.get("group_name") or "").strip()
+        if len(group_name) > 80:
+            raise ValueError("Group name must be 80 characters or fewer.")
+        if any(ord(char) < 32 for char in group_name):
+            raise ValueError("Group name may not contain control characters.")
+        normalized["group_name"] = group_name or None
     else:
         if len(name) < 3 or len(name) > 9:
             raise ValueError("Item name must be 3-9 printable ASCII characters.")
@@ -5283,6 +5309,13 @@ def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if message_kind not in {"bulletin", "announcement", "group_bulletin"}:
         raise ValueError("Type must be bulletin, announcement or group bulletin.")
     normalized["message_kind"] = message_kind
+
+    folder_name = str(payload.get("folder_name") or "").strip()
+    if len(folder_name) > 80:
+        raise ValueError("Folder name must be 80 characters or fewer.")
+    if any(ord(char) < 32 or ord(char) == 127 for char in folder_name):
+        raise ValueError("Folder name may not contain control characters.")
+    normalized["folder_name"] = folder_name or None
 
     bulletin_code = str(payload.get("bulletin_code") or "").strip().upper()
     group_name = str(payload.get("group_name") or "").strip().upper()

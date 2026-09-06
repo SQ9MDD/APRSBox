@@ -81,6 +81,7 @@ from app.services.content import (
     traffic_snapshot as get_traffic_snapshot,
     safe_create_section_row,
     set_modem_enabled,
+    set_object_enabled,
     safe_update_section_row,
 )
 from app.services.tx_scope import ALL_ACTIVE_INTERFACE_OPTION_VALUE, INTERNAL_TX_INTERFACE_OPTION_VALUE
@@ -401,6 +402,7 @@ def _section_template_context(
     form_data: dict[str, object] | None = None,
     initial_modem_type: str | None = None,
     edit_id: int | None = None,
+    object_group: str | None = None,
 ) -> dict:
     with connection_scope():
         return _section_template_context_scoped(
@@ -413,6 +415,7 @@ def _section_template_context(
             form_data=form_data,
             initial_modem_type=initial_modem_type,
             edit_id=edit_id,
+            object_group=object_group,
         )
 
 
@@ -427,6 +430,7 @@ def _section_template_context_scoped(
     form_data: dict[str, object] | None = None,
     initial_modem_type: str | None = None,
     edit_id: int | None = None,
+    object_group: str | None = None,
 ) -> dict:
     definition = SECTION_DEFINITIONS[slug]
     station_settings = None
@@ -457,6 +461,74 @@ def _section_template_context_scoped(
         symbol_set=symbol_set,
         translator=translator,
     )
+    object_groups: list[dict[str, object]] = []
+    object_tree_rows: list[dict[str, object]] = []
+    bulletin_groups: list[dict[str, object]] = []
+    bulletin_tree_rows: list[dict[str, object]] = []
+    if slug == "objects":
+        grouped_rows: dict[str, list[dict[str, object]]] = {}
+        root_rows: list[dict[str, object]] = []
+        for row in rows:
+            group_name = str(row.get("group_name") or "").strip()
+            if group_name:
+                grouped_rows.setdefault(group_name, []).append(row)
+            else:
+                root_rows.append(row)
+        object_groups = [
+            {"name": name, "count": len(group_rows), "rows": group_rows}
+            for name, group_rows in sorted(grouped_rows.items(), key=lambda item: item[0].casefold())
+        ]
+        for group_index, group in enumerate(object_groups):
+            group_key = f"object-group-{group_index}"
+            group_rows = group["rows"]
+            object_tree_rows.append({"row_type": "group", "group_key": group_key, **group})
+            for group_row in group_rows:
+                object_tree_rows.append(
+                    {
+                        "row_type": "object",
+                        "tree_child": True,
+                        "group_key": group_key,
+                        **group_row,
+                    }
+                )
+        for root_row in root_rows:
+            object_tree_rows.append(
+                {
+                    "row_type": "object",
+                    "tree_child": False,
+                    **root_row,
+                }
+            )
+        rows = root_rows
+    elif slug == "bulletins":
+        grouped_rows: dict[str, list[dict[str, object]]] = {}
+        root_rows: list[dict[str, object]] = []
+        for row in rows:
+            folder_name = str(row.get("folder_name") or "").strip()
+            if folder_name:
+                grouped_rows.setdefault(folder_name, []).append(row)
+            else:
+                root_rows.append(row)
+        bulletin_groups = [
+            {"name": name, "count": len(group_rows), "rows": group_rows}
+            for name, group_rows in sorted(grouped_rows.items(), key=lambda item: item[0].casefold())
+        ]
+        for group_index, group in enumerate(bulletin_groups):
+            group_key = f"bulletin-group-{group_index}"
+            group_rows = group["rows"]
+            bulletin_tree_rows.append({"row_type": "group", "group_key": group_key, **group})
+            for group_row in group_rows:
+                bulletin_tree_rows.append(
+                    {
+                        "row_type": "bulletin",
+                        "tree_child": True,
+                        "group_key": group_key,
+                        **group_row,
+                    }
+                )
+        for root_row in root_rows:
+            bulletin_tree_rows.append({"row_type": "bulletin", "tree_child": False, **root_row})
+        rows = root_rows
     context = build_template_context(
         request,
         page_title=definition.title,
@@ -473,6 +545,13 @@ def _section_template_context_scoped(
         prefetched_app_language=app_language,
         prefetched_aprs_symbol_set=symbol_set,
         prefetched_map_config=map_config,
+        object_groups=object_groups,
+        object_tree_rows=object_tree_rows,
+        object_group="",
+        object_group_names=[str(group["name"]) for group in object_groups],
+        bulletin_groups=bulletin_groups,
+        bulletin_tree_rows=bulletin_tree_rows,
+        bulletin_folder_names=[str(group["name"]) for group in bulletin_groups],
     )
     if slug == "modems":
         aprsis_config = get_aprsis_config()
@@ -2949,6 +3028,7 @@ def objects_page(
     edit: int | None = None,
     flash: str | None = None,
     success: str | None = None,
+    group: str | None = None,
 ) -> object:
     templates = request.app.state.templates
     context = _section_template_context(
@@ -2957,6 +3037,7 @@ def objects_page(
         "objects",
         flash=flash,
         edit_id=edit,
+        object_group=group,
     )
     if success is not None:
         context["flash_success"] = str(success).strip() not in {"0", "false", "False"}
@@ -2969,6 +3050,7 @@ def objects_create(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     record_id: int | None = Form(None),
     name: str = Form(...),
+    group_name: str = Form(""),
     lifetime: str = Form("temporary"),
     state: str = Form("live"),
     latitude: str = Form(""),
@@ -2991,6 +3073,7 @@ def objects_create(
     wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "name": name.strip(),
+        "group_name": group_name.strip(),
         "lifetime": lifetime.strip(),
         "state": state.strip(),
         "latitude": latitude.strip(),
@@ -3056,6 +3139,37 @@ def objects_create(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
     return templates.TemplateResponse("section.html", context, status_code=status.HTTP_400_BAD_REQUEST if error else 200)
+
+
+@router.post("/settings/objects/{record_id}/toggle")
+def objects_toggle(
+    record_id: int,
+    request: Request,
+    _: UserIdentity = Depends(require_roles("admin", "operator")),
+    enabled: int = Form(...),
+    group: str | None = None,
+) -> object:
+    wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
+    try:
+        set_object_enabled(record_id, bool(enabled))
+    except ValueError as exc:
+        if wants_json:
+            return JSONResponse({"ok": False, "error": _translate(str(exc))}, status_code=status.HTTP_404_NOT_FOUND)
+        return RedirectResponse(
+            url=_path(request, f"/objects?flash={quote(str(exc))}&success=0"),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    redirect = "/objects"
+    if group and group.strip():
+        redirect = f"/objects?group={quote(group.strip())}"
+    if wants_json:
+        return JSONResponse(
+            {"ok": True, "message": _translate("Object status updated."), "reload": True, "redirect": _path(request, redirect)}
+        )
+    return RedirectResponse(
+        url=_path(request, f"{redirect}{'&' if '?' in redirect else '?'}flash=Object%20status%20updated.&success=1"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.post("/settings/objects/{record_id}/send")
@@ -3218,6 +3332,7 @@ def bulletins_create(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     record_id: int | None = Form(None),
     message_kind: str = Form("bulletin"),
+    folder_name: str = Form(""),
     bulletin_code: str = Form(""),
     group_name: str = Form(""),
     interval_minutes: str = Form("30"),
@@ -3235,6 +3350,7 @@ def bulletins_create(
     wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "message_kind": message_kind.strip(),
+        "folder_name": folder_name.strip(),
         "bulletin_code": bulletin_code.strip(),
         "group_name": group_name.strip(),
         "interval_minutes": interval_minutes.strip(),

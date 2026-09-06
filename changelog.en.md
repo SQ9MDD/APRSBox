@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.23.dev - 2026-09-06
+- `Objects`: added a compact list with collapsible folders, quick enable/disable actions, and an autocomplete group field.
+- `Bulletins`: added matching folders and a separate `Folder` field; the protocol-level `APRS Group` retains its existing meaning.
+
 ## 1.12.21.dev - 2026-09-05
 - `Dashboard / estimated APRS RF channel load`: added a separate channel-load chart based on estimated AX.25 airtime per RF interface. It uses the same time range, buckets, and zoom as activity charts, shows diagnostic `normal` (<20%), `busy` (20–<40%), and `congested` (≥40%) states, and clearly identifies the result as an estimate from decoded APRS traffic rather than physical DCD/channel utilization.
 - `Interfaces / RF bitrate`: KISS serial and TCP interfaces use the fixed default RF modem bitrate of `1200 bit/s`, independent of UART baud rate. Airtime uses raw AX.25 length where available, includes FCS, flags, and a deterministic HDLC bit-stuffing approximation, while excluding KISS framing and unknown TX delay/preamble. The bitrate is intentionally not exposed in the interface form; incomplete history is shown as unavailable data rather than a false zero.

@@ -37,51 +37,97 @@
                 </div>
             </div>
             <div class="table-wrap">
-                {% if section.slug in ['objects', 'items'] %}
-                <table class="data-table prepared-entity-table">
+                {% if section.slug == 'objects' %}
+                <table class="data-table prepared-entity-table compact-table objects-list-table">
                     <thead>
                         <tr>
                             <th class="prepared-entity-col-icon" title="{{ t('Icon') }}">{{ t("Icon") }}</th>
-                            <th class="prepared-entity-col-active" title="{{ t('Enabled') if section.slug == 'objects' else t('Active') }}">{{ t("Enabled") if section.slug == 'objects' else t("Active") }}</th>
-                            {% if section.slug == 'objects' %}
-                            <th class="prepared-entity-col-active" title="{{ t('Active now') }}">{{ t("Active now") }}</th>
-                            {% endif %}
-                            <th class="prepared-entity-col-schedule" title="{{ t('Schedule') }}">{{ t("Schedule") }}</th>
-                            <th class="prepared-entity-col-interval" title="{{ t('Every') }}">{{ t("Every") }}</th>
-                            <th class="prepared-entity-col-name" title="{{ t('Object Name' if section.slug == 'objects' else 'Item Name') }}">{{ t('Object Name' if section.slug == 'objects' else 'Item Name') }}</th>
-                            <th class="prepared-entity-col-raw" title="{{ t('Raw Frame Preview') }}">{{ t("Raw Frame Preview") }}</th>
+                            <th class="prepared-entity-col-object-name" title="{{ t('Object Name') }}">{{ t("Object Name") }}</th>
+                            <th class="prepared-entity-col-object-status" title="{{ t('Status') }}">{{ t("Status") }}</th>
+                            <th class="prepared-entity-col-schedule" title="{{ t('Schedule / Mode') }}">{{ t("Schedule / Mode") }}</th>
+                            <th class="prepared-entity-col-object-what" title="{{ t('What') }}">{{ t("What") }}</th>
+                            {% if can_edit %}<th class="prepared-entity-col-actions">{{ t("Actions") }}</th>{% endif %}
                         </tr>
                     </thead>
                     <tbody>
-                        {% for row in rows %}
-                        <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
+                        {% for row in object_tree_rows %}
+                        {% if row.row_type == 'group' %}
+                        <tr class="object-group-row">
+                            <td colspan="{{ 5 + (1 if can_edit else 0) }}" class="object-group-cell">
+                                <button
+                                    type="button"
+                                    class="object-group-toggle"
+                                    data-collapsible-group-toggle
+                                    data-collapsible-group-key="{{ row.group_key }}"
+                                    data-collapsible-group-name="{{ row.name }}"
+                                    data-collapsible-group-storage-key="aprsbox:objects:expanded-groups"
+                                    data-expand-label="{{ t('Expand group') }}"
+                                    data-collapse-label="{{ t('Collapse group') }}"
+                                    aria-expanded="false"
+                                    title="{{ t('Expand group') }}: {{ row.name }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/chevron-right.svg" alt="" class="object-group-chevron">
+                                    <img src="{{ request.scope.root_path }}/static/icons/folder-outline.svg" alt="" class="object-group-icon object-group-icon-closed">
+                                    <img src="{{ request.scope.root_path }}/static/icons/folder-open-outline.svg" alt="" class="object-group-icon object-group-icon-open" hidden>
+                                    <strong class="object-group-title">{{ row.name }}</strong>
+                                    <span class="object-group-count" title="{{ t('Object count') }}">{{ row.count }}</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr{% if row.tree_child %} class="object-group-child-row{% if can_edit and section.supports_editing %} clickable-row{% endif %}" data-collapsible-group-child="{{ row.group_key }}" hidden{% elif can_edit and section.supports_editing %} class="clickable-row"{% endif %}{% if can_edit and section.supports_editing %} data-href="?edit={{ row.id }}"{% endif %}>
                             <td class="prepared-entity-col-icon"><img src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol_table }}{{ row.symbol_code }}" class="section-symbol-preview"></td>
-                            <td class="prepared-entity-col-active">
+                            <td class="prepared-entity-col-object-name{% if row.tree_child %} object-group-child-name{% endif %}"><strong>{{ row.name }}</strong></td>
+                            <td class="prepared-entity-col-object-status">
                                 <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.is_enabled else 'tnc-status-icon-disabled' }}" title="{{ t('Enabled' if row.is_enabled else 'Disabled') }}" aria-label="{{ t('Enabled' if row.is_enabled else 'Disabled') }}">
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
                                 </span>
                             </td>
-                            {% if section.slug == 'objects' %}
-                            <td class="prepared-entity-col-active">
-                                <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.activation_active_now else 'tnc-status-icon-disabled' }}" title="{{ row.activation_summary }}" aria-label="{{ t('Active now' if row.activation_active_now else 'Inactive now') }}">
-                                    <img src="{{ request.scope.root_path }}/static/icons/{{ 'play-circle.svg' if row.activation_active_now else 'close-circle.svg' }}" alt="">
-                                </span>
-                            </td>
+                            <td class="prepared-entity-col-schedule" title="{{ row.activation_summary }}">{{ t(row.activation_short_label) }}</td>
+                            <td class="prepared-entity-col-object-what">{{ t('Temporary' if row.lifetime == 'temporary' else 'Permanent') }} · {{ t('Live (*)' if row.state == 'live' else 'Killed (_)') }} · {{ row.interval_minutes }}m</td>
+                            {% if can_edit %}
+                            <td class="prepared-entity-col-actions"><div class="digi-flows-actions">
+                                <form method="post" action="{{ request.scope.root_path }}/settings/objects/{{ row.id }}/toggle{% if object_group %}?group={{ object_group|urlencode }}{% endif %}" class="table-action-form" data-object-toggle-action onclick="event.stopPropagation();" onsubmit="event.stopPropagation(); return true;">
+                                    <input type="hidden" name="enabled" value="{{ 0 if row.is_enabled else 1 }}">
+                                    <button type="submit" class="table-icon-button" title="{{ t('Disable object') if row.is_enabled else t('Enable object') }}" aria-label="{{ (t('Disable object') if row.is_enabled else t('Enable object')) }} {{ row.name }}"><img src="{{ request.scope.root_path }}/static/icons/{{ 'pause-circle-outline.svg' if row.is_enabled else 'play-circle-outline.svg' }}" alt=""></button>
+                                </form>
+                                <form method="post" action="{{ request.scope.root_path }}/settings/objects/{{ row.id }}/delete" class="table-action-form" onclick="event.stopPropagation();" onsubmit="event.stopPropagation();" data-object-modal-action data-object-confirm="{{ t(delete_confirm_message) }}">
+                                    <button type="submit" class="table-icon-button table-icon-button-danger" title="{{ t('Delete record') }}" aria-label="{{ t('Delete record') }} {{ row.name }}"><img src="{{ request.scope.root_path }}/static/icons/delete-outline.svg" alt=""></button>
+                                </form>
+                            </div></td>
                             {% endif %}
+                        </tr>
+                        {% endif %}
+                        {% else %}
+                        <tr>
+                            <td colspan="{{ 5 + (1 if can_edit else 0) }}">{{ t("No records yet.") }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% elif section.slug == 'items' %}
+                <table class="data-table prepared-entity-table">
+                    <thead><tr>
+                        <th class="prepared-entity-col-icon" title="{{ t('Icon') }}">{{ t("Icon") }}</th>
+                        <th class="prepared-entity-col-active" title="{{ t('Active') }}">{{ t("Active") }}</th>
+                        <th class="prepared-entity-col-schedule" title="{{ t('Schedule') }}">{{ t("Schedule") }}</th>
+                        <th class="prepared-entity-col-interval" title="{{ t('Every') }}">{{ t("Every") }}</th>
+                        <th class="prepared-entity-col-name" title="{{ t('Item Name') }}">{{ t("Item Name") }}</th>
+                        <th class="prepared-entity-col-raw" title="{{ t('Raw Frame Preview') }}">{{ t("Raw Frame Preview") }}</th>
+                    </tr></thead>
+                    <tbody>{% for row in rows %}
+                        <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
+                            <td class="prepared-entity-col-icon"><img src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol_table }}{{ row.symbol_code }}" class="section-symbol-preview"></td>
+                            <td class="prepared-entity-col-active"><span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.is_enabled else 'tnc-status-icon-disabled' }}" title="{{ t('Enabled' if row.is_enabled else 'Disabled') }}"><img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt=""></span></td>
                             <td class="prepared-entity-col-schedule" title="{{ row.activation_summary }}">{{ t(row.activation_short_label) }}</td>
                             <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
                             <td class="prepared-entity-col-name">{{ row.name }}</td>
                             <td class="prepared-entity-col-raw" title="{{ row.raw_frame_preview }}"><code title="{{ row.raw_frame_preview }}">{{ row.raw_frame_preview }}</code></td>
                         </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="{{ 7 if section.slug == 'objects' else 6 }}">{{ t("No records yet.") }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
+                    {% else %}<tr><td colspan="6">{{ t("No records yet.") }}</td></tr>{% endfor %}</tbody>
                 </table>
                 {% elif section.slug == 'bulletins' %}
-                <table class="data-table prepared-entity-table message-entry-table">
+                <table class="data-table prepared-entity-table compact-table message-entry-table bulletins-list-table">
                     <thead>
                         <tr>
                             <th class="prepared-entity-col-active" title="{{ t('Enabled') }}">{{ t("Enabled") }}</th>
@@ -94,8 +140,32 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for row in rows %}
-                        <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
+                        {% for row in bulletin_tree_rows %}
+                        {% if row.row_type == 'group' %}
+                        <tr class="object-group-row bulletin-group-row">
+                            <td colspan="7" class="object-group-cell">
+                                <button
+                                    type="button"
+                                    class="object-group-toggle"
+                                    data-collapsible-group-toggle
+                                    data-collapsible-group-key="{{ row.group_key }}"
+                                    data-collapsible-group-name="{{ row.name }}"
+                                    data-collapsible-group-storage-key="aprsbox:bulletins:expanded-groups"
+                                    data-expand-label="{{ t('Expand group') }}"
+                                    data-collapse-label="{{ t('Collapse group') }}"
+                                    aria-expanded="false"
+                                    title="{{ t('Expand group') }}: {{ row.name }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/chevron-right.svg" alt="" class="object-group-chevron">
+                                    <img src="{{ request.scope.root_path }}/static/icons/folder-outline.svg" alt="" class="object-group-icon object-group-icon-closed">
+                                    <img src="{{ request.scope.root_path }}/static/icons/folder-open-outline.svg" alt="" class="object-group-icon object-group-icon-open" hidden>
+                                    <strong class="object-group-title">{{ row.name }}</strong>
+                                    <span class="object-group-count" title="{{ t('Bulletin count') }}">{{ row.count }}</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr{% if row.tree_child %} class="object-group-child-row{% if can_edit and section.supports_editing %} clickable-row{% endif %}" data-collapsible-group-child="{{ row.group_key }}" hidden{% elif can_edit and section.supports_editing %} class="clickable-row"{% endif %}{% if can_edit and section.supports_editing %} data-href="?edit={{ row.id }}"{% endif %}>
                             <td class="prepared-entity-col-active">
                                 <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.is_enabled else 'tnc-status-icon-disabled' }}" title="{{ t('Enabled' if row.is_enabled else 'Disabled') }}" aria-label="{{ t('Enabled' if row.is_enabled else 'Disabled') }}">
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
@@ -108,10 +178,11 @@
                             </td>
                             <td class="prepared-entity-col-schedule" title="{{ row.activation_summary }}">{{ t(row.activation_short_label) }}</td>
                             <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
-                            <td class="message-entry-col-type">{{ t(row.type_label) }}</td>
+                            <td class="message-entry-col-type{% if row.tree_child %} object-group-child-name{% endif %}">{{ t(row.type_label) }}</td>
                             <td class="message-entry-col-target"><code>{{ row.target_display }}</code></td>
                             <td class="prepared-entity-col-raw"><code>{{ row.raw_frame_preview }}</code></td>
                         </tr>
+                        {% endif %}
                         {% else %}
                         <tr>
                             <td colspan="7">{{ t("No records yet.") }}</td>
@@ -291,6 +362,16 @@
                 {% if section.supports_editing and edit_row %}
                 <input type="hidden" name="record_id" value="{{ edit_row.id }}">
                 {% endif %}
+                {% if section.slug == 'objects' %}
+                <datalist id="object-group-names">
+                    {% for group_name in object_group_names %}<option value="{{ group_name }}">{% endfor %}
+                </datalist>
+                {% endif %}
+                {% if section.slug == 'bulletins' %}
+                <datalist id="bulletin-folder-names">
+                    {% for folder_name in bulletin_folder_names %}<option value="{{ folder_name }}">{% endfor %}
+                </datalist>
+                {% endif %}
                 {% if section.slug == 'modems' %}
                 {% include "partials/modem_form_fields.html" %}
                 {% else %}
@@ -428,6 +509,8 @@
                     <input
                         type="{{ field.type }}"
                         name="{{ field.name }}"
+                        {% if section.slug == 'objects' and field.name == 'group_name' %}list="object-group-names" placeholder="{{ t('No group') }}"{% endif %}
+                        {% if section.slug == 'bulletins' and field.name == 'folder_name' %}list="bulletin-folder-names" placeholder="{{ t('No folder') }}"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'device_path' %}id="modems-device-path"{% endif %}
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'expose_bind_address' %}id="modems-expose-bind-address"{% endif %}
@@ -472,6 +555,12 @@
                     <span class="muted" data-activation-summary>{{ edit_row.activation_summary if edit_row else t("Manual activation.") }}</span>
                     <div class="activation-warning-list" data-activation-warnings></div>
                 </div>
+                {% endif %}
+                {% if section.slug == 'objects' and edit_row %}
+                <details class="full object-technical-details">
+                    <summary>{{ t("Technical details") }}</summary>
+                    <code>{{ edit_row.raw_frame_preview }}</code>
+                </details>
                 {% endif %}
                 <div class="form-actions">
                     <button type="submit" class="button">{{ t("Save") }}</button>
@@ -672,6 +761,53 @@
                 const href = row.dataset.href;
                 if (href) {
                     window.location.href = href;
+                }
+            });
+        }
+
+        const expandedGroupsByStorageKey = new Map();
+        const expandedGroupsFor = (storageKey) => {
+            if (expandedGroupsByStorageKey.has(storageKey)) return expandedGroupsByStorageKey.get(storageKey);
+            let expandedGroups = new Set();
+            try {
+                const storedGroups = JSON.parse(window.sessionStorage.getItem(storageKey) || "[]");
+                if (Array.isArray(storedGroups)) expandedGroups = new Set(storedGroups.map(String));
+            } catch (_error) {
+                expandedGroups = new Set();
+            }
+            expandedGroupsByStorageKey.set(storageKey, expandedGroups);
+            return expandedGroups;
+        };
+
+        const syncCollapsibleGroup = (toggle, expanded) => {
+            const groupKey = toggle.dataset.collapsibleGroupKey || "";
+            const groupName = toggle.dataset.collapsibleGroupName || "";
+            const label = expanded ? toggle.dataset.collapseLabel : toggle.dataset.expandLabel;
+            toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+            toggle.title = `${label || ""}: ${groupName}`;
+            const closedIcon = toggle.querySelector(".object-group-icon-closed");
+            const openIcon = toggle.querySelector(".object-group-icon-open");
+            if (closedIcon instanceof HTMLElement) closedIcon.hidden = expanded;
+            if (openIcon instanceof HTMLElement) openIcon.hidden = !expanded;
+            for (const childRow of document.querySelectorAll("[data-collapsible-group-child]")) {
+                if (childRow.dataset.collapsibleGroupChild === groupKey) childRow.hidden = !expanded;
+            }
+        };
+
+        for (const toggle of document.querySelectorAll("[data-collapsible-group-toggle]")) {
+            const storageKey = toggle.dataset.collapsibleGroupStorageKey || "aprsbox:groups:expanded";
+            const groupName = toggle.dataset.collapsibleGroupName || "";
+            const expandedGroups = expandedGroupsFor(storageKey);
+            syncCollapsibleGroup(toggle, expandedGroups.has(groupName));
+            toggle.addEventListener("click", () => {
+                const expanded = toggle.getAttribute("aria-expanded") !== "true";
+                syncCollapsibleGroup(toggle, expanded);
+                if (expanded) expandedGroups.add(groupName);
+                else expandedGroups.delete(groupName);
+                try {
+                    window.sessionStorage.setItem(storageKey, JSON.stringify([...expandedGroups]));
+                } catch (_error) {
+                    // Folder toggling remains functional when storage is unavailable.
                 }
             });
         }
@@ -952,7 +1088,7 @@
                 });
             });
 
-            for (const toggleForm of document.querySelectorAll("form[data-interface-toggle-action]")) {
+            for (const toggleForm of document.querySelectorAll("form[data-interface-toggle-action], form[data-object-toggle-action]")) {
                 toggleForm.addEventListener("submit", (event) => {
                     if (event.defaultPrevented) return;
                     event.preventDefault();

@@ -161,6 +161,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
         supports_delete=True,
         fields=[
             {"name": "name", "label": "Object Name", "type": "text", "required": True, "maxlength": 9, "placeholder": "VOICE"},
+            {"name": "group_name", "label": "Group", "type": "text", "required": False, "maxlength": 80},
             {
                 "name": "lifetime",
                 "label": "Object Lifetime",
@@ -324,8 +325,9 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
                 ],
                 "default": "bulletin",
             },
+            {"name": "folder_name", "label": "Folder", "type": "text", "required": False, "maxlength": 80},
             {"name": "bulletin_code", "label": "Code", "type": "text", "required": False, "maxlength": 1, "placeholder": "0"},
-            {"name": "group_name", "label": "Group", "type": "text", "required": False, "maxlength": 5, "placeholder": "WX"},
+            {"name": "group_name", "label": "APRS Group", "type": "text", "required": False, "maxlength": 5, "placeholder": "WX"},
             {
                 "name": "interval_minutes",
                 "label": "Send Interval",

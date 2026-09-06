@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.23.dev - 2026-09-06
+- `Objetos`: se añadió una lista compacta con carpetas desplegables, activación/desactivación rápida y un campo de grupo con autocompletado.
+- `Boletines`: se añadieron carpetas equivalentes y un campo `Carpeta` independiente; el `Grupo APRS` del protocolo conserva su significado actual.
+
 ## 1.12.21.dev - 2026-09-05
 - `Panel / carga estimada del canal APRS RF`: se añadió un gráfico independiente de tiempo de transmisión AX.25 estimado por interfaz RF. Usa el mismo rango temporal, buckets y zoom que los gráficos de actividad, muestra los estados diagnósticos `normal` (<20%), `busy` (20–<40%) y `congested` (≥40%), y deja claro que el resultado es una estimación del tráfico APRS decodificado, no una medición DCD ni de utilización física del canal.
 - `Interfaces / tasa de bits RF`: las interfaces KISS serie y TCP usan la tasa de bits fija del módem RF de `1200 bit/s`, independiente de la velocidad UART. El tiempo de transmisión usa la longitud AX.25 raw cuando está disponible, incluye FCS, flags y una aproximación determinista de bit stuffing HDLC, y excluye el framing KISS y TXDELAY/preámbulo desconocidos. La tasa no se muestra intencionadamente en el formulario de interfaz; el historial incompleto se muestra como datos no disponibles, no como un cero falso.
