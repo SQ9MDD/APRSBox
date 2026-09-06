@@ -302,6 +302,32 @@
             .replaceAll("'", "&#39;");
     }
 
+    function renderMessageText(value) {
+        const text = String(value ?? "");
+        const links = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+        let result = "";
+        let offset = 0;
+        for (const match of text.matchAll(links)) {
+            let label = match[0].replace(/[.,!?;:]+$/, "");
+            // Leave surrounding punctuation outside the link, but keep balanced
+            // parentheses used in URLs (for example Wikipedia article names).
+            while (label.endsWith(")") && label.split(")").length > label.split("(").length) {
+                label = label.slice(0, -1);
+            }
+            const href = /^www\./i.test(label) ? `https://${label}` : label;
+            result += escapeHtml(text.slice(offset, match.index));
+            try {
+                const url = new URL(href);
+                if (!["http:", "https:"].includes(url.protocol) || !url.hostname) throw new Error("Invalid link");
+                result += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+            } catch {
+                result += escapeHtml(label);
+            }
+            offset = match.index + label.length;
+        }
+        return result + escapeHtml(text.slice(offset));
+    }
+
     function formatText(template, params = {}) {
         return String(template || "").replace(/\{(\w+)\}/g, (match, key) => (
             Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match
@@ -758,7 +784,7 @@
                 <div class="message-bubble-row ${message.direction === "rx" ? "message-bubble-row-rx" : "message-bubble-row-tx"}">
                     <div class="message-bubble ${message.direction === "rx" ? "message-bubble-rx" : "message-bubble-tx"}">
                         ${senderLabel ? `<strong class="message-bubble-sender">${escapeHtml(senderLabel)}</strong>` : ""}
-                        <p>${escapeHtml(message.text)}</p>
+                        <p>${renderMessageText(message.text)}</p>
                         <span class="message-bubble-meta">${escapeHtml(formatDateTime(message.timestamp))}${deliveryBadge}</span>
                     </div>
                 </div>
@@ -1127,8 +1153,10 @@
         const filtered = normalizeMessageText(pasted);
         const available = composerLimit - composerInput.value.length + ((composerInput.selectionEnd || 0) - (composerInput.selectionStart || 0));
         composerInput.setRangeText(filtered.slice(0, Math.max(available, 0)), composerInput.selectionStart || 0, composerInput.selectionEnd || 0, "end");
+        // setRangeText does not emit input. Save the new draft before rendering,
+        // otherwise renderComposer restores the old draft over the pasted text.
+        composerInput.dispatchEvent(new Event("input", { bubbles: true }));
         composerError.hidden = filtered === pasted && filtered.length <= available;
-        renderComposer(getActiveConversation());
     });
 
     composerInput.addEventListener("input", () => {
@@ -1141,8 +1169,8 @@
         if (conversation) {
             messageDrafts.set(conversation.id, composerInput.value);
         }
-        composerError.hidden = !hadInvalid;
         renderComposer(conversation);
+        composerError.hidden = !hadInvalid;
     });
 
     composerPathInput.addEventListener("input", () => {

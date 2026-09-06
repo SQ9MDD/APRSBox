@@ -9031,6 +9031,12 @@ body.modal-open {
     word-break: break-word;
 }
 
+.message-bubble p a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+}
+
 .message-bubble-sender {
     display: block;
     margin-bottom: 0.25rem;

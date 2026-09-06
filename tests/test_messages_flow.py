@@ -447,6 +447,50 @@ class MessagesFlowTests(unittest.IsolatedAsyncioTestCase):
         allowed = r''',.:?/\()<>-_+=[]{}"'&$@#!'''
         self.assertEqual(normalize_aprs_message_text(allowed), allowed)
 
+    def test_outgoing_message_rejects_non_ascii_and_control_characters(self) -> None:
+        for char in ("ÿ", "\ufffd", "ą", "😀", "\x00", "\x1f", "\x7f"):
+            with self.subTest(char=repr(char)), self.assertRaises(ValueError):
+                normalize_aprs_message_text(f"hello{char}world")
+
+    def test_received_message_filters_non_ascii_before_storage_and_notification(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            with patch("app.services.messages.queue_aprs_message_notification") as notification:
+                for index, suffix in enumerate(("ÿ", "\ufffd", "")):
+                    process_incoming_tnc2_message(
+                        "SP8ABC>APRS::SQ9MDD-4 :\\:-){0K<" + suffix,
+                        timestamp=f"2026-01-01T00:0{index}:00+00:00",
+                    )
+            rows = fetch_all("SELECT message_text, message_number FROM aprs_messages WHERE direction = 'rx'")
+            self.assertEqual(len(rows), 3)
+            self.assertTrue(all(row["message_text"] == r"\:-){0K<" for row in rows))
+            self.assertTrue(all(row["message_number"] is None for row in rows))
+            self.assertEqual([call.kwargs["text"] for call in notification.call_args_list], [r"\:-){0K<"] * 3)
+            self.assertIsNone(fetch_one("SELECT id FROM outbound_jobs WHERE kind = 'message'"))
+
+    def test_received_ascii_filter_keeps_numbered_message_ack(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            process_incoming_tnc2_message("SP8ABC>APRS::SQ9MDD-4 :Helloÿ\ufffd\x00!{0K")
+            row = fetch_one("SELECT message_text, message_number FROM aprs_messages WHERE direction = 'rx'")
+            self.assertEqual(row["message_text"], "Hello!")
+            self.assertEqual(row["message_number"], "0K")
+            jobs = fetch_all("SELECT payload_json FROM outbound_jobs WHERE kind = 'message'")
+            self.assertEqual(len(jobs), 2)
+            self.assertTrue(all('"message_text":"ack0K"' in row["payload_json"].replace(" ", "") for row in jobs))
+
+    def test_historical_received_messages_are_filtered_only_for_display(self) -> None:
+        with temporary_database():
+            interface_id = insert_modem()
+            update_station_settings(station_payload(interface_id))
+            process_incoming_tnc2_message("SP8ABC>APRS::SQ9MDD-4 :Hello")
+            execute("UPDATE aprs_messages SET message_text = ? WHERE direction = 'rx'", ("Helloÿ\ufffd",))
+            view = get_messages_page_data()
+            self.assertEqual(view["conversations"][0]["messages"][0]["text"], "Hello")
+            self.assertEqual(fetch_one("SELECT message_text FROM aprs_messages")["message_text"], "Helloÿ\ufffd")
+
     def test_destination_callsign_accepts_documented_aprs_service_aliases(self) -> None:
         for alias in ("WHO-IS", "WHO-15", "WLNK-1", "EMAIL", "E", "ANSRVR", "CQSRVR", "QRU", "QRZ", "WXBOT", "WHERE-IS", "SMSGTE"):
             self.assertEqual(normalize_aprs_destination_callsign(alias.lower()), alias)

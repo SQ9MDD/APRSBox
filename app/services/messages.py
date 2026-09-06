@@ -128,6 +128,11 @@ def normalize_aprs_message_text(value: str) -> str:
     return text
 
 
+def _sanitize_received_message_text(value: str) -> str:
+    """Keep readable ASCII without changing protocol fields or truncating RX text."""
+    return re.sub(r"[^\x20-\x7E]", "", str(value or ""))
+
+
 def normalize_aprs_path(value: str) -> str:
     path = str(value or "").strip().upper()
     if len(path) > 64:
@@ -1550,6 +1555,7 @@ def store_incoming_message(
 ) -> None:
     if is_configured_aprs_alarm_group(addressee):
         return
+    message_text = _sanitize_received_message_text(message_text)
     station_settings = _get_station_settings()
     ack_path = _resolve_auto_ack_path(sender=sender, station_settings=station_settings)
     conversation = create_or_update_conversation(
@@ -1644,6 +1650,7 @@ def store_incoming_query(
     path: str,
     timestamp: str,
 ) -> bool:
+    query_text = _sanitize_received_message_text(query_text)
     conversation = create_or_update_conversation(sender, conversation_kind=CONVERSATION_KIND_DIRECT)
     existing = None
     if query_number:
@@ -1700,6 +1707,7 @@ def store_incoming_bulletin(
     path: str,
     timestamp: str,
 ) -> None:
+    message_text = _sanitize_received_message_text(message_text)
     conversation = create_or_update_conversation(sender, conversation_kind=CONVERSATION_KIND_DIRECT)
     display_text = _format_bulletin_display_text(addressee, message_text)
     existing = fetch_one(
@@ -2117,7 +2125,11 @@ def _serialize_message_row(row: dict[str, Any]) -> dict[str, Any]:
         "direction": str(row["direction"]),
         "sender": str(row.get("sender") or ""),
         "addressee": str(row.get("addressee") or ""),
-        "text": str(row["message_text"] or ""),
+        "text": (
+            _sanitize_received_message_text(row["message_text"])
+            if row["direction"] == MESSAGE_DIRECTION_RX
+            else str(row["message_text"] or "")
+        ),
         "timestamp": timestamp,
         "unread": bool(int(row.get("is_unread") or 0)),
         "delivery_state": str(row.get("status") or ""),
