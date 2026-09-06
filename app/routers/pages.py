@@ -462,23 +462,41 @@ def _section_template_context_scoped(
         translator=translator,
     )
     object_groups: list[dict[str, object]] = []
-    selected_object_group = str(object_group or "").strip()
+    object_tree_rows: list[dict[str, object]] = []
     if slug == "objects":
-        group_counts: dict[str, int] = {}
+        grouped_rows: dict[str, list[dict[str, object]]] = {}
+        root_rows: list[dict[str, object]] = []
         for row in rows:
             group_name = str(row.get("group_name") or "").strip()
             if group_name:
-                group_counts[group_name] = group_counts.get(group_name, 0) + 1
+                grouped_rows.setdefault(group_name, []).append(row)
+            else:
+                root_rows.append(row)
         object_groups = [
-            {"name": name, "count": count}
-            for name, count in sorted(group_counts.items(), key=lambda item: item[0].casefold())
+            {"name": name, "count": len(group_rows), "rows": group_rows}
+            for name, group_rows in sorted(grouped_rows.items(), key=lambda item: item[0].casefold())
         ]
-        rows = [
-            row for row in rows
-            if str(row.get("group_name") or "").strip() == selected_object_group
-        ] if selected_object_group else [
-            row for row in rows if not str(row.get("group_name") or "").strip()
-        ]
+        for group in object_groups:
+            object_tree_rows.append({"row_type": "group", **group})
+            for index, group_row in enumerate(group["rows"]):
+                object_tree_rows.append(
+                    {
+                        "row_type": "object",
+                        "tree_prefix": "│  " + ("└─" if index == len(group["rows"]) - 1 else "├─"),
+                        "tree_child": True,
+                        **group_row,
+                    }
+                )
+        for index, root_row in enumerate(root_rows):
+            object_tree_rows.append(
+                {
+                    "row_type": "object",
+                    "tree_prefix": "└─" if index == len(root_rows) - 1 else "├─",
+                    "tree_child": False,
+                    **root_row,
+                }
+            )
+        rows = root_rows
     context = build_template_context(
         request,
         page_title=definition.title,
@@ -496,7 +514,8 @@ def _section_template_context_scoped(
         prefetched_aprs_symbol_set=symbol_set,
         prefetched_map_config=map_config,
         object_groups=object_groups,
-        object_group=selected_object_group,
+        object_tree_rows=object_tree_rows,
+        object_group="",
         object_group_names=[str(group["name"]) for group in object_groups],
     )
     if slug == "modems":

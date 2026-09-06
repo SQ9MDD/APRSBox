@@ -279,6 +279,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
         self.assertIn("data-object-toggle-action", template_source)
         self.assertIn("/settings/objects/{{ row.id }}/toggle", template_source)
         self.assertIn("folder-outline.svg", template_source)
+        self.assertIn("folder-open-outline.svg", template_source)
         self.assertIn("object-group-names", template_source)
         object_table = template_source.split("{% elif section.slug == 'items' %}", 1)[0]
         self.assertNotIn("prepared-entity-col-raw", object_table)

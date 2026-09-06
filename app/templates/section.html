@@ -50,20 +50,20 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% if not object_group %}
-                        {% for group in object_groups %}
-                        <tr class="clickable-row object-group-row" data-href="?group={{ group.name|urlencode }}">
+                        {% for row in object_tree_rows %}
+                        {% if row.row_type == 'group' %}
+                        <tr class="object-group-row">
                             <td class="prepared-entity-col-icon"><img src="{{ request.scope.root_path }}/static/icons/folder-outline.svg" alt="" class="object-group-icon"></td>
-                            <td colspan="{{ 4 + (1 if can_edit else 0) }}" class="object-group-name"><strong>{{ group.name }}</strong><span class="muted">{{ t("Object count") }}: {{ group.count }}</span></td>
+                            <td class="prepared-entity-col-object-name"><span class="object-tree-branch">├─</span><strong>{{ row.name }}</strong></td>
+                            <td class="prepared-entity-col-object-status"><span class="muted">—</span></td>
+                            <td class="prepared-entity-col-schedule"><span class="muted">{{ t("Group") }}</span></td>
+                            <td class="prepared-entity-col-object-what">{{ t("Object count") }}: {{ row.count }}</td>
+                            {% if can_edit %}<td class="prepared-entity-col-actions"><img src="{{ request.scope.root_path }}/static/icons/folder-open-outline.svg" alt="" class="object-group-open-icon"></td>{% endif %}
                         </tr>
-                        {% endfor %}
                         {% else %}
-                        <tr class="object-group-back-row"><td colspan="{{ 5 + (1 if can_edit else 0) }}"><a href="{{ request.scope.root_path }}/objects" class="object-group-back-link">← {{ t("Back to object list") }}</a></td></tr>
-                        {% endif %}
-                        {% for row in rows %}
-                        <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}{% if object_group %}&group={{ object_group|urlencode }}{% endif %}"{% endif %}>
+                        <tr {% if can_edit and section.supports_editing %}class="clickable-row{% if row.tree_child %} object-tree-child-row{% endif %}" data-href="?edit={{ row.id }}"{% endif %}>
                             <td class="prepared-entity-col-icon"><img src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol_table }}{{ row.symbol_code }}" class="section-symbol-preview"></td>
-                            <td class="prepared-entity-col-object-name"><strong>{{ row.name }}</strong></td>
+                            <td class="prepared-entity-col-object-name"><span class="object-tree-branch{% if row.tree_child %} object-tree-branch-child{% endif %}">{{ row.tree_prefix }}</span><strong>{{ row.name }}</strong></td>
                             <td class="prepared-entity-col-object-status">
                                 <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.is_enabled else 'tnc-status-icon-disabled' }}" title="{{ t('Enabled' if row.is_enabled else 'Disabled') }}" aria-label="{{ t('Enabled' if row.is_enabled else 'Disabled') }}">
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
@@ -83,6 +83,7 @@
                             </div></td>
                             {% endif %}
                         </tr>
+                        {% endif %}
                         {% else %}
                         <tr>
                             <td colspan="{{ 5 + (1 if can_edit else 0) }}">{{ t("No records yet.") }}</td>
