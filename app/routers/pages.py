@@ -463,6 +463,8 @@ def _section_template_context_scoped(
     )
     object_groups: list[dict[str, object]] = []
     object_tree_rows: list[dict[str, object]] = []
+    bulletin_groups: list[dict[str, object]] = []
+    bulletin_tree_rows: list[dict[str, object]] = []
     if slug == "objects":
         grouped_rows: dict[str, list[dict[str, object]]] = {}
         root_rows: list[dict[str, object]] = []
@@ -498,6 +500,35 @@ def _section_template_context_scoped(
                 }
             )
         rows = root_rows
+    elif slug == "bulletins":
+        grouped_rows: dict[str, list[dict[str, object]]] = {}
+        root_rows: list[dict[str, object]] = []
+        for row in rows:
+            group_name = str(row.get("group_name") or "").strip()
+            if group_name:
+                grouped_rows.setdefault(group_name, []).append(row)
+            else:
+                root_rows.append(row)
+        bulletin_groups = [
+            {"name": name, "count": len(group_rows), "rows": group_rows}
+            for name, group_rows in sorted(grouped_rows.items(), key=lambda item: item[0].casefold())
+        ]
+        for group_index, group in enumerate(bulletin_groups):
+            group_key = f"bulletin-group-{group_index}"
+            group_rows = group["rows"]
+            bulletin_tree_rows.append({"row_type": "group", "group_key": group_key, **group})
+            for group_row in group_rows:
+                bulletin_tree_rows.append(
+                    {
+                        "row_type": "bulletin",
+                        "tree_child": True,
+                        "group_key": group_key,
+                        **group_row,
+                    }
+                )
+        for root_row in root_rows:
+            bulletin_tree_rows.append({"row_type": "bulletin", "tree_child": False, **root_row})
+        rows = root_rows
     context = build_template_context(
         request,
         page_title=definition.title,
@@ -518,6 +549,8 @@ def _section_template_context_scoped(
         object_tree_rows=object_tree_rows,
         object_group="",
         object_group_names=[str(group["name"]) for group in object_groups],
+        bulletin_groups=bulletin_groups,
+        bulletin_tree_rows=bulletin_tree_rows,
     )
     if slug == "modems":
         aprsis_config = get_aprsis_config()

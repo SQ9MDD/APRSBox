@@ -110,6 +110,7 @@ class ObjectAndItemFormTests(unittest.TestCase):
             "What",
             "Expand group",
             "Collapse group",
+            "Bulletin count",
         ]
         self.assertEqual(SECTION_DEFINITIONS["items"].list_title, "Item List")
         for language in ("en", "pl", "de", "es", "tlh"):
@@ -282,10 +283,11 @@ class ObjectAndItemFormTests(unittest.TestCase):
         self.assertIn("/settings/objects/{{ row.id }}/toggle", template_source)
         self.assertIn("folder-outline.svg", template_source)
         self.assertIn("folder-open-outline.svg", template_source)
-        self.assertIn("data-object-group-toggle", template_source)
-        self.assertIn("data-object-group-child", template_source)
+        self.assertIn("data-collapsible-group-toggle", template_source)
+        self.assertIn("data-collapsible-group-child", template_source)
         self.assertIn("aria-expanded=\"false\"", template_source)
         self.assertIn("aprsbox:objects:expanded-groups", template_source)
+        self.assertIn("aprsbox:bulletins:expanded-groups", template_source)
         self.assertIn("object-group-names", template_source)
         object_table = template_source.split("{% elif section.slug == 'items' %}", 1)[0]
         self.assertNotIn("prepared-entity-col-raw", object_table)

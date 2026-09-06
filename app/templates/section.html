@@ -57,9 +57,10 @@
                                 <button
                                     type="button"
                                     class="object-group-toggle"
-                                    data-object-group-toggle
-                                    data-object-group-key="{{ row.group_key }}"
-                                    data-object-group-name="{{ row.name }}"
+                                    data-collapsible-group-toggle
+                                    data-collapsible-group-key="{{ row.group_key }}"
+                                    data-collapsible-group-name="{{ row.name }}"
+                                    data-collapsible-group-storage-key="aprsbox:objects:expanded-groups"
                                     data-expand-label="{{ t('Expand group') }}"
                                     data-collapse-label="{{ t('Collapse group') }}"
                                     aria-expanded="false"
@@ -74,7 +75,7 @@
                             </td>
                         </tr>
                         {% else %}
-                        <tr{% if row.tree_child %} class="object-group-child-row{% if can_edit and section.supports_editing %} clickable-row{% endif %}" data-object-group-child="{{ row.group_key }}" hidden{% elif can_edit and section.supports_editing %} class="clickable-row"{% endif %}{% if can_edit and section.supports_editing %} data-href="?edit={{ row.id }}"{% endif %}>
+                        <tr{% if row.tree_child %} class="object-group-child-row{% if can_edit and section.supports_editing %} clickable-row{% endif %}" data-collapsible-group-child="{{ row.group_key }}" hidden{% elif can_edit and section.supports_editing %} class="clickable-row"{% endif %}{% if can_edit and section.supports_editing %} data-href="?edit={{ row.id }}"{% endif %}>
                             <td class="prepared-entity-col-icon"><img src="{{ request.scope.root_path }}/static/{{ row.symbol_icon }}" alt="{{ row.symbol_table }}{{ row.symbol_code }}" class="section-symbol-preview"></td>
                             <td class="prepared-entity-col-object-name{% if row.tree_child %} object-group-child-name{% endif %}"><strong>{{ row.name }}</strong></td>
                             <td class="prepared-entity-col-object-status">
@@ -126,7 +127,7 @@
                     {% else %}<tr><td colspan="6">{{ t("No records yet.") }}</td></tr>{% endfor %}</tbody>
                 </table>
                 {% elif section.slug == 'bulletins' %}
-                <table class="data-table prepared-entity-table message-entry-table">
+                <table class="data-table prepared-entity-table compact-table message-entry-table bulletins-list-table">
                     <thead>
                         <tr>
                             <th class="prepared-entity-col-active" title="{{ t('Enabled') }}">{{ t("Enabled") }}</th>
@@ -139,8 +140,32 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for row in rows %}
-                        <tr {% if can_edit and section.supports_editing %}class="clickable-row" data-href="?edit={{ row.id }}"{% endif %}>
+                        {% for row in bulletin_tree_rows %}
+                        {% if row.row_type == 'group' %}
+                        <tr class="object-group-row bulletin-group-row">
+                            <td colspan="7" class="object-group-cell">
+                                <button
+                                    type="button"
+                                    class="object-group-toggle"
+                                    data-collapsible-group-toggle
+                                    data-collapsible-group-key="{{ row.group_key }}"
+                                    data-collapsible-group-name="{{ row.name }}"
+                                    data-collapsible-group-storage-key="aprsbox:bulletins:expanded-groups"
+                                    data-expand-label="{{ t('Expand group') }}"
+                                    data-collapse-label="{{ t('Collapse group') }}"
+                                    aria-expanded="false"
+                                    title="{{ t('Expand group') }}: {{ row.name }}"
+                                >
+                                    <img src="{{ request.scope.root_path }}/static/icons/chevron-right.svg" alt="" class="object-group-chevron">
+                                    <img src="{{ request.scope.root_path }}/static/icons/folder-outline.svg" alt="" class="object-group-icon object-group-icon-closed">
+                                    <img src="{{ request.scope.root_path }}/static/icons/folder-open-outline.svg" alt="" class="object-group-icon object-group-icon-open" hidden>
+                                    <strong class="object-group-title">{{ row.name }}</strong>
+                                    <span class="object-group-count" title="{{ t('Bulletin count') }}">{{ row.count }}</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr{% if row.tree_child %} class="object-group-child-row{% if can_edit and section.supports_editing %} clickable-row{% endif %}" data-collapsible-group-child="{{ row.group_key }}" hidden{% elif can_edit and section.supports_editing %} class="clickable-row"{% endif %}{% if can_edit and section.supports_editing %} data-href="?edit={{ row.id }}"{% endif %}>
                             <td class="prepared-entity-col-active">
                                 <span class="tnc-status-icon {{ 'tnc-status-icon-enabled' if row.is_enabled else 'tnc-status-icon-disabled' }}" title="{{ t('Enabled' if row.is_enabled else 'Disabled') }}" aria-label="{{ t('Enabled' if row.is_enabled else 'Disabled') }}">
                                     <img src="{{ request.scope.root_path }}/static/icons/{{ 'check-circle.svg' if row.is_enabled else 'close-circle.svg' }}" alt="">
@@ -153,10 +178,11 @@
                             </td>
                             <td class="prepared-entity-col-schedule" title="{{ row.activation_summary }}">{{ t(row.activation_short_label) }}</td>
                             <td class="prepared-entity-col-interval">{{ row.interval_minutes }}m</td>
-                            <td class="message-entry-col-type">{{ t(row.type_label) }}</td>
+                            <td class="message-entry-col-type{% if row.tree_child %} object-group-child-name{% endif %}">{{ t(row.type_label) }}</td>
                             <td class="message-entry-col-target"><code>{{ row.target_display }}</code></td>
                             <td class="prepared-entity-col-raw"><code>{{ row.raw_frame_preview }}</code></td>
                         </tr>
+                        {% endif %}
                         {% else %}
                         <tr>
                             <td colspan="7">{{ t("No records yet.") }}</td>
@@ -733,18 +759,23 @@
             });
         }
 
-        const objectGroupStorageKey = "aprsbox:objects:expanded-groups";
-        let expandedObjectGroups = new Set();
-        try {
-            const storedGroups = JSON.parse(window.sessionStorage.getItem(objectGroupStorageKey) || "[]");
-            if (Array.isArray(storedGroups)) expandedObjectGroups = new Set(storedGroups.map(String));
-        } catch (_error) {
-            expandedObjectGroups = new Set();
-        }
+        const expandedGroupsByStorageKey = new Map();
+        const expandedGroupsFor = (storageKey) => {
+            if (expandedGroupsByStorageKey.has(storageKey)) return expandedGroupsByStorageKey.get(storageKey);
+            let expandedGroups = new Set();
+            try {
+                const storedGroups = JSON.parse(window.sessionStorage.getItem(storageKey) || "[]");
+                if (Array.isArray(storedGroups)) expandedGroups = new Set(storedGroups.map(String));
+            } catch (_error) {
+                expandedGroups = new Set();
+            }
+            expandedGroupsByStorageKey.set(storageKey, expandedGroups);
+            return expandedGroups;
+        };
 
-        const syncObjectGroup = (toggle, expanded) => {
-            const groupKey = toggle.dataset.objectGroupKey || "";
-            const groupName = toggle.dataset.objectGroupName || "";
+        const syncCollapsibleGroup = (toggle, expanded) => {
+            const groupKey = toggle.dataset.collapsibleGroupKey || "";
+            const groupName = toggle.dataset.collapsibleGroupName || "";
             const label = expanded ? toggle.dataset.collapseLabel : toggle.dataset.expandLabel;
             toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
             toggle.title = `${label || ""}: ${groupName}`;
@@ -752,21 +783,23 @@
             const openIcon = toggle.querySelector(".object-group-icon-open");
             if (closedIcon instanceof HTMLElement) closedIcon.hidden = expanded;
             if (openIcon instanceof HTMLElement) openIcon.hidden = !expanded;
-            for (const childRow of document.querySelectorAll("[data-object-group-child]")) {
-                if (childRow.dataset.objectGroupChild === groupKey) childRow.hidden = !expanded;
+            for (const childRow of document.querySelectorAll("[data-collapsible-group-child]")) {
+                if (childRow.dataset.collapsibleGroupChild === groupKey) childRow.hidden = !expanded;
             }
         };
 
-        for (const toggle of document.querySelectorAll("[data-object-group-toggle]")) {
-            const groupName = toggle.dataset.objectGroupName || "";
-            syncObjectGroup(toggle, expandedObjectGroups.has(groupName));
+        for (const toggle of document.querySelectorAll("[data-collapsible-group-toggle]")) {
+            const storageKey = toggle.dataset.collapsibleGroupStorageKey || "aprsbox:groups:expanded";
+            const groupName = toggle.dataset.collapsibleGroupName || "";
+            const expandedGroups = expandedGroupsFor(storageKey);
+            syncCollapsibleGroup(toggle, expandedGroups.has(groupName));
             toggle.addEventListener("click", () => {
                 const expanded = toggle.getAttribute("aria-expanded") !== "true";
-                syncObjectGroup(toggle, expanded);
-                if (expanded) expandedObjectGroups.add(groupName);
-                else expandedObjectGroups.delete(groupName);
+                syncCollapsibleGroup(toggle, expanded);
+                if (expanded) expandedGroups.add(groupName);
+                else expandedGroups.delete(groupName);
                 try {
-                    window.sessionStorage.setItem(objectGroupStorageKey, JSON.stringify([...expandedObjectGroups]));
+                    window.sessionStorage.setItem(storageKey, JSON.stringify([...expandedGroups]));
                 } catch (_error) {
                     // Folder toggling remains functional when storage is unavailable.
                 }
