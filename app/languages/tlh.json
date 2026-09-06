@@ -2115,5 +2115,10 @@
   "What": "nuq",
   "Expand group": "ghom yIpoSmoH",
   "Collapse group": "ghom yISoQmoH",
-  "Bulletin count": "Bulletinmey mI'"
+  "Bulletin count": "Bulletinmey mI'",
+  "Folder": "ngaSwI'",
+  "No folder": "ngaSwI' ghajbe'",
+  "APRS Group": "APRS ghom",
+  "Folder name must be 80 characters or fewer.": "ngaSwI' pongDaq 80 Deghmey law' tu'lu'be'nIS.",
+  "Folder name may not contain control characters.": "ngaSwI' pongDaq SeH Deghmey tu'lu'be'nIS."
 }

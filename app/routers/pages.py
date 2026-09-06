@@ -504,9 +504,9 @@ def _section_template_context_scoped(
         grouped_rows: dict[str, list[dict[str, object]]] = {}
         root_rows: list[dict[str, object]] = []
         for row in rows:
-            group_name = str(row.get("group_name") or "").strip()
-            if group_name:
-                grouped_rows.setdefault(group_name, []).append(row)
+            folder_name = str(row.get("folder_name") or "").strip()
+            if folder_name:
+                grouped_rows.setdefault(folder_name, []).append(row)
             else:
                 root_rows.append(row)
         bulletin_groups = [
@@ -551,6 +551,7 @@ def _section_template_context_scoped(
         object_group_names=[str(group["name"]) for group in object_groups],
         bulletin_groups=bulletin_groups,
         bulletin_tree_rows=bulletin_tree_rows,
+        bulletin_folder_names=[str(group["name"]) for group in bulletin_groups],
     )
     if slug == "modems":
         aprsis_config = get_aprsis_config()
@@ -3331,6 +3332,7 @@ def bulletins_create(
     current_user: UserIdentity = Depends(require_roles("admin", "operator")),
     record_id: int | None = Form(None),
     message_kind: str = Form("bulletin"),
+    folder_name: str = Form(""),
     bulletin_code: str = Form(""),
     group_name: str = Form(""),
     interval_minutes: str = Form("30"),
@@ -3348,6 +3350,7 @@ def bulletins_create(
     wants_json = request.headers.get("x-requested-with", "").lower() == "xmlhttprequest"
     payload = {
         "message_kind": message_kind.strip(),
+        "folder_name": folder_name.strip(),
         "bulletin_code": bulletin_code.strip(),
         "group_name": group_name.strip(),
         "interval_minutes": interval_minutes.strip(),

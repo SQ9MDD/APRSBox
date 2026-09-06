@@ -2115,5 +2115,10 @@
   "What": "Was",
   "Expand group": "Gruppe aufklappen",
   "Collapse group": "Gruppe zuklappen",
-  "Bulletin count": "Anzahl der Bulletins"
+  "Bulletin count": "Anzahl der Bulletins",
+  "Folder": "Ordner",
+  "No folder": "Kein Ordner",
+  "APRS Group": "APRS-Gruppe",
+  "Folder name must be 80 characters or fewer.": "Der Ordnername darf höchstens 80 Zeichen lang sein.",
+  "Folder name may not contain control characters.": "Der Ordnername darf keine Steuerzeichen enthalten."
 }

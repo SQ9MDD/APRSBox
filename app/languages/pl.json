@@ -2171,5 +2171,10 @@
   "What": "Co",
   "Expand group": "Rozwiń grupę",
   "Collapse group": "Zwiń grupę",
-  "Bulletin count": "Liczba biuletynów"
+  "Bulletin count": "Liczba biuletynów",
+  "Folder": "Folder",
+  "No folder": "Brak folderu",
+  "APRS Group": "Grupa APRS",
+  "Folder name must be 80 characters or fewer.": "Nazwa folderu może mieć najwyżej 80 znaków.",
+  "Folder name may not contain control characters.": "Nazwa folderu nie może zawierać znaków sterujących."
 }

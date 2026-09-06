@@ -2117,5 +2117,10 @@
   "What": "Qué",
   "Expand group": "Expandir grupo",
   "Collapse group": "Contraer grupo",
-  "Bulletin count": "Número de boletines"
+  "Bulletin count": "Número de boletines",
+  "Folder": "Carpeta",
+  "No folder": "Sin carpeta",
+  "APRS Group": "Grupo APRS",
+  "Folder name must be 80 characters or fewer.": "El nombre de la carpeta debe tener 80 caracteres como máximo.",
+  "Folder name may not contain control characters.": "El nombre de la carpeta no puede contener caracteres de control."
 }

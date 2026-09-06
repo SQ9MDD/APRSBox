@@ -2149,5 +2149,10 @@
   "What": "What",
   "Expand group": "Expand group",
   "Collapse group": "Collapse group",
-  "Bulletin count": "Bulletin count"
+  "Bulletin count": "Bulletin count",
+  "Folder": "Folder",
+  "No folder": "No folder",
+  "APRS Group": "APRS Group",
+  "Folder name must be 80 characters or fewer.": "Folder name must be 80 characters or fewer.",
+  "Folder name may not contain control characters.": "Folder name may not contain control characters."
 }

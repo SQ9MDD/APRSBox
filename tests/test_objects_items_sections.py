@@ -111,6 +111,11 @@ class ObjectAndItemFormTests(unittest.TestCase):
             "Expand group",
             "Collapse group",
             "Bulletin count",
+            "Folder",
+            "No folder",
+            "APRS Group",
+            "Folder name must be 80 characters or fewer.",
+            "Folder name may not contain control characters.",
         ]
         self.assertEqual(SECTION_DEFINITIONS["items"].list_title, "Item List")
         for language in ("en", "pl", "de", "es", "tlh"):
@@ -932,6 +937,61 @@ class ObjectAndItemFormTests(unittest.TestCase):
 
 
 class BulletinAndMessageFormTests(unittest.TestCase):
+    def test_bulletin_folder_is_independent_from_aprs_group_and_can_be_changed(self) -> None:
+        with temporary_database():
+            payload = {
+                "message_kind": "group_bulletin",
+                "folder_name": "  Weather warnings  ",
+                "bulletin_code": "1",
+                "group_name": "wx",
+                "interval_minutes": "30",
+                "activation_mode": "scheduled",
+                "active_from_utc": "2026-12-01 08:00",
+                "active_until_utc": "2026-12-31 20:00",
+                "recurrence_duration_minutes": "",
+                "recurrence_interval_value": "",
+                "recurrence_interval_unit": "",
+                "path": "",
+                "is_enabled": "1",
+                "message_text": "Strong wind warning",
+            }
+            success, error = safe_create_section_row("bulletins", payload)
+            self.assertTrue(success)
+            self.assertIsNone(error)
+
+            row = fetch_one(
+                "SELECT id, folder_name, group_name, activation_mode, active_from_utc, active_until_utc "
+                "FROM bulletins ORDER BY id DESC LIMIT 1"
+            )
+            assert row is not None
+            bulletin_id = int(row["id"])
+            self.assertEqual(row["folder_name"], "Weather warnings")
+            self.assertEqual(row["group_name"], "WX")
+
+            payload["folder_name"] = "Events"
+            success, error = safe_update_section_row("bulletins", bulletin_id, payload)
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            moved = fetch_one(
+                "SELECT folder_name, group_name, activation_mode, active_from_utc, active_until_utc "
+                "FROM bulletins WHERE id = ?",
+                (bulletin_id,),
+            )
+            assert moved is not None
+            self.assertEqual(moved["folder_name"], "Events")
+            self.assertEqual(moved["group_name"], "WX")
+            self.assertEqual(moved["activation_mode"], "scheduled")
+            self.assertEqual(moved["active_from_utc"], "2026-12-01 08:00")
+            self.assertEqual(moved["active_until_utc"], "2026-12-31 20:00")
+
+            payload["folder_name"] = ""
+            success, error = safe_update_section_row("bulletins", bulletin_id, payload)
+            self.assertTrue(success)
+            self.assertIsNone(error)
+            ungrouped = fetch_one("SELECT folder_name FROM bulletins WHERE id = ?", (bulletin_id,))
+            assert ungrouped is not None
+            self.assertIsNone(ungrouped["folder_name"])
+
     def test_announcement_row_contains_target_and_raw_frame_preview(self) -> None:
         with temporary_database():
             update_station_settings(
@@ -1117,6 +1177,9 @@ class BulletinAndMessageFormTests(unittest.TestCase):
         self.assertIn("data-bulletin-modal-action", template_source)
         self.assertIn("data-bulletin-confirm", template_source)
         self.assertIn("Send this bulletin now?", template_source)
+        self.assertIn('datalist id="bulletin-folder-names"', template_source)
+        self.assertIn('list="bulletin-folder-names"', template_source)
+        self.assertIn("t('No folder')", template_source)
 
         base_source = Path("app/templates/base.html").read_text(encoding="utf-8")
         self.assertNotIn("['igate']", base_source)

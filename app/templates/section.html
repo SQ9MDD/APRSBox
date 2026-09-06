@@ -367,6 +367,11 @@
                     {% for group_name in object_group_names %}<option value="{{ group_name }}">{% endfor %}
                 </datalist>
                 {% endif %}
+                {% if section.slug == 'bulletins' %}
+                <datalist id="bulletin-folder-names">
+                    {% for folder_name in bulletin_folder_names %}<option value="{{ folder_name }}">{% endfor %}
+                </datalist>
+                {% endif %}
                 {% if section.slug == 'modems' %}
                 {% include "partials/modem_form_fields.html" %}
                 {% else %}
@@ -505,6 +510,7 @@
                         type="{{ field.type }}"
                         name="{{ field.name }}"
                         {% if section.slug == 'objects' and field.name == 'group_name' %}list="object-group-names" placeholder="{{ t('No group') }}"{% endif %}
+                        {% if section.slug == 'bulletins' and field.name == 'folder_name' %}list="bulletin-folder-names" placeholder="{{ t('No folder') }}"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'device_path' %}id="modems-device-path"{% endif %}
                         {% if section.slug in ['objects', 'items'] and field.name == 'symbol_table' %}id="{{ section.slug }}-symbol-table"{% endif %}
                         {% if section.slug == 'modems' and field.name == 'expose_bind_address' %}id="modems-expose-bind-address"{% endif %}

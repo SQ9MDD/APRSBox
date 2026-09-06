@@ -581,6 +581,7 @@ CREATE TABLE IF NOT EXISTS bulletins (
     addressee TEXT,
     bulletin_code TEXT,
     group_name TEXT,
+    folder_name TEXT,
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
     interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
     valid_until_utc TEXT,
@@ -1944,6 +1945,21 @@ CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
                 ADD COLUMN valid_until_utc TEXT
                 """
             )
+        if "folder_name" not in bulletin_columns:
+            connection.execute(
+                """
+                ALTER TABLE bulletins
+                ADD COLUMN folder_name TEXT
+                """
+            )
+            connection.execute(
+                """
+                UPDATE bulletins
+                SET folder_name = NULLIF(TRIM(group_name), '')
+                WHERE folder_name IS NULL
+                  AND TRIM(COALESCE(group_name, '')) <> ''
+                """
+            )
         for table_name in ("aprs_objects", "aprs_items", "bulletins"):
             _ensure_activation_schedule_columns(connection, table_name)
         connection.execute(
@@ -2955,6 +2971,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
     bulletins_sql = _table_sql(connection, "bulletins")
     bulletin_columns = {row["name"] for row in connection.execute("PRAGMA table_info(bulletins)").fetchall()}
     bulletin_valid_until_select = "valid_until_utc" if "valid_until_utc" in bulletin_columns else "NULL"
+    bulletin_folder_select = "folder_name" if "folder_name" in bulletin_columns else "NULL"
     if bulletins_sql and "message_kind" not in bulletins_sql:
         connection.executescript(
             f"""
@@ -2965,6 +2982,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 addressee TEXT,
                 bulletin_code TEXT,
                 group_name TEXT,
+                folder_name TEXT,
                 is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
                 interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
                 valid_until_utc TEXT,
@@ -2973,7 +2991,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 updated_at TEXT NOT NULL
             );
             INSERT INTO bulletins (
-                id, message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at
+                id, message_kind, addressee, bulletin_code, group_name, folder_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at
             )
             SELECT
                 id,
@@ -2981,6 +2999,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 NULL,
                 '0',
                 '',
+                {bulletin_folder_select},
                 COALESCE(is_enabled, 0),
                 CASE
                     WHEN cadence_minutes IN (5, 10, 15, 30, 45, 60) THEN cadence_minutes
@@ -3004,6 +3023,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 addressee TEXT,
                 bulletin_code TEXT,
                 group_name TEXT,
+                folder_name TEXT,
                 is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
                 interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
                 valid_until_utc TEXT,
@@ -3012,7 +3032,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 updated_at TEXT NOT NULL
             );
             INSERT INTO bulletins (
-                id, message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at
+                id, message_kind, addressee, bulletin_code, group_name, folder_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at
             )
             SELECT
                 id,
@@ -3023,6 +3043,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 NULL,
                 COALESCE(bulletin_code, '0'),
                 COALESCE(group_name, ''),
+                {bulletin_folder_select},
                 COALESCE(is_enabled, 0),
                 CASE
                     WHEN interval_minutes IN (5, 10, 15, 30, 45, 60) THEN interval_minutes
@@ -3046,6 +3067,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 addressee TEXT,
                 bulletin_code TEXT,
                 group_name TEXT,
+                folder_name TEXT,
                 is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
                 interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (interval_minutes IN (5, 10, 15, 30, 45, 60)),
                 valid_until_utc TEXT,
@@ -3054,7 +3076,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 updated_at TEXT NOT NULL
             );
             INSERT INTO bulletins (
-                id, message_kind, addressee, bulletin_code, group_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at
+                id, message_kind, addressee, bulletin_code, group_name, folder_name, is_enabled, interval_minutes, valid_until_utc, path, message_text, updated_at
             )
             SELECT
                 id,
@@ -3065,6 +3087,7 @@ def _migrate_bulletin_table(connection: sqlite3.Connection) -> None:
                 NULL,
                 COALESCE(bulletin_code, '0'),
                 COALESCE(group_name, ''),
+                {bulletin_folder_select},
                 COALESCE(is_enabled, 0),
                 CASE
                     WHEN interval_minutes IN (5, 10, 15, 30, 45, 60) THEN interval_minutes

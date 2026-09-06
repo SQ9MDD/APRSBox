@@ -5310,6 +5310,13 @@ def _normalize_aprs_message_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Type must be bulletin, announcement or group bulletin.")
     normalized["message_kind"] = message_kind
 
+    folder_name = str(payload.get("folder_name") or "").strip()
+    if len(folder_name) > 80:
+        raise ValueError("Folder name must be 80 characters or fewer.")
+    if any(ord(char) < 32 or ord(char) == 127 for char in folder_name):
+        raise ValueError("Folder name may not contain control characters.")
+    normalized["folder_name"] = folder_name or None
+
     bulletin_code = str(payload.get("bulletin_code") or "").strip().upper()
     group_name = str(payload.get("group_name") or "").strip().upper()
 
