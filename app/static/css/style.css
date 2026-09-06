@@ -7956,6 +7956,50 @@ code {
     width: 8.5rem;
 }
 
+.prepared-entity-col-object-name {
+    min-width: 11rem;
+    width: 22%;
+}
+
+.prepared-entity-col-object-status,
+.prepared-entity-col-actions {
+    width: 4.5rem;
+    text-align: center;
+}
+
+.prepared-entity-col-object-what {
+    min-width: 12rem;
+    white-space: nowrap;
+}
+
+.object-group-row td,
+.object-group-back-row td {
+    background: var(--panel-alt);
+}
+
+.object-group-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    filter: var(--icon-filter);
+}
+
+.object-group-name {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.object-group-back-link {
+    font-weight: 600;
+}
+
+.object-technical-details code {
+    display: block;
+    margin-top: 0.5rem;
+    overflow-wrap: anywhere;
+}
+
 .prepared-entity-col-raw {
     width: auto;
 }

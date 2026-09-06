@@ -526,6 +526,7 @@ CREATE TABLE IF NOT EXISTS aprsis_igate_pending_position (
 CREATE TABLE IF NOT EXISTS aprs_objects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
+    group_name TEXT,
     lifetime TEXT NOT NULL DEFAULT 'temporary' CHECK (lifetime IN ('temporary', 'permanent')),
     state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
     is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
@@ -1863,6 +1864,13 @@ CREATE INDEX IF NOT EXISTS idx_aprs_messages_direction_unread_conversation
                 CHECK (lifetime IN ('temporary', 'permanent'))
                 """
             )
+        if "group_name" not in object_columns:
+            connection.execute(
+                """
+                ALTER TABLE aprs_objects
+                ADD COLUMN group_name TEXT
+                """
+            )
         if "path" not in object_columns:
             connection.execute(
                 """
@@ -2744,12 +2752,14 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
         object_columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
         object_overlay_select = "symbol_overlay" if "symbol_overlay" in object_columns else "NULL"
         object_valid_until_select = "valid_until_utc" if "valid_until_utc" in object_columns else "NULL"
+        object_group_select = "group_name" if "group_name" in object_columns else "NULL"
         connection.executescript(
             f"""
             ALTER TABLE aprs_objects RENAME TO aprs_objects_old;
             CREATE TABLE aprs_objects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
+                group_name TEXT,
                 lifetime TEXT NOT NULL DEFAULT 'temporary' CHECK (lifetime IN ('temporary', 'permanent')),
                 state TEXT NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'killed')),
                 is_enabled INTEGER NOT NULL DEFAULT 0 CHECK (is_enabled IN (0, 1)),
@@ -2765,11 +2775,12 @@ def _migrate_entity_interval_constraints(connection: sqlite3.Connection) -> None
                 updated_at TEXT NOT NULL
             );
             INSERT INTO aprs_objects (
-                id, name, lifetime, state, is_enabled, interval_minutes, valid_until_utc, latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment, updated_at
+                id, name, group_name, lifetime, state, is_enabled, interval_minutes, valid_until_utc, latitude, longitude, symbol_table, symbol_code, symbol_overlay, path, comment, updated_at
             )
             SELECT
                 id,
                 name,
+                {object_group_select},
                 COALESCE(lifetime, 'temporary'),
                 COALESCE(state, 'live'),
                 COALESCE(is_enabled, 0),

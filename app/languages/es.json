@@ -2105,5 +2105,14 @@
   "RF load unavailable: wait for a complete bucket. Gaps indicate missing data.": "Carga RF no disponible: espere un intervalo completo. Los huecos indican datos faltantes.",
   "Busy": "Ocupado",
   "Congested": "Congestionado",
-  "s": "s"
+  "s": "s",
+  "Object count": "Número de objetos",
+  "Object status updated.": "Estado del objeto actualizado.",
+  "Back to object list": "Volver a la lista de objetos",
+  "Disable object": "Desactivar objeto",
+  "Enable object": "Activar objeto",
+  "No group": "Sin grupo",
+  "Schedule / Mode": "Horario / modo",
+  "Technical details": "Detalles técnicos",
+  "What": "Qué"
 }

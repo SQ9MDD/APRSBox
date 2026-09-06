@@ -161,6 +161,7 @@ SECTION_DEFINITIONS: dict[str, SectionDefinition] = {
         supports_delete=True,
         fields=[
             {"name": "name", "label": "Object Name", "type": "text", "required": True, "maxlength": 9, "placeholder": "VOICE"},
+            {"name": "group_name", "label": "Group", "type": "text", "required": False, "maxlength": 80},
             {
                 "name": "lifetime",
                 "label": "Object Lifetime",

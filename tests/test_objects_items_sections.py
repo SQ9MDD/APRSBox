@@ -7,7 +7,15 @@ from pathlib import Path
 
 from app.db import execute, fetch_one, init_db
 from app.sections import SECTION_DEFINITIONS
-from app.services.content import get_section_row, safe_create_section_row, safe_update_section_row, update_station_settings
+from app.services.content import (
+    delete_section_row,
+    get_section_row,
+    get_section_rows,
+    safe_create_section_row,
+    safe_update_section_row,
+    set_object_enabled,
+    update_station_settings,
+)
 
 
 @contextlib.contextmanager
@@ -91,9 +99,18 @@ class ObjectAndItemFormTests(unittest.TestCase):
             "Month(s)",
             "Year(s)",
             "Select",
+            "Object count",
+            "Object status updated.",
+            "Back to object list",
+            "Disable object",
+            "Enable object",
+            "No group",
+            "Schedule / Mode",
+            "Technical details",
+            "What",
         ]
         self.assertEqual(SECTION_DEFINITIONS["items"].list_title, "Item List")
-        for language in ("en", "pl", "es", "tlh"):
+        for language in ("en", "pl", "de", "es", "tlh"):
             catalog = json.loads((Path("app/languages") / f"{language}.json").read_text())
             for key in required_keys:
                 self.assertIn(key, catalog, msg=f"Missing {key!r} in {language}.json")
@@ -172,6 +189,99 @@ class ObjectAndItemFormTests(unittest.TestCase):
             self.assertEqual(row["interval_minutes"], 45)
             self.assertEqual(row["path"], "WIDE2-2")
             self.assertEqual(row["is_enabled"], 1)
+
+    def test_object_groups_are_created_moved_and_removed_with_their_last_object(self) -> None:
+        def payload(name: str, group_name: str = "") -> dict[str, str]:
+            return {
+                "name": name,
+                "group_name": group_name,
+                "lifetime": "temporary",
+                "state": "live",
+                "latitude": "52.2297",
+                "longitude": "21.0122",
+                "symbol_table": "/",
+                "symbol_code": "r",
+                "interval_minutes": "30",
+                "path": "WIDE2-2",
+                "comment": "Local voice repeater",
+            }
+
+        with temporary_database():
+            self.assertEqual(safe_create_section_row("objects", payload("DIRECT")), (True, None))
+            self.assertEqual(safe_create_section_row("objects", payload("VHF1", "VHF repeaters")), (True, None))
+            self.assertEqual(safe_create_section_row("objects", payload("VHF2", "VHF repeaters")), (True, None))
+            rows = get_section_rows("objects")
+            self.assertEqual({row["name"] for row in rows if not row.get("group_name")}, {"DIRECT"})
+            self.assertEqual(
+                {row["name"] for row in rows if row.get("group_name") == "VHF repeaters"},
+                {"VHF1", "VHF2"},
+            )
+
+            first = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", ("VHF1",))
+            second = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", ("VHF2",))
+            assert first is not None and second is not None
+            self.assertEqual(safe_update_section_row("objects", int(first["id"]), payload("VHF1", "UHF repeaters")), (True, None))
+            groups = {str(row.get("group_name") or "") for row in get_section_rows("objects")}
+            self.assertEqual(groups, {"", "VHF repeaters", "UHF repeaters"})
+
+            delete_section_row("objects", int(second["id"]))
+            groups_after_last_vhf = {str(row.get("group_name") or "") for row in get_section_rows("objects")}
+            self.assertNotIn("VHF repeaters", groups_after_last_vhf)
+            delete_section_row("objects", int(first["id"]))
+            self.assertEqual(
+                {str(row.get("group_name") or "") for row in get_section_rows("objects")},
+                {""},
+            )
+
+    def test_clearing_object_group_and_list_toggle_preserve_schedule(self) -> None:
+        payload = {
+            "name": "SCHED",
+            "group_name": "Network",
+            "lifetime": "permanent",
+            "state": "live",
+            "latitude": "52.2297",
+            "longitude": "21.0122",
+            "symbol_table": "/",
+            "symbol_code": "r",
+            "interval_minutes": "45",
+            "activation_mode": "scheduled",
+            "active_from_utc": "2026-09-07T10:00",
+            "active_until_utc": "2026-09-08T10:00",
+            "path": "WIDE2-2",
+            "is_enabled": "1",
+            "comment": "Scheduled repeater",
+        }
+        with temporary_database():
+            self.assertEqual(safe_create_section_row("objects", payload), (True, None))
+            row = fetch_one("SELECT id FROM aprs_objects WHERE name = ?", ("SCHED",))
+            assert row is not None
+            object_id = int(row["id"])
+            payload["group_name"] = ""
+            self.assertEqual(safe_update_section_row("objects", object_id, payload), (True, None))
+            before_toggle = fetch_one(
+                "SELECT group_name, lifetime, interval_minutes, activation_mode, active_from_utc, active_until_utc FROM aprs_objects WHERE id = ?",
+                (object_id,),
+            )
+            assert before_toggle is not None
+            self.assertIsNone(before_toggle["group_name"])
+            set_object_enabled(object_id, False)
+            set_object_enabled(object_id, True)
+            after_toggle = fetch_one(
+                "SELECT is_enabled, lifetime, interval_minutes, activation_mode, active_from_utc, active_until_utc FROM aprs_objects WHERE id = ?",
+                (object_id,),
+            )
+            assert after_toggle is not None
+            self.assertEqual(after_toggle["is_enabled"], 1)
+            self.assertEqual(tuple(after_toggle[key] for key in after_toggle.keys() if key != "is_enabled"), tuple(before_toggle[key] for key in before_toggle.keys() if key != "group_name"))
+
+    def test_object_list_template_has_groups_toggle_and_no_raw_frame_column(self) -> None:
+        template_source = Path("app/templates/section.html").read_text(encoding="utf-8")
+        self.assertIn("data-object-toggle-action", template_source)
+        self.assertIn("/settings/objects/{{ row.id }}/toggle", template_source)
+        self.assertIn("folder-outline.svg", template_source)
+        self.assertIn("object-group-names", template_source)
+        object_table = template_source.split("{% elif section.slug == 'items' %}", 1)[0]
+        self.assertNotIn("prepared-entity-col-raw", object_table)
 
     def test_object_edit_post_redirects_back_to_edit_page_with_data(self) -> None:
         with temporary_database():
