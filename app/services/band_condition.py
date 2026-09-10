@@ -1596,30 +1596,8 @@ def _latest_saved_snapshot(
 
 
 def get_dashboard_band_condition_snapshot() -> dict[str, Any]:
-    """Return only persisted band results; never evaluate history in a web request."""
-    items: list[dict[str, Any]] = []
-    for interface in _monitored_interfaces():
-        saved = _latest_saved_snapshot(interface, evaluate_missing=False)
-        if saved is None:
-            saved = {
-                "interface_id": int(interface["id"]),
-                "interface_name": str(interface.get("name") or ""),
-                "band": normalize_band(interface.get("band")),
-                "condition_index": None,
-                "confidence_score": 0.0,
-                "confidence_percent": 0,
-                "band_label": format_band_label(interface.get("band")),
-                "label": "Collecting data",
-                "diagnosis_summary": "The first assessment will appear after 24 hours of monitored RF data.",
-                "diagnosis_tone": "learning",
-                "model_ready": False,
-            }
-        items.append(saved)
-    return {
-        "generated_at": utc_now(),
-        "interfaces": items,
-        "bands": items,
-    }
+    """Return the same current assessment shown on the Band Condition page."""
+    return get_band_condition_snapshot()
 
 
 def _interface_snapshot(interface: dict[str, Any], *, now_utc: datetime) -> dict[str, Any]:

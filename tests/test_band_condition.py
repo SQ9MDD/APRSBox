@@ -150,28 +150,15 @@ def insert_radio_activity(
 
 
 class BandConditionHelpersTests(unittest.TestCase):
-    def test_dashboard_snapshot_never_evaluates_band_history(self) -> None:
-        with temporary_database():
-            interface_id = insert_interface(band="2m")
-            hour = datetime(2026, 5, 4, 10, 0, tzinfo=timezone.utc)
-            execute(
-                """
-                INSERT INTO band_condition_hourly(
-                    hour_start_utc, interface_id, interface_name, band,
-                    condition_index, confidence_score, fixed_station_count,
-                    positioned_station_count, direct_station_count,
-                    normal_station_count, far_station_count, very_far_station_count,
-                    new_area_count, history_hours, created_at
-                ) VALUES (?, ?, 'RF-2m', '2m', NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, ?)
-                """,
-                (hour.isoformat(), interface_id, hour.isoformat()),
-            )
+    def test_dashboard_snapshot_uses_the_same_current_snapshot_as_the_page(self) -> None:
+        expected = {
+            "generated_at": "2026-05-04T10:00:00+00:00",
+            "interfaces": [{"interface_id": 7, "condition_index": 2}],
+            "bands": [{"interface_id": 7, "condition_index": 2}],
+        }
 
-            with patch("app.services.band_condition._evaluate_hour", side_effect=AssertionError("evaluation")):
-                item = get_dashboard_band_condition_snapshot()["bands"][0]
-
-            self.assertIsNone(item["condition_index"])
-            self.assertEqual(item["label"], "Collecting data")
+        with patch("app.services.band_condition.get_band_condition_snapshot", return_value=expected):
+            self.assertEqual(get_dashboard_band_condition_snapshot(), expected)
 
     def test_interface_assessment_defaults_to_disabled_and_supports_only_requested_bands(self) -> None:
         self.assertEqual(
