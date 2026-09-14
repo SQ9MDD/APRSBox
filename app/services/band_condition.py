@@ -25,12 +25,12 @@ BAND_CONDITION_STATION_HISTORY_DAYS = 35
 
 # Baseline / model readiness
 BAND_CONDITION_BASELINE_DAYS = 28
-BAND_CONDITION_BASELINE_MAX_INDEX = 2
 BAND_CONDITION_BASELINE_SAME_HOUR_BLEND_START_ROWS = 7
 BAND_CONDITION_BASELINE_SAME_HOUR_FULL_ROWS = 14
 BAND_CONDITION_MIN_MODEL_HOURS = 24
 BAND_CONDITION_MIN_BASELINE_ROWS = 12
 BAND_CONDITION_CURRENT_MIN_SEGMENTS = 3
+BAND_CONDITION_STRONG_MIN_SEGMENTS = 6
 
 # Packet eligibility
 # Third-party frames MUST NOT be treated as RF propagation observations.
@@ -71,7 +71,6 @@ BAND_CONDITION_LEVEL3_MIN_CONFIRMED_FAR = 1
 
 # Level 4 - Strong opening
 BAND_CONDITION_LEVEL4_MIN_CONFIRMED_VERY_FAR = 2
-BAND_CONDITION_LEVEL4_MIN_VERY_FAR = 3
 BAND_CONDITION_LEVEL4_MIN_CONFIRMED_FAR = 2
 BAND_CONDITION_LEVEL4_FAR_REACH_RATIO = 1.60
 BAND_CONDITION_LEVEL4_MIN_FAR_FOR_REACH = 2
@@ -79,7 +78,6 @@ BAND_CONDITION_LEVEL4_MIN_FAR_FOR_REACH = 2
 # Level 5 - Very strong opening
 BAND_CONDITION_LEVEL5_MIN_VERY_FAR = 3
 BAND_CONDITION_LEVEL5_MIN_CONFIRMED_VERY_FAR = 2
-BAND_CONDITION_LEVEL5_FALLBACK_VERY_FAR = 5
 BAND_CONDITION_LEVEL5_MIN_NEW_AREAS = 2
 BAND_CONDITION_LEVEL5_MIN_STATIONS = 3
 BAND_CONDITION_LEVEL5_REACH_RATIO = 1.55
@@ -597,6 +595,9 @@ def _station_rows_for_hour(interface_id: int, band: str, hour_start: datetime) -
 
 def _baseline_candidate_rows(interface_id: int, band: str, hour_start: datetime) -> list[dict[str, Any]]:
     cutoff = _floor_to_hour(hour_start) - timedelta(days=BAND_CONDITION_BASELINE_DAYS)
+    # Keep the baseline independent from earlier assessments. Excluding hours
+    # already labelled as openings lowers the learned norm and creates a
+    # self-reinforcing stream of optimistic scores.
     rows = fetch_all(
         """
         SELECT *
@@ -605,7 +606,6 @@ def _baseline_candidate_rows(interface_id: int, band: str, hour_start: datetime)
           AND band = ?
           AND hour_start_utc >= ?
           AND hour_start_utc < ?
-          AND (condition_index IS NULL OR condition_index BETWEEN 1 AND ?)
         ORDER BY hour_start_utc ASC
         """,
         (
@@ -613,7 +613,6 @@ def _baseline_candidate_rows(interface_id: int, band: str, hour_start: datetime)
             normalize_band(band),
             cutoff.isoformat(),
             _floor_to_hour(hour_start).isoformat(),
-            int(BAND_CONDITION_BASELINE_MAX_INDEX),
         ),
     )
     return [dict(row) for row in rows]
@@ -885,10 +884,7 @@ def _score_condition(
 
     if (
         very_far_station_count >= BAND_CONDITION_LEVEL5_MIN_VERY_FAR
-        and (
-            confirmed_very_far_station_count >= BAND_CONDITION_LEVEL5_MIN_CONFIRMED_VERY_FAR
-            or very_far_station_count >= BAND_CONDITION_LEVEL5_FALLBACK_VERY_FAR
-        )
+        and confirmed_very_far_station_count >= BAND_CONDITION_LEVEL5_MIN_CONFIRMED_VERY_FAR
         and new_area_count >= BAND_CONDITION_LEVEL5_MIN_NEW_AREAS
         and fixed_station_count >= max(
             BAND_CONDITION_LEVEL5_MIN_STATIONS,
@@ -900,12 +896,11 @@ def _score_condition(
 
     if confirmed_very_far_station_count >= BAND_CONDITION_LEVEL4_MIN_CONFIRMED_VERY_FAR:
         return 4, "confirmed_very_far"
-    if very_far_station_count >= BAND_CONDITION_LEVEL4_MIN_VERY_FAR:
-        return 4, "multiple_very_far"
     if confirmed_far_station_count >= BAND_CONDITION_LEVEL4_MIN_CONFIRMED_FAR:
         return 4, "multiple_confirmed_far"
     if (
         far_station_count >= BAND_CONDITION_LEVEL4_MIN_FAR_FOR_REACH
+        and confirmed_far_station_count >= 1
         and reach_ratio >= BAND_CONDITION_LEVEL4_FAR_REACH_RATIO
     ):
         return 4, "far_with_strong_reach_lift"
@@ -914,7 +909,7 @@ def _score_condition(
         return 3, "station_count_lift"
     if confirmed_far_station_count >= BAND_CONDITION_LEVEL3_MIN_CONFIRMED_FAR:
         return 3, "confirmed_far"
-    if reach_ratio >= BAND_CONDITION_LEVEL3_REACH_RATIO:
+    if far_station_count >= 1 and reach_ratio >= BAND_CONDITION_LEVEL3_REACH_RATIO:
         return 3, "reach_lift"
 
     if (
@@ -1038,11 +1033,22 @@ def _evaluate_hour(
     direct_station_count = sum(1 for row in station_rows if int(row.get("direct_segment_mask") or 0) > 0)
     current_median_distance = float(median(distances)) if distances else None
     current_p90_distance = _percentile(distances, BAND_CONDITION_DISTANCE_PERCENTILE)
+    # Repeated packets describe the reach of the APRS digi network, not a path
+    # heard directly by this receiver. They remain visible in service totals,
+    # but cannot by themselves raise the propagation assessment.
+    direct_distances = [
+        float(row["distance_km"])
+        for row in station_rows
+        if row.get("distance_km") is not None
+        and float(row["distance_km"]) >= 0
+        and int(row.get("direct_segment_mask") or 0) > 0
+    ]
+    scoring_p90_distance = _percentile(direct_distances, BAND_CONDITION_DISTANCE_PERCENTILE)
     confirmed_distances = [
         float(row["distance_km"])
         for row in station_rows
         if row.get("distance_km") is not None
-        and _bit_count(row.get("segment_mask")) >= BAND_CONDITION_CONFIRM_SEGMENTS
+        and _bit_count(row.get("direct_segment_mask")) >= BAND_CONDITION_CONFIRM_SEGMENTS
     ]
     max_confirmed_distance = max(confirmed_distances) if confirmed_distances else None
     baseline_candidates = _baseline_candidate_rows(interface_id, normalized_band, hour)
@@ -1145,6 +1151,7 @@ def _evaluate_hour(
         for row in station_rows
         if moderate_far_threshold is not None
         and row.get("distance_km") is not None
+        and int(row.get("direct_segment_mask") or 0) > 0
         and float(row["distance_km"]) >= moderate_far_threshold
     ]
     very_far_rows = [
@@ -1152,17 +1159,18 @@ def _evaluate_hour(
         for row in station_rows
         if very_far_threshold is not None
         and row.get("distance_km") is not None
+        and int(row.get("direct_segment_mask") or 0) > 0
         and float(row["distance_km"]) >= very_far_threshold
     ]
     confirmed_far_count = sum(
         1
         for row in far_rows
-        if _bit_count(row.get("segment_mask")) >= BAND_CONDITION_CONFIRM_SEGMENTS
+        if _bit_count(row.get("direct_segment_mask")) >= BAND_CONDITION_CONFIRM_SEGMENTS
     )
     confirmed_very_far_count = sum(
         1
         for row in very_far_rows
-        if _bit_count(row.get("segment_mask")) >= BAND_CONDITION_CONFIRM_SEGMENTS
+        if _bit_count(row.get("direct_segment_mask")) >= BAND_CONDITION_CONFIRM_SEGMENTS
     )
     rarity_limit = max(
         BAND_CONDITION_NEW_AREA_MIN_HISTORY_HOURS,
@@ -1224,7 +1232,7 @@ def _evaluate_hour(
         condition_index, score_reason = _score_condition(
             fixed_station_count=fixed_station_count,
             normal_station_count=normal_station_count,
-            current_p90_distance_km=current_p90_distance,
+            current_p90_distance_km=scoring_p90_distance,
             normal_p90_distance_km=normal_p90_distance,
             far_station_count=len(far_rows),
             confirmed_far_station_count=confirmed_far_count,
@@ -1233,6 +1241,13 @@ def _evaluate_hour(
             new_area_count=len(new_cells),
             rx_total=rx_total,
         )
+        if (
+            condition_index is not None
+            and condition_index >= 4
+            and current_segment_count < BAND_CONDITION_STRONG_MIN_SEGMENTS
+        ):
+            condition_index = 3
+            score_reason = f"{score_reason}_segment_limited"
         limited_condition_index = _limit_condition_by_confidence(condition_index, confidence)
         if limited_condition_index != condition_index:
             score_reason = f"{score_reason}_confidence_limited"
