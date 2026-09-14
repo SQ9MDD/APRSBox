@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.24.dev - 2026-09-14
+- `Band conditions`: the baseline includes all previous hours, while W4–W5 require confirmed direct reception so single frames and digipeated traffic no longer inflate the assessment.
+
 ## 1.12.23.dev - 2026-09-06
 - `Objects`: added a compact list with collapsible folders, quick enable/disable actions, and an autocomplete group field.
 - `Bulletins`: added matching folders and a separate `Folder` field; the protocol-level `APRS Group` retains its existing meaning.

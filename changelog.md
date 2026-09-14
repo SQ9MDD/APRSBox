@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.24.dev - 14.09.2026
+- `Warunki pasma`: baza odniesienia uwzględnia wszystkie poprzednie godziny, a W4–W5 wymagają potwierdzonych odbiorów bezpośrednich, dzięki czemu pojedyncze ramki i odbiory przez digi nie zawyżają oceny.
+
 ## 1.12.23.dev - 06.09.2026
 - `Obiekty`: dodano kompaktową listę z rozwijanymi folderami, szybką aktywacją/dezaktywacją oraz polem grupy z podpowiedziami.
 - `Biuletyny`: dodano analogiczne foldery i osobne pole `Folder`; protokołowa `Grupa APRS` zachowuje dotychczasowe znaczenie.

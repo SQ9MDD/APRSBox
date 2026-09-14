@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.24.dev - 2026-09-14
+- `Bandbedingungen`: die Referenz berücksichtigt alle vorherigen Stunden; W4–W5 erfordern bestätigten Direktempfang, sodass einzelne Frames und über Digipeater empfangener Verkehr die Bewertung nicht mehr erhöhen.
+
 ## 1.12.23.dev - 2026-09-06
 - `Objekte`: kompakte Liste mit aufklappbaren Ordnern, schneller Aktivierung/Deaktivierung und Gruppenfeld mit Autovervollständigung hinzugefügt.
 - `Bulletins`: entsprechende Ordner und ein separates Feld `Ordner` hinzugefügt; die protokollbezogene `APRS-Gruppe` behält ihre bisherige Bedeutung.

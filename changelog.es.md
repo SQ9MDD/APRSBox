@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.24.dev - 2026-09-14
+- `Condiciones de banda`: la referencia incluye todas las horas anteriores y W4–W5 requieren recepción directa confirmada, evitando que tramas aisladas o tráfico repetido por digipeaters eleven la evaluación.
+
 ## 1.12.23.dev - 2026-09-06
 - `Objetos`: se añadió una lista compacta con carpetas desplegables, activación/desactivación rápida y un campo de grupo con autocompletado.
 - `Boletines`: se añadieron carpetas equivalentes y un campo `Carpeta` independiente; el `Grupo APRS` del protocolo conserva su significado actual.
