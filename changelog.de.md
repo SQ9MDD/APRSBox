@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.25.dev - 2026-09-15
+- `Packet Routing / APRS-IS → RF`: beim Speichern, Aktivieren, Löschen oder Umsortieren eines Flows wird der Routing-Snapshot im separaten Prozess `aprsbox-core` jetzt sofort neu geladen. Änderungen an Rufzeichen und Radius werden ohne Dienstneustart wirksam, statt weiterhin eine veraltete leere Konfiguration zu verwenden.
+
 ## 1.12.24.dev - 2026-09-14
 - `Bandbedingungen`: die Referenz berücksichtigt alle vorherigen Stunden; W4–W5 erfordern bestätigten Direktempfang, sodass einzelne Frames und über Digipeater empfangener Verkehr die Bewertung nicht mehr erhöhen.
 

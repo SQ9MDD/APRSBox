@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.25.dev - 2026-09-15
+- `Packet Routing / APRS-IS → RF`: al guardar, activar, eliminar o reordenar un flujo, ahora se recarga inmediatamente la instantánea de enrutamiento en el proceso separado `aprsbox-core`. Los cambios de indicativos y radio surten efecto sin reiniciar los servicios, en lugar de seguir usando una configuración vacía obsoleta.
+
 ## 1.12.24.dev - 2026-09-14
 - `Condiciones de banda`: la referencia incluye todas las horas anteriores y W4–W5 requieren recepción directa confirmada, evitando que tramas aisladas o tráfico repetido por digipeaters eleven la evaluación.
 

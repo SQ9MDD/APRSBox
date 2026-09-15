@@ -14,6 +14,7 @@ from app.services.alerts import expire_aprs_alerts
 from app.services.beacon_scheduler import BeaconSchedulerService
 from app.services.bulletin_scheduler import BulletinSchedulerService
 from app.services.digi_flow_runtime import DigiFlowRuntimeService
+from app.services.digi_flows import reload_digi_flow_routing_snapshot
 from app.services.maintenance_scheduler import MaintenanceSchedulerService
 from app.services.notifications import (
     radar_notification_dispatcher_snapshot,
@@ -153,6 +154,17 @@ def digi_flow_latency_snapshot() -> JSONResponse:
     rx_side_effect_snapshot["radar_breakdown_ms"] = radar_snapshot["radar_breakdown_ms"]
     snapshot["rx_side_effect_dispatcher"] = rx_side_effect_snapshot
     return JSONResponse(snapshot)
+
+
+@app.post("/api/digi-flows/reload")
+def reload_digi_flow_routing() -> JSONResponse:
+    snapshot = reload_digi_flow_routing_snapshot()
+    log_event(
+        "INFO",
+        "config",
+        f"Reloaded DIGI Flow routing snapshot revision={snapshot.revision}",
+    )
+    return JSONResponse({"ok": True, "revision": snapshot.revision})
 
 
 @app.post("/api/traffic/restart")

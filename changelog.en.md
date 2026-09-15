@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.25.dev - 2026-09-15
+- `Packet Routing / APRS-IS → RF`: saving, enabling, deleting, or reordering a flow now immediately reloads the routing snapshot in the separate `aprsbox-core` process. Callsign and radius changes take effect without a service restart instead of continuing to use stale empty configuration.
+
 ## 1.12.24.dev - 2026-09-14
 - `Band conditions`: the baseline includes all previous hours, while W4–W5 require confirmed direct reception so single frames and digipeated traffic no longer inflate the assessment.
 

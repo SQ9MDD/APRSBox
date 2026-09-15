@@ -542,6 +542,22 @@ class AprsisRfModelTests(unittest.TestCase):
 
 
 class AprsisRfRuleAndProtocolTests(unittest.TestCase):
+    def test_default_deny_filter_accepts_exact_ssid_and_uncompressed_position(self) -> None:
+        parsed = parse_tnc2_frame(
+            "SQ9MDD-10>AP3VSS,TCPIP*,qAC,T2WARSPL:=5215.01N/02055.60E[000/000Test"
+        )
+        config = normalize_default_deny_config(
+            {"callsigns": ["SQ9MDD-10"], "radius_km": "40"}
+        )
+
+        self.assertTrue(
+            matches_default_deny_filter(
+                parsed,
+                config,
+                {"latitude": "52.25030", "longitude": "20.92660"},
+            )
+        )
+
     def test_default_deny_filter_uses_exact_callsign_and_my_station_radius_as_and(self) -> None:
         parsed = parse_tnc2_frame(position_line(source="SP5ABC-1"))
         station = {"latitude": "52.2297", "longitude": "21.0122"}

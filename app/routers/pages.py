@@ -184,7 +184,11 @@ from app.services.aprs_device_identification import (
     get_aprs_device_identification_status,
     refresh_aprs_device_identification_cache,
 )
-from app.services.core_client import get_core_digi_flow_latency_snapshot, restart_core_traffic_monitor
+from app.services.core_client import (
+    get_core_digi_flow_latency_snapshot,
+    reload_core_digi_flow_routing,
+    restart_core_traffic_monitor,
+)
 from app.services.digi_performance import evaluate_digi_performance
 from app.services.radio_activity import (
     get_dashboard_radio_activity,
@@ -797,6 +801,18 @@ def _parse_digi_flow_form_payload(form_data: Any) -> dict[str, object]:
         "enabled": 1 if form_data.get("enabled") else 0,
         "steps": raw_steps,
     }
+
+
+def _notify_core_digi_flow_routing_changed() -> None:
+    result = reload_core_digi_flow_routing()
+    if result.get("ok"):
+        return
+    log_event(
+        "WARNING",
+        "config",
+        "DIGI Flow configuration was saved, but aprsbox-core did not reload it: "
+        f"{result.get('error') or 'unknown error'}",
+    )
 
 
 def _digi_flow_editor_context(
@@ -2878,6 +2894,7 @@ async def digi_flow_create(
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
     assert flow_id is not None
+    await asyncio.to_thread(_notify_core_digi_flow_routing_changed)
     if wants_json:
         return JSONResponse(
             {
@@ -2932,6 +2949,7 @@ async def digi_flow_update(
         context = _digi_flow_editor_context(request, current_user, flow_id=flow_id, form_data=payload, flash=error)
         return templates.TemplateResponse("digi_flow_form.html", context, status_code=status.HTTP_400_BAD_REQUEST)
 
+    await asyncio.to_thread(_notify_core_digi_flow_routing_changed)
     if wants_json:
         return JSONResponse(
             {
@@ -2973,6 +2991,7 @@ def digi_flow_toggle(
             url=_path(request, f"/digi-flows?flash={quote(str(exc))}&success=0"),
             status_code=status.HTTP_303_SEE_OTHER,
         )
+    _notify_core_digi_flow_routing_changed()
     if wants_json:
         return JSONResponse(
             {
@@ -3001,6 +3020,7 @@ def digi_flow_move(
             url=_path(request, f"/digi-flows?flash={quote(error)}&success=0"),
             status_code=status.HTTP_303_SEE_OTHER,
         )
+    _notify_core_digi_flow_routing_changed()
     return RedirectResponse(
         url=_path(request, "/digi-flows"),
         status_code=status.HTTP_303_SEE_OTHER,
@@ -3014,6 +3034,7 @@ def digi_flow_delete(
     _: UserIdentity = Depends(require_roles("admin", "operator")),
 ) -> RedirectResponse:
     delete_digi_flow(flow_id)
+    _notify_core_digi_flow_routing_changed()
     return RedirectResponse(
         url=_path(request, f"/digi-flows?flash={'Packet%20Routing%20flow%20deleted.'}&success=1"),
         status_code=status.HTTP_303_SEE_OTHER,

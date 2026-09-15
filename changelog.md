@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.25.dev - 15.09.2026
+- `Packet Routing / APRS-IS → RF`: zapis, włączenie, usunięcie lub zmiana kolejności flow natychmiast przeładowuje snapshot routingu w osobnym procesie `aprsbox-core`. Zmiany listy znaków i promienia działają bez restartu usług i nie korzystają już ze starej, pustej konfiguracji.
+
 ## 1.12.24.dev - 14.09.2026
 - `Warunki pasma`: baza odniesienia uwzględnia wszystkie poprzednie godziny, a W4–W5 wymagają potwierdzonych odbiorów bezpośrednich, dzięki czemu pojedyncze ramki i odbiory przez digi nie zawyżają oceny.
 

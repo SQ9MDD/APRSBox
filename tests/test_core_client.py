@@ -1,9 +1,14 @@
 import io
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.services.core_client import get_core_digi_flow_latency_snapshot, restart_core_traffic_monitor
+from app.services.core_client import (
+    get_core_digi_flow_latency_snapshot,
+    reload_core_digi_flow_routing,
+    restart_core_traffic_monitor,
+)
 
 
 class _DummyResponse(io.BytesIO):
@@ -27,6 +32,27 @@ class CoreClientTests(unittest.TestCase):
             result = restart_core_traffic_monitor()
 
         self.assertEqual(result, {"ok": True})
+
+    def test_reload_core_digi_flow_routing_returns_new_revision(self) -> None:
+        payload = {"ok": True, "revision": 7}
+        with patch("app.services.core_client.urlopen", return_value=_DummyResponse(json.dumps(payload).encode("utf-8"))) as request:
+            result = reload_core_digi_flow_routing()
+
+        self.assertEqual(result, {"ok": True, "revision": 7})
+        self.assertEqual(request.call_args.args[0].full_url, "http://127.0.0.1:18081/api/digi-flows/reload")
+
+    def test_core_reload_endpoint_rebuilds_the_runtime_snapshot(self) -> None:
+        from app.core_main import reload_digi_flow_routing
+
+        with patch(
+            "app.core_main.reload_digi_flow_routing_snapshot",
+            return_value=SimpleNamespace(revision=11),
+        ) as reload_snapshot:
+            with patch("app.core_main.log_event"):
+                response = reload_digi_flow_routing()
+
+        reload_snapshot.assert_called_once_with()
+        self.assertEqual(json.loads(response.body), {"ok": True, "revision": 11})
 
 
 if __name__ == "__main__":

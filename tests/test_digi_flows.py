@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.db import connect, fetch_one, init_db
 from app.services.content import get_section_row, safe_update_section_row
@@ -215,11 +216,12 @@ class DigiFlowsTests(unittest.TestCase):
             try:
                 insert_aprsis_interface()
                 flow_id = create_digi_flow(sample_local_tx_flow_payload(name="Toggle modal", enabled=0))
-                response = TestClient(app).post(
-                    f"/digi-flows/{flow_id}/toggle",
-                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
-                    data={"enabled": "1"},
-                )
+                with patch("app.routers.pages._notify_core_digi_flow_routing_changed") as notify_core:
+                    response = TestClient(app).post(
+                        f"/digi-flows/{flow_id}/toggle",
+                        headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                        data={"enabled": "1"},
+                    )
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(
                     response.json(),
@@ -231,6 +233,7 @@ class DigiFlowsTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(int(get_digi_flow(flow_id)["enabled"]), 1)
+                notify_core.assert_called_once_with()
             finally:
                 app.dependency_overrides.pop(get_current_user, None)
 
@@ -289,17 +292,18 @@ class DigiFlowsTests(unittest.TestCase):
                 payload = sample_local_tx_flow_payload(name="Edit modal", enabled=0)
                 flow_id = create_digi_flow(payload)
                 payload["description"] = "Updated through modal"
-                response = TestClient(app).post(
-                    f"/digi-flows/{flow_id}",
-                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
-                    data={
-                        "name": payload["name"],
-                        "description": payload["description"],
-                        "source_selector": f'{payload["source_kind"]}::{payload["source_ref"]}',
-                        "target_selector": f'{payload["target_kind"]}::{payload["target_ref"]}',
-                        "steps_json": json.dumps(payload["steps"]),
-                    },
-                )
+                with patch("app.routers.pages._notify_core_digi_flow_routing_changed") as notify_core:
+                    response = TestClient(app).post(
+                        f"/digi-flows/{flow_id}",
+                        headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+                        data={
+                            "name": payload["name"],
+                            "description": payload["description"],
+                            "source_selector": f'{payload["source_kind"]}::{payload["source_ref"]}',
+                            "target_selector": f'{payload["target_kind"]}::{payload["target_ref"]}',
+                            "steps_json": json.dumps(payload["steps"]),
+                        },
+                    )
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(
                     response.json(),
@@ -311,6 +315,7 @@ class DigiFlowsTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(get_digi_flow(flow_id)["description"], "Updated through modal")
+                notify_core.assert_called_once_with()
             finally:
                 app.dependency_overrides.pop(get_current_user, None)
 
