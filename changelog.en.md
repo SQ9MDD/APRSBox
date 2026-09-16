@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.26.dev - 2026-09-16
+- `Stations / last activity`: relative activity time now uses the active GUI language, including after automatic table refresh; the English interface now shows values such as `Just now` and `12 minutes ago` instead of Polish text.
+
 ## 1.12.25.dev - 2026-09-15
 - `Packet Routing / APRS-IS → RF`: saving, enabling, deleting, or reordering a flow now immediately reloads the routing snapshot in the separate `aprsbox-core` process. Callsign and radius changes take effect without a service restart instead of continuing to use stale empty configuration.
 

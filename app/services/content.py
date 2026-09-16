@@ -26,7 +26,7 @@ from app.db import (
     set_app_setting,
     utc_now,
 )
-from app.i18n import get_app_language, get_translator
+from app.i18n import get_app_language, get_format_translator, get_translator
 from app.services.alarm_groups import (
     alarm_event_meets_category_threshold,
     get_aprs_alarm_enabled,
@@ -3710,15 +3710,7 @@ def _format_last_heard(timestamp: str) -> str:
 
     now = datetime.now(timezone.utc)
     delta_seconds = max(0, int((now - heard_at).total_seconds()))
-    relative = "teraz"
-    if delta_seconds < 60:
-        relative = "teraz"
-    elif delta_seconds < 3600:
-        minutes = delta_seconds // 60
-        relative = f"{minutes} {_pluralize_minutes(minutes)} temu"
-    else:
-        hours = delta_seconds // 3600
-        relative = f"{hours} {_pluralize_hours(hours)} temu"
+    relative = _format_relative_age(delta_seconds)
     return f"{heard_at.strftime('%Y.%m.%d %H:%M UTC')} ({relative})"
 
 
@@ -3729,15 +3721,24 @@ def _format_last_heard_parts(timestamp: str) -> tuple[str, str]:
 
     now = datetime.now(timezone.utc)
     delta_seconds = max(0, int((now - heard_at).total_seconds()))
-    if delta_seconds < 60:
-        relative = "teraz"
-    elif delta_seconds < 3600:
-        minutes = delta_seconds // 60
-        relative = f"{minutes} {_pluralize_minutes(minutes)} temu"
-    else:
-        hours = delta_seconds // 3600
-        relative = f"{hours} {_pluralize_hours(hours)} temu"
+    relative = _format_relative_age(delta_seconds)
     return heard_at.strftime("%Y.%m.%d %H:%M UTC"), relative
+
+
+def _format_relative_age(delta_seconds: int) -> str:
+    translate = get_format_translator(get_app_language())
+    if delta_seconds < 60:
+        return translate("Just now")
+
+    value = delta_seconds // 60 if delta_seconds < 3600 else delta_seconds // 3600
+    unit = "minute" if delta_seconds < 3600 else "hour"
+    if value == 1:
+        key = f"{{count}} {unit} ago"
+    elif value % 10 in {2, 3, 4} and value % 100 not in {12, 13, 14}:
+        key = f"{{count}} {unit}s ago (few)"
+    else:
+        key = f"{{count}} {unit}s ago"
+    return translate(key, {"count": value})
 
 
 def _last_heard_age_seconds(timestamp: str) -> int | None:
@@ -3971,22 +3972,6 @@ def station_summary(stations: list[dict[str, Any]]) -> dict[str, int]:
         else:
             summary["stationary"] += 1
     return summary
-
-
-def _pluralize_minutes(value: int) -> str:
-    if value == 1:
-        return "minutę"
-    if value % 10 in {2, 3, 4} and value % 100 not in {12, 13, 14}:
-        return "minuty"
-    return "minut"
-
-
-def _pluralize_hours(value: int) -> str:
-    if value == 1:
-        return "godzinę"
-    if value % 10 in {2, 3, 4} and value % 100 not in {12, 13, 14}:
-        return "godziny"
-    return "godzin"
 
 
 def _parse_aprs_packet(packet: dict[str, str]) -> dict[str, Any] | None:

@@ -8,6 +8,7 @@ from unittest.mock import patch
 from app.db import execute, init_db
 from app.routers.pages import _station_detail_context
 from app.services.content import (
+    _format_last_heard_parts,
     get_heard_station_snapshots,
     get_recent_station_packets,
     get_related_ssids,
@@ -68,6 +69,19 @@ def sample_snapshot() -> dict[str, object]:
 
 
 class StationSnapshotPerformanceTests(unittest.TestCase):
+    def test_last_heard_relative_time_uses_the_selected_language(self) -> None:
+        with (
+            patch("app.services.content.get_app_language", return_value="en"),
+            patch("app.services.content.datetime") as datetime_mock,
+        ):
+            from datetime import datetime, timezone
+
+            datetime_mock.now.return_value = datetime(2026, 4, 1, 12, 12, 0, tzinfo=timezone.utc)
+            datetime_mock.fromisoformat.side_effect = datetime.fromisoformat
+            _, relative = _format_last_heard_parts("2026-04-01T12:00:00+00:00")
+
+        self.assertEqual(relative, "12 minutes ago")
+
     def test_heard_station_snapshot_query_limits_scanned_rows(self) -> None:
         with temporary_database():
             with patch("app.services.content.fetch_all", return_value=[]) as fetch_all_mock:

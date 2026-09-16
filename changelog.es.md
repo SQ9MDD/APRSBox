@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.26.dev - 2026-09-16
+- `Estaciones / última actividad`: el tiempo relativo de actividad usa ahora el idioma activo de la interfaz, incluso tras la actualización automática de la tabla; la interfaz en inglés muestra valores como `Just now` y `12 minutes ago` en lugar de texto en polaco.
+
 ## 1.12.25.dev - 2026-09-15
 - `Packet Routing / APRS-IS → RF`: al guardar, activar, eliminar o reordenar un flujo, ahora se recarga inmediatamente la instantánea de enrutamiento en el proceso separado `aprsbox-core`. Los cambios de indicativos y radio surten efecto sin reiniciar los servicios, en lugar de seguir usando una configuración vacía obsoleta.
 
