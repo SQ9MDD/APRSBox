@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.27.dev - 11.10.2026
+- `APRS-IS / ponowne łączenie`: klient wznawia pracę po nieoczekiwanym błędzie, a limit czasu wysyłania logowania zapobiega blokowaniu kolejnych prób.
+
 ## 1.12.26.dev - 16.09.2026
 - `Stacje / ostatnia aktywność`: względny czas aktywności korzysta z aktywnego języka GUI także po automatycznym odświeżeniu tabeli; angielska wersja pokazuje teraz m.in. `Just now` oraz `12 minutes ago` zamiast polskich opisów.
 

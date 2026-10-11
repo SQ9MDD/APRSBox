@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import re
 import socket
 import time
@@ -19,6 +20,7 @@ from app.services.traffic_source import DEFAULT_APRSIS_FILTER, normalize_aprsis_
 
 DEFAULT_APRSIS_SERVER = "rotate.aprs2.net"
 DEFAULT_APRSIS_PORT = 14580
+APRSIS_CONNECT_DRAIN_TIMEOUT_SECONDS = 3.0
 APRSIS_STATUS_INACTIVE = "inactive"
 APRSIS_STATUS_CONNECTING = "connecting"
 APRSIS_STATUS_CONNECTED = "connected"
@@ -48,6 +50,7 @@ APRSIS_TCP_USER_TIMEOUT_MS = 3_000
 APRSIS_TCP_KEEPIDLE_SECONDS = 10
 APRSIS_TCP_KEEPINTVL_SECONDS = 3
 APRSIS_TCP_KEEPCNT = 2
+logger = logging.getLogger(__name__)
 
 
 def _normalize_text(value: Any) -> str:
@@ -1132,7 +1135,15 @@ class AprsisClientService:
 
     async def start(self) -> None:
         if self._task is not None:
-            return
+            if not self._task.done():
+                return
+            try:
+                self._task.result()
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("Previous APRS-IS runtime task failed before restart.")
+            self._task = None
         self._stop_event.clear()
         await self._rx_side_effect_dispatcher.start()
         self._task = asyncio.create_task(self._run(), name="aprsbox-aprsis-uplink")
@@ -1222,59 +1233,91 @@ class AprsisClientService:
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
-            rx_interface = get_enabled_aprsis_interface()
-            self._desired_rx_interface = dict(rx_interface) if rx_interface is not None else None
-            desired_active = rx_interface is not None
-            config = get_aprsis_config()
-            config_key = (
-                str(config["server"]),
-                int(config["port"]),
-                str(config["login"]),
-                str(config["passcode"]),
+            try:
+                await self._run_iteration()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                error = str(exc).strip() or exc.__class__.__name__
+                reason = f"APRS-IS runtime loop failed: {error}"
+                logger.exception(
+                    "APRS-IS runtime loop failed; retrying in %.1f seconds.",
+                    self._reconnect_delay,
+                )
+                try:
+                    await self._disconnect(reason=reason, status=APRSIS_STATUS_ERROR, error=error)
+                except Exception:
+                    logger.exception("APRS-IS cleanup after a runtime error failed.")
+                try:
+                    runtime = get_aprsis_runtime_status()
+                    persist_aprsis_runtime_status(
+                        status=APRSIS_STATUS_ERROR,
+                        status_detail=reason,
+                        server=runtime.get("server"),
+                        port=runtime.get("port"),
+                        login=runtime.get("login"),
+                        connected_at=None,
+                        last_error=error,
+                    )
+                except Exception:
+                    logger.exception("Failed to persist APRS-IS runtime error status.")
+                with contextlib.suppress(Exception):
+                    log_event("ERROR", "aprsis", reason)
+                await self._sleep(self._reconnect_delay)
+                continue
+            await self._sleep(self._poll_interval)
+
+    async def _run_iteration(self) -> None:
+        if self._stop_event.is_set():
+            return
+
+        rx_interface = get_enabled_aprsis_interface()
+        self._desired_rx_interface = dict(rx_interface) if rx_interface is not None else None
+        desired_active = rx_interface is not None
+        config = get_aprsis_config()
+        config_key = (
+            str(config["server"]),
+            int(config["port"]),
+            str(config["login"]),
+            str(config["passcode"]),
+        )
+
+        if not desired_active:
+            await self._disconnect(
+                reason="APRS-IS inactive because the interface connection is disabled.",
+                status=APRSIS_STATUS_INACTIVE,
+            )
+            return
+
+        if not config_key[2]:
+            persist_aprsis_runtime_status(
+                status=APRSIS_STATUS_ERROR,
+                status_detail="APRS-IS login is empty. Configure My Station callsign or set APRS-IS login override.",
+                server=config_key[0],
+                port=config_key[1],
+                login=None,
+                connected_at=None,
+                last_error="Missing APRS-IS login.",
+            )
+            await self._disconnect(reason="APRS-IS login missing.", status=APRSIS_STATUS_ERROR, error="Missing APRS-IS login.")
+            return
+
+        desired_rx_signature = self._rx_signature(rx_interface)
+        async with self._connection_lock:
+            should_reconnect = self._connection_needs_reconnect(
+                config_key=config_key,
+                desired_rx_signature=desired_rx_signature,
+            )
+        if should_reconnect:
+            await self._disconnect(
+                reason="APRS-IS uplink reconnecting because configuration changed.",
+                status=APRSIS_STATUS_CONNECTING,
             )
 
-            if not desired_active:
-                await self._disconnect(
-                    reason="APRS-IS inactive because the interface connection is disabled.",
-                    status=APRSIS_STATUS_INACTIVE,
-                )
-                await self._sleep(self._poll_interval)
-                continue
-
-            if not config_key[2]:
-                persist_aprsis_runtime_status(
-                    status=APRSIS_STATUS_ERROR,
-                    status_detail="APRS-IS login is empty. Configure My Station callsign or set APRS-IS login override.",
-                    server=config_key[0],
-                    port=config_key[1],
-                    login=None,
-                    connected_at=None,
-                    last_error="Missing APRS-IS login.",
-                )
-                await self._disconnect(reason="APRS-IS login missing.", status=APRSIS_STATUS_ERROR, error="Missing APRS-IS login.")
-                await self._sleep(self._poll_interval)
-                continue
-
-            should_reconnect = False
-            desired_rx_signature = self._rx_signature(rx_interface)
-            async with self._connection_lock:
-                should_reconnect = self._connection_needs_reconnect(
-                    config_key=config_key,
-                    desired_rx_signature=desired_rx_signature,
-                )
-            if should_reconnect:
-                await self._disconnect(
-                    reason="APRS-IS uplink reconnecting because configuration changed.",
-                    status=APRSIS_STATUS_CONNECTING,
-                )
-
-            async with self._connection_lock:
-                has_connection = self._writer is not None
-            if not has_connection:
-                now = time.monotonic()
-                if now >= self._retry_not_before:
-                    await self._connect(config_key, rx_interface=rx_interface)
-            await self._sleep(self._poll_interval)
+        async with self._connection_lock:
+            has_connection = self._writer is not None
+        if not has_connection and time.monotonic() >= self._retry_not_before:
+            await self._connect(config_key, rx_interface=rx_interface)
 
     async def _connect(
         self,
@@ -1315,12 +1358,15 @@ class AprsisClientService:
         login_line = build_aprsis_login_line(login=login, passcode=passcode, server_filter=server_filter)
         try:
             writer.write(login_line.encode("ascii", errors="replace") + b"\r\n")
-            await writer.drain()
-        except OSError as exc:
+            await asyncio.wait_for(writer.drain(), timeout=APRSIS_CONNECT_DRAIN_TIMEOUT_SECONDS)
+        except (OSError, TimeoutError) as exc:
             error = str(exc).strip() or exc.__class__.__name__
             writer.close()
-            with contextlib.suppress(OSError):
-                await writer.wait_closed()
+            with contextlib.suppress(OSError, TimeoutError):
+                await asyncio.wait_for(
+                    writer.wait_closed(),
+                    timeout=APRSIS_CONNECT_DRAIN_TIMEOUT_SECONDS,
+                )
             persist_aprsis_runtime_status(
                 status=APRSIS_STATUS_ERROR,
                 status_detail=f"APRS-IS login send failed: {error}",

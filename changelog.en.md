@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.27.dev - 2026-10-11
+- `APRS-IS / reconnect`: the client resumes after an unexpected runtime error, and a login write timeout prevents stalled sockets from blocking retries.
+
 ## 1.12.26.dev - 2026-09-16
 - `Stations / last activity`: relative activity time now uses the active GUI language, including after automatic table refresh; the English interface now shows values such as `Just now` and `12 minutes ago` instead of Polish text.
 

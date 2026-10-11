@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.27.dev - 2026-10-11
+- `APRS-IS / Wiederverbindung`: Der Client setzt den Betrieb nach einem unerwarteten Laufzeitfehler fort; ein Timeout beim Senden der Anmeldung verhindert, dass ein blockierter Socket weitere Versuche aufhält.
+
 ## 1.12.26.dev - 2026-09-16
 - `Stationen / letzte Aktivität`: Die relative Aktivitätszeit verwendet jetzt auch nach der automatischen Tabellenaktualisierung die aktive GUI-Sprache; die englische Oberfläche zeigt nun beispielsweise `Just now` und `12 minutes ago` statt polnischer Texte.
 

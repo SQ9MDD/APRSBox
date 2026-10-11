@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.12.27.dev - 2026-10-11
+- `APRS-IS / reconexión`: el cliente se recupera tras un error de ejecución inesperado y un límite de tiempo al enviar el inicio de sesión evita que un socket bloqueado impida nuevos intentos.
+
 ## 1.12.26.dev - 2026-09-16
 - `Estaciones / última actividad`: el tiempo relativo de actividad usa ahora el idioma activo de la interfaz, incluso tras la actualización automática de la tabla; la interfaz en inglés muestra valores como `Just now` y `12 minutes ago` en lugar de texto en polaco.
 
