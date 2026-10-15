@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.28.dev - 2026-10-15
+- `Notifications / Telegram`: added a `Use IPv4 only` checkbox for each transport. Disabled by default; when enabled, tests and notifications use IPv4 to avoid timeouts caused by broken HTTPS connectivity over IPv6. TLS certificate verification remains enabled.
+- `Notifications / diagnostics`: connection errors now include the DNS/TLS reason or timeout instead of just `Request failed`; URLs and bot tokens are redacted from error details.
+- `Configuration`: the IPv4 setting is stored in the database and configuration backups; existing database migrations and older backup imports retain the default protocol selection.
+
 ## 1.12.27.dev - 2026-10-11
 - `APRS-IS / reconnect`: the client resumes after an unexpected runtime error, and a login write timeout prevents stalled sockets from blocking retries.
 

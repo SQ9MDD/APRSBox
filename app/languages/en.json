@@ -1687,6 +1687,7 @@
   "Telegram": "Telegram",
   "Bot token": "Bot token",
   "Chat ID": "Chat ID",
+  "Use IPv4 only": "Use IPv4 only",
   "Secret header name": "Secret header name",
   "Secret token": "Secret token",
   "Leave blank to keep the existing secret.": "Leave blank to keep the existing secret.",

@@ -4,17 +4,19 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from http.client import HTTPSConnection
 import json
 import math
 from queue import Full, Queue
 import re
+import socket
 import sqlite3
 from threading import RLock, Thread
 import time
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPSHandler, Request, build_opener, urlopen
 
 from app.db import (
     connection_scope,
@@ -412,10 +414,10 @@ def save_notification_transport(payload: dict[str, Any], *, transport_id: int | 
                 """
                 INSERT INTO notification_transports(
                     name, transport_type, enabled, url, secret_header_name, secret_token,
-                    bot_token, chat_id, timeout_s, last_test_status, last_test_error, last_test_at,
+                    bot_token, chat_id, timeout_s, force_ipv4, last_test_status, last_test_error, last_test_at,
                     created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', NULL, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', NULL, ?, ?)
                 """,
                 (
                     normalized["name"],
@@ -427,6 +429,7 @@ def save_notification_transport(payload: dict[str, Any], *, transport_id: int | 
                     normalized["bot_token"],
                     normalized["chat_id"],
                     normalized["timeout_s"],
+                    normalized["force_ipv4"],
                     timestamp,
                     timestamp,
                 ),
@@ -446,6 +449,7 @@ def save_notification_transport(payload: dict[str, Any], *, transport_id: int | 
                     bot_token = :bot_token,
                     chat_id = :chat_id,
                     timeout_s = :timeout_s,
+                    force_ipv4 = :force_ipv4,
                     updated_at = :updated_at
                 WHERE id = :id
                 """,
@@ -1122,7 +1126,9 @@ def _deliver_event_to_transport(transport: dict[str, Any], event: dict[str, Any]
             "text": text or "APRSBox notification",
         }
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        return _send_json_request(url, payload, timeout_s=timeout_s)
+        return _send_json_request(
+            url, payload, timeout_s=timeout_s, force_ipv4=_setting_flag(transport.get("force_ipv4"))
+        )
 
     if transport_type == NOTIFICATION_TRANSPORT_TYPE_WEBHOOK:
         url = str(transport.get("url") or "").strip()
@@ -1139,12 +1145,45 @@ def _deliver_event_to_transport(transport: dict[str, Any], event: dict[str, Any]
     return False, f"Unsupported transport type: {transport_type or 'unknown'}"
 
 
+def _create_ipv4_connection(
+    address: tuple[str, int],
+    timeout: Any,
+    source_address: tuple[str, int] | None = None,
+) -> socket.socket:
+    host, port = address
+    last_error: OSError | None = None
+    for _family, _type, _proto, _canonname, sockaddr in socket.getaddrinfo(
+        host, port, family=socket.AF_INET, type=socket.SOCK_STREAM
+    ):
+        try:
+            return socket.create_connection(sockaddr, timeout, source_address)
+        except OSError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    raise OSError("No IPv4 address found for notification server")
+
+
+class _IPv4HTTPSConnection(HTTPSConnection):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # Override only this connection's socket factory. Keep the original host
+        # for TLS SNI, certificate verification, HTTP headers and proxy tunnels.
+        self._create_connection = _create_ipv4_connection
+
+
+class _IPv4HTTPSHandler(HTTPSHandler):
+    def https_open(self, request: Request) -> Any:
+        return self.do_open(_IPv4HTTPSConnection, request, context=self._context)
+
+
 def _send_json_request(
     url: str,
     payload: dict[str, Any],
     *,
     timeout_s: int,
     headers: dict[str, str] | None = None,
+    force_ipv4: bool = False,
 ) -> tuple[bool, str | None]:
     body = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     request_headers = {"Content-Type": "application/json"}
@@ -1152,14 +1191,21 @@ def _send_json_request(
         request_headers.update(headers)
     request = Request(url, data=body, headers=request_headers, method="POST")
     try:
-        with urlopen(request, timeout=timeout_s) as response:
+        open_request = build_opener(_IPv4HTTPSHandler()).open if force_ipv4 else urlopen
+        with open_request(request, timeout=timeout_s) as response:
             response.read()
     except HTTPError as exc:
         return False, f"HTTP {exc.code}"
-    except URLError:
-        return False, "Request failed"
+    except URLError as exc:
+        if isinstance(exc.reason, TimeoutError):
+            return False, f"Request timed out after {timeout_s}s"
+        detail = str(exc.reason).strip()
+        # Network errors may include the request URL, which contains the bot token.
+        detail = re.sub(r"https?://\S+", "[redacted URL]", detail)
+        detail = re.sub(r"\b\d+:[A-Za-z0-9_-]+", "[redacted token]", detail)
+        return False, f"Request failed: {detail}" if detail else "Request failed"
     except TimeoutError:
-        return False, "Request timed out"
+        return False, f"Request timed out after {timeout_s}s"
     return True, None
 
 
@@ -1172,6 +1218,7 @@ def _serialize_transport_row(row: dict[str, Any]) -> dict[str, Any]:
         NOTIFICATION_TRANSPORT_TYPE_TELEGRAM: "Telegram",
     }.get(str(item.get("transport_type") or "").strip().lower(), str(item.get("transport_type") or ""))
     item["enabled"] = bool(item.get("enabled"))
+    item["force_ipv4"] = _setting_flag(item.get("force_ipv4"))
     item["timeout_s"] = int(item.get("timeout_s") or NOTIFICATION_HTTP_TIMEOUT_SECONDS_DEFAULT)
     item["bot_token_masked"] = _mask_secret(str(item.get("bot_token") or ""))
     item["secret_token_masked"] = _mask_secret(str(item.get("secret_token") or ""))
@@ -1200,6 +1247,7 @@ def _build_transport_form(transport: dict[str, Any] | None) -> dict[str, Any]:
         "secret_token": "",
         "bot_token": str((transport or {}).get("bot_token") or ""),
         "chat_id": str(item.get("chat_id") or ""),
+        "force_ipv4": bool(item.get("force_ipv4")),
         "timeout_s": str(item.get("timeout_s") or NOTIFICATION_HTTP_TIMEOUT_SECONDS_DEFAULT),
     }
 
@@ -1222,6 +1270,7 @@ def _normalize_transport_payload(payload: dict[str, Any], *, transport_id: int |
     if transport_type not in {NOTIFICATION_TRANSPORT_TYPE_WEBHOOK, NOTIFICATION_TRANSPORT_TYPE_TELEGRAM}:
         raise ValueError("Transport type must be Telegram or Generic Webhook.")
     enabled = _setting_flag(payload.get("enabled"))
+    force_ipv4 = transport_type == NOTIFICATION_TRANSPORT_TYPE_TELEGRAM and _setting_flag(payload.get("force_ipv4"))
     timeout_s = _normalize_timeout_seconds(payload.get("timeout_s"))
     existing = get_notification_transport(transport_id) if transport_id is not None else None
 
@@ -1268,6 +1317,7 @@ def _normalize_transport_payload(payload: dict[str, Any], *, transport_id: int |
         "secret_token": secret_token,
         "bot_token": bot_token,
         "chat_id": chat_id,
+        "force_ipv4": 1 if force_ipv4 else 0,
         "timeout_s": timeout_s,
     }
 

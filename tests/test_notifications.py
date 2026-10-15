@@ -1,5 +1,6 @@
 import contextlib
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -378,6 +379,86 @@ class NotificationTests(unittest.TestCase):
                 queue_aprs_message_notification(sender="SQ0ABC-7", destination="APRS", text="Hello")
                 queue_radar_notifications()
             submit_mock.assert_not_called()
+
+    def test_ipv4_option_migrates_existing_transports_and_survives_reinitialization(self) -> None:
+        with temporary_database() as database_path:
+            payload = {
+                "name": "Telegram transport",
+                "transport_type": "telegram",
+                "enabled": True,
+                "bot_token": "123456:ABCDEF",
+                "chat_id": "-100123",
+            }
+            ok, error, transport_id = safe_save_notification_transport(payload)
+            self.assertTrue(ok, error)
+            with sqlite3.connect(database_path) as connection:
+                connection.execute("ALTER TABLE notification_transports DROP COLUMN force_ipv4")
+
+            init_db()
+            row = fetch_one("SELECT * FROM notification_transports WHERE id = ?", (transport_id,))
+            self.assertEqual(row["force_ipv4"], 0)
+            self.assertEqual(row["bot_token"], payload["bot_token"])
+            self.assertEqual(row["chat_id"], payload["chat_id"])
+
+            ok, error, _ = safe_save_notification_transport({**payload, "force_ipv4": True}, transport_id=transport_id)
+            self.assertTrue(ok, error)
+            init_db()
+            page = get_notifications_page_data(edit_transport_id=transport_id)
+            self.assertTrue(page["notification_transport_form"]["force_ipv4"])
+
+    def test_telegram_ipv4_checkbox_can_be_enabled_and_unchecked_via_form(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from app.dependencies import get_current_user
+        from app.main import app
+        from app.models import UserIdentity
+
+        with temporary_database():
+            app.dependency_overrides[get_current_user] = lambda: UserIdentity(
+                id=1, username="admin", role="admin", is_active=True
+            )
+            try:
+                client = TestClient(app)
+                payload = {
+                    "name": "Telegram transport",
+                    "transport_type": "telegram",
+                    "enabled": "1",
+                    "bot_token": "123456:ABCDEF",
+                    "chat_id": "-100123",
+                }
+                headers = {"X-Requested-With": "XMLHttpRequest"}
+                for ipv4_enabled in (False, True, False):
+                    with self.subTest(ipv4_enabled=ipv4_enabled):
+                        submitted = {**payload, "force_ipv4": "1"} if ipv4_enabled else dict(payload)
+                        response = client.post("/notifications/transports", headers=headers, data=submitted)
+                        self.assertEqual(response.status_code, 200, response.text)
+                        row = fetch_one("SELECT * FROM notification_transports WHERE name = ?", (payload["name"],))
+                        payload["transport_id"] = str(row["id"])
+                        self.assertEqual(bool(row["force_ipv4"]), ipv4_enabled)
+                        page = client.get(f"/notifications?edit_transport={row['id']}")
+                        self.assertEqual(page.context["notification_transport_form"]["force_ipv4"], ipv4_enabled)
+                        checkbox = page.text.split('name="force_ipv4"', 1)[1].split(">", 1)[0]
+                        self.assertEqual("checked" in checkbox, ipv4_enabled)
+                        self.assertNotIn("disabled", checkbox)
+
+                # Validation failure must keep the user's checkbox selection.
+                response = client.post(
+                    "/notifications/transports", data={**payload, "name": "", "force_ipv4": "1"}
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertTrue(response.context["notification_transport_form"]["force_ipv4"])
+
+                # Switching to a webhook clears the Telegram-only option.
+                response = client.post(
+                    "/notifications/transports",
+                    headers=headers,
+                    data={**payload, "transport_type": "webhook", "url": "https://example.invalid", "force_ipv4": "1"},
+                )
+                self.assertEqual(response.status_code, 200)
+                row = fetch_one("SELECT force_ipv4 FROM notification_transports WHERE id = ?", (payload["transport_id"],))
+                self.assertEqual(row["force_ipv4"], 0)
+            finally:
+                app.dependency_overrides.pop(get_current_user, None)
 
     def test_alarm_group_message_is_not_queued_for_notification_transports(self) -> None:
         with temporary_database():

@@ -11,6 +11,8 @@ A transport defines where APRSBox sends an event.
 - During normal event dispatch, only transports marked `Enabled` are used.
 - The test button sends an `APRSBox notification test` event and stores the transport test result.
 
+For Telegram, `Use IPv4 only` forces IPv4 for tests and notifications. Enable it if HTTPS connections to Telegram time out over IPv6 while IPv4 works. The option is disabled by default, leaving IPv4/IPv6 selection to the system. HTTPS certificate verification remains enabled.
+
 For webhooks, you can configure `Secret header name` and `Secret token`. If both fields are filled, APRSBox adds that HTTP header to the request.
 
 `Timeout` is counted in seconds. The allowed range is `1` to `60`, and the default is `5`.

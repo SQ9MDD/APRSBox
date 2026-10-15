@@ -14,6 +14,7 @@ from app.services.config_backup import (
     export_configuration_backup_bytes,
     safe_import_configuration_backup,
 )
+from app.services.notifications import save_notification_transport
 
 
 @contextlib.contextmanager
@@ -33,6 +34,31 @@ def temporary_database() -> Path:
 
 
 class ConfigBackupTests(unittest.TestCase):
+    def test_telegram_ipv4_option_roundtrips_and_older_backup_defaults_to_off(self) -> None:
+        with temporary_database():
+            transport_id = save_notification_transport(
+                {
+                    "name": "Telegram transport",
+                    "transport_type": "telegram",
+                    "enabled": True,
+                    "bot_token": "123:TEST",
+                    "chat_id": "42",
+                    "force_ipv4": True,
+                }
+            )
+            payload = export_configuration_backup()
+            transport = payload["tables"]["notification_transports"][0]
+            self.assertEqual(transport["force_ipv4"], 1)
+            execute("UPDATE notification_transports SET force_ipv4 = 0 WHERE id = ?", (transport_id,))
+            ok, error = safe_import_configuration_backup(json.dumps(payload).encode())
+            self.assertTrue(ok, error)
+            self.assertEqual(fetch_one("SELECT force_ipv4 FROM notification_transports WHERE id = ?", (transport_id,))["force_ipv4"], 1)
+
+            del transport["force_ipv4"]
+            ok, error = safe_import_configuration_backup(json.dumps(payload).encode())
+            self.assertTrue(ok, error)
+            self.assertEqual(fetch_one("SELECT force_ipv4 FROM notification_transports WHERE id = ?", (transport_id,))["force_ipv4"], 0)
+
     def test_filename_contains_station_callsign_and_ssid(self) -> None:
         with temporary_database():
             execute(

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.28.dev - 2026-10-15
+- `Notificaciones / Telegram`: se añadió la casilla `Usar solo IPv4` para cada transporte. Está desactivada por defecto; al activarla, las pruebas y notificaciones usan IPv4 para evitar tiempos de espera por conexiones HTTPS defectuosas mediante IPv6. Se mantiene la verificación de certificados TLS.
+- `Notificaciones / diagnóstico`: los errores de conexión muestran ahora la causa DNS/TLS o el límite de tiempo en lugar de solo `Request failed`; las URL y los tokens del bot se ocultan en los detalles del error.
+- `Configuración`: la opción IPv4 se guarda en la base de datos y en las copias de configuración; la migración de bases existentes y la importación de copias antiguas conservan la selección de protocolo predeterminada.
+
 ## 1.12.27.dev - 2026-10-11
 - `APRS-IS / reconexión`: el cliente se recupera tras un error de ejecución inesperado y un límite de tiempo al enviar el inicio de sesión evita que un socket bloqueado impida nuevos intentos.
 

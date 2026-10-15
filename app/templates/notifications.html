@@ -149,6 +149,10 @@
                     <span>{{ t("Chat ID") }}</span>
                     <input type="text" name="chat_id" value="{{ notification_transport_form.chat_id }}" {% if notification_transport_form.transport_type == "webhook" %}disabled{% endif %}>
                 </label>
+                <label class="full checkbox-row" data-notification-telegram-only {% if notification_transport_form.transport_type == "webhook" %}hidden{% endif %}>
+                    <input type="checkbox" name="force_ipv4" value="1" {% if notification_transport_form.force_ipv4 %}checked{% endif %} {% if notification_transport_form.transport_type == "webhook" %}disabled{% endif %}>
+                    <span>{{ t("Use IPv4 only") }}</span>
+                </label>
                 {% if notification_transport_form.id %}
                 <p class="muted full">{{ t("Leave blank to keep the existing secret.") }}</p>
                 {% endif %}

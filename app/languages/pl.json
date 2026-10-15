@@ -1713,6 +1713,7 @@
   "Telegram": "Telegram",
   "Bot token": "Token bota",
   "Chat ID": "ID czatu",
+  "Use IPv4 only": "Używaj tylko IPv4",
   "Secret header name": "Nazwa nagłówka sekretu",
   "Secret token": "Token sekretu",
   "Leave blank to keep the existing secret.": "Pozostaw puste, aby zachować istniejący sekret.",

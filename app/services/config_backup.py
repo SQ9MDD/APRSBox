@@ -186,6 +186,9 @@ def _parse_backup_payload(raw_payload: bytes) -> dict[str, Any]:
         for row in rows:
             if not isinstance(row, dict):
                 raise ValueError(f"Backup payload contains invalid row shape for table '{table}'.")
+            if table == "notification_transports":
+                # Backups created before 1.12.28 did not include the IPv4 option.
+                row.setdefault("force_ipv4", 0)
 
     app_settings_payload = payload.get("app_settings")
     if not isinstance(app_settings_payload, dict):

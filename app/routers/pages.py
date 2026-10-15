@@ -1003,6 +1003,7 @@ def _notification_transport_form_from_payload(payload: dict[str, Any], *, transp
         "secret_token": "",
         "bot_token": "",
         "chat_id": str(payload.get("chat_id") or ""),
+        "force_ipv4": bool(payload.get("force_ipv4")),
         "timeout_s": str(timeout_value) if timeout_value not in {None, ""} else "5",
     }
 
@@ -4047,6 +4048,7 @@ def notifications_transport_save(
     secret_token: str = Form(""),
     bot_token: str = Form(""),
     chat_id: str = Form(""),
+    force_ipv4: str | None = Form(None),
     timeout_s: str = Form(""),
 ) -> object:
     templates = request.app.state.templates
@@ -4060,6 +4062,7 @@ def notifications_transport_save(
         "secret_token": secret_token,
         "bot_token": bot_token,
         "chat_id": chat_id,
+        "force_ipv4": force_ipv4,
         "timeout_s": timeout_s,
     }
     success, error, _saved_transport_id = safe_save_notification_transport(payload, transport_id=transport_id)

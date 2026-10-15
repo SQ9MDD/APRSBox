@@ -313,6 +313,7 @@ CREATE TABLE IF NOT EXISTS notification_transports (
     secret_token TEXT NOT NULL DEFAULT '',
     bot_token TEXT NOT NULL DEFAULT '',
     chat_id TEXT NOT NULL DEFAULT '',
+    force_ipv4 INTEGER NOT NULL DEFAULT 0 CHECK (force_ipv4 IN (0, 1)),
     timeout_s INTEGER NOT NULL DEFAULT 5 CHECK (timeout_s BETWEEN 1 AND 60),
     last_test_status TEXT NOT NULL DEFAULT '' CHECK (last_test_status IN ('', 'ok', 'error')),
     last_test_error TEXT NOT NULL DEFAULT '',
@@ -1137,6 +1138,16 @@ def init_db() -> None:
         modem_columns = {row["name"] for row in connection.execute("PRAGMA table_info(modems)").fetchall()}
         map_columns = {row["name"] for row in connection.execute("PRAGMA table_info(map_sources)").fetchall()}
         wx_columns = {row["name"] for row in connection.execute("PRAGMA table_info(wx_config)").fetchall()}
+        notification_transport_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(notification_transports)").fetchall()
+        }
+        if "force_ipv4" not in notification_transport_columns:
+            connection.execute(
+                """
+                ALTER TABLE notification_transports
+                ADD COLUMN force_ipv4 INTEGER NOT NULL DEFAULT 0 CHECK (force_ipv4 IN (0, 1))
+                """
+            )
         object_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_objects)").fetchall()}
         item_columns = {row["name"] for row in connection.execute("PRAGMA table_info(aprs_items)").fetchall()}
         bulletin_columns = {row["name"] for row in connection.execute("PRAGMA table_info(bulletins)").fetchall()}

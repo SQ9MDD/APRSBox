@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.28.dev - 15.10.2026
+- `Powiadomienia / Telegram`: dodano checkbox `Używaj tylko IPv4` w konfiguracji każdego transportu. Opcja jest domyślnie wyłączona; po jej włączeniu testy i powiadomienia korzystają z IPv4, co pozwala ominąć timeouty przy niedziałającym połączeniu HTTPS przez IPv6. Zachowano weryfikację certyfikatów TLS.
+- `Powiadomienia / diagnostyka`: błędy połączenia pokazują przyczynę DNS/TLS lub limit czasu zamiast samego `Request failed`; adresy URL i tokeny bota są maskowane w szczegółach błędu.
+- `Konfiguracja`: ustawienie IPv4 jest zapisywane w bazie i kopiach konfiguracji; migracja istniejących baz i import starszych kopii zachowują domyślny wybór protokołu.
+
 ## 1.12.27.dev - 11.10.2026
 - `APRS-IS / ponowne łączenie`: klient wznawia pracę po nieoczekiwanym błędzie, a limit czasu wysyłania logowania zapobiega blokowaniu kolejnych prób.
 
