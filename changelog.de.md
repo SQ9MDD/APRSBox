@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.29.dev - 2026-10-17
+- `Web / IPv6`: Die HTTP- und HTTPS-Oberfläche lauscht auf IPv4 und IPv6, wenn IPv6 verfügbar ist; andernfalls verwendet sie weiterhin IPv4. Dies gilt für systemd-/OpenRC-Installationen und den Docker-Container.
+- `HTTPS / Weiterleitung`: Der Dienst auf Port 80 nimmt IPv4- und IPv6-Verbindungen an und erhält IPv6-Adressen in eckigen Klammern im `Location`-Header korrekt bei.
+
 ## 1.12.28.dev - 2026-10-15
 - `Benachrichtigungen / Telegram`: Checkbox `Nur IPv4 verwenden` pro Transport hinzugefügt. Standardmäßig deaktiviert; bei Aktivierung verwenden Tests und Benachrichtigungen IPv4, um Timeouts bei gestörter HTTPS-Verbindung über IPv6 zu umgehen. Die TLS-Zertifikatsprüfung bleibt aktiv.
 - `Benachrichtigungen / Diagnose`: Verbindungsfehler zeigen jetzt die DNS-/TLS-Ursache oder das Zeitlimit statt nur `Request failed`; URLs und Bot-Tokens werden in Fehlerdetails maskiert.

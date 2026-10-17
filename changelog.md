@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.29.dev - 17.10.2026
+- `Web / IPv6`: panel HTTP i HTTPS nasłuchuje na IPv4 i IPv6, gdy IPv6 jest dostępne w systemie; w przeciwnym razie pozostaje przy IPv4. Zmiana obejmuje instalacje systemd/OpenRC i kontener Docker.
+- `HTTPS / przekierowanie`: usługa na porcie 80 przyjmuje połączenia IPv4 i IPv6 oraz poprawnie zachowuje adres IPv6 w nawiasach kwadratowych w nagłówku `Location`.
+
 ## 1.12.28.dev - 15.10.2026
 - `Powiadomienia / Telegram`: dodano checkbox `Używaj tylko IPv4` w konfiguracji każdego transportu. Opcja jest domyślnie wyłączona; po jej włączeniu testy i powiadomienia korzystają z IPv4, co pozwala ominąć timeouty przy niedziałającym połączeniu HTTPS przez IPv6. Zachowano weryfikację certyfikatów TLS.
 - `Powiadomienia / diagnostyka`: błędy połączenia pokazują przyczynę DNS/TLS lub limit czasu zamiast samego `Request failed`; adresy URL i tokeny bota są maskowane w szczegółach błędu.

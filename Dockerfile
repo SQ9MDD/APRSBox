@@ -71,7 +71,8 @@ uvicorn app.core_main:app --host 127.0.0.1 --port 18081 --access-log &
 CORE_PID=$!
 
 echo "[APRSBox] Starting web..."
-uvicorn app.main:app --host 0.0.0.0 --port "$APRSBOX_WEB_HTTP_PORT" --access-log &
+WEB_HOST="$(python scripts/web-bind-host.py)"
+uvicorn app.main:app --host "$WEB_HOST" --port "$APRSBOX_WEB_HTTP_PORT" --access-log &
 
 WEB_PID=$!
 

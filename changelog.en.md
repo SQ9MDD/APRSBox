@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.29.dev - 2026-10-17
+- `Web / IPv6`: the HTTP and HTTPS web interface listens on IPv4 and IPv6 when IPv6 is available; otherwise it continues to use IPv4. This applies to systemd/OpenRC installations and the Docker container.
+- `HTTPS / redirect`: the port 80 service accepts IPv4 and IPv6 connections and correctly preserves bracketed IPv6 addresses in the `Location` header.
+
 ## 1.12.28.dev - 2026-10-15
 - `Notifications / Telegram`: added a `Use IPv4 only` checkbox for each transport. Disabled by default; when enabled, tests and notifications use IPv4 to avoid timeouts caused by broken HTTPS connectivity over IPv6. TLS certificate verification remains enabled.
 - `Notifications / diagnostics`: connection errors now include the DNS/TLS reason or timeout instead of just `Request failed`; URLs and bot tokens are redacted from error details.
